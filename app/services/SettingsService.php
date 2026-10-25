@@ -3,14 +3,12 @@
 /** Editable overrides preserve legacy configuration and stable cloud account IDs. */
 class SettingsService
 {
-    private string $configDir;
     private PrivateJsonStore $store;
     private array $legacy;
     private ?array $cached = null;
 
     public function __construct(string $configDir, string $dataDir)
     {
-        $this->configDir = $configDir;
         $legacyFile = $configDir . '/config.php';
         $this->legacy = is_file($legacyFile) ? require $legacyFile : [];
         if (!is_array($this->legacy)) { throw new RuntimeException('旧配置文件格式错误'); }
@@ -133,21 +131,14 @@ class SettingsService
 
     public function setup(array $body): void
     {
-        self::stringFields($body, ['user', 'password', 'setup_key']);
+        self::stringFields($body, ['user', 'password']);
         $auth = self::authData(trim((string) ($body['user'] ?? '')), (string) ($body['password'] ?? ''));
-        $this->change(function (array $all) use ($body, $auth): array {
+        $this->change(function (array $all) use ($auth): array {
             if (!empty($all['auth']['user']) && (!empty($all['auth']['pass']) || !empty($all['auth']['pass_hash']))) {
                 throw new DomainException('工作台已初始化，请登录后管理配置');
             }
-            $file = $this->configDir . '/setup.key';
-            $key = is_file($file) ? trim((string) file_get_contents($file)) : '';
-            if ($key === '' || !hash_equals($key, (string) ($body['setup_key'] ?? ''))) {
-                throw new InvalidArgumentException('初始化凭据不正确，请在服务器运行 php scripts/setup-key.php 获取');
-            }
             return ['auth' => $auth];
         });
-        $keyFile = $this->configDir . '/setup.key';
-        if (is_file($keyFile)) { @unlink($keyFile); }
     }
 
     public function updateCredentials(array $body): void

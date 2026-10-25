@@ -68,7 +68,7 @@ php -S 0.0.0.0:8080 -t public public/index.php
 
 > 注意：必须传入路由脚本 `public/index.php`（作为 php -S 的 router），否则带点的域名路径（如 `51chigua.wang`）会被内置服务器误判为静态文件返回 404。
 
-浏览器打开 http://localhost:8080 。新安装按页面提示完成首次配置，初始化凭据由 `php scripts/setup-key.php` 获取；已有安装使用原管理员账号密码登录。
+浏览器打开 http://localhost:8080 。新安装直接在页面设置管理员账号和密码，提交后自动完成初始化并登录，无需运行额外命令；已有安装使用原管理员账号密码登录。
 
 也可直接运行：`./start.sh`
 

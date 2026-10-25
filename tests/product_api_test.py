@@ -95,19 +95,23 @@ try:
     fresh = Installation()
     status, setup, _ = fresh.request("GET", "/api/setup/status")
     check(status == 200 and setup["needs_setup"], "Missing config starts first-run flow")
+    check(not (fresh.root / "config/setup.key").exists(), "Fresh browser setup needs no server-generated key")
+    status, page, _ = fresh.request("GET", "/")
+    check(status == 200 and 'id="setup-user"' in page and 'id="setup-password"' in page, "Page offers administrator account and password")
+    check('id="setup-key"' not in page and 'id="setup-confirm"' not in page, "First-run form has no extra credential fields")
     csrf = setup["csrf_token"]
     check(fresh.request("GET", "/api/health")[0] == 401, "Anonymous health is protected")
     check(fresh.request("GET", "/api/settings")[0] == 401, "Anonymous settings are protected")
-    subprocess.run([shutil.which("php"), "scripts/setup-key.php"], cwd=fresh.root, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    key = (fresh.root / "config/setup.key").read_text().strip()
-    admin = {"user": "preview", "password": "preview-password-test", "setup_key": key}
+    admin = {"user": "preview", "password": "preview-password-test"}
     check(fresh.request("POST", "/api/setup", admin)[0] == 403, "Setup requires CSRF and session cookie")
-    check(fresh.request("POST", "/api/setup", {**admin, "setup_key": "wrong"}, csrf=csrf)[0] == 422, "Setup requires server-side owner key")
+    check(fresh.request("POST", "/api/setup", admin, csrf=csrf, anonymous=True)[0] == 403, "CSRF token alone cannot initialize without its browser session")
+    check(fresh.request("POST", "/api/setup", {**admin, "password": "short"}, csrf=csrf)[0] == 422, "Setup validates the administrator password")
+    check(not (fresh.root / "data/settings.json").exists(), "Failed setup does not save configuration")
     status, identity, headers = fresh.request("POST", "/api/setup", admin, csrf=csrf)
     check(status == 200 and identity["user"] == "preview", "Setup creates and logs in administrator")
     check(headers.get("Cache-Control") == "no-store", "Setup credentials response is not cached")
     csrf = identity["csrf_token"]
-    check(not (fresh.root / "config/setup.key").exists(), "Setup key consumed")
+    check(fresh.request("GET", "/api/me")[1]["user"] == admin["user"], "Browser is immediately logged in after setup")
     check(fresh.request("POST", "/api/setup", admin, csrf=csrf)[0] == 409, "Completed installation cannot be claimed again")
     check(fresh.request("GET", "/api/setup/status")[1]["needs_setup"] is False, "First-run prompt stops after setup")
     settings = fresh.request("GET", "/api/settings")[1]
@@ -169,6 +173,8 @@ try:
     check(token not in (fresh.root / "data/api_tokens.json").read_text(), "Token storage contains only hashes")
     status, spec, _ = fresh.request("GET", "/api/openapi.json", anonymous=True)
     check(status == 200 and spec["openapi"] == "3.1.0", "OpenAPI is available to AI tools")
+    setup_schema = spec["paths"]["/api/setup"]["post"]["requestBody"]["content"]["application/json"]["schema"]
+    check(set(setup_schema["required"]) == {"user", "password"} and "setup_key" not in setup_schema["properties"], "Setup API documents only administrator account and password")
     routes = re.findall(r"\$router->(get|post|put|delete)\('(/api/[^']+)'", (PROJECT / "public/index.php").read_text())
     check(all(method in spec["paths"].get(path, {}) for method, path in routes), "Every registered API operation has an OpenAPI contract")
     check(spec["paths"]["/api/domains/{provider}/{domain}/records/{recordId}"]["put"]["x-required-scopes"] == ["dns:write"], "Cloud writes declare their permission")
@@ -183,11 +189,14 @@ try:
     check(fresh.request("POST", "/api/login", {"user": "preview", "pass": admin["password"]})[0] == 401, "Old credentials stop working")
     check(fresh.request("POST", "/api/login", {"user": "admin2", "pass": "updated-password-test"})[1]["ok"], "Password login API accepts updated credentials")
     fresh.stop(); fresh.start()
+    check(fresh.request("GET", "/api/setup/status")[1]["needs_setup"] is False, "Restart keeps initialization complete")
+    check(fresh.request("POST", "/api/setup", admin)[0] == 409, "Restart cannot reopen administrator creation")
     check(fresh.request("GET", "/api/settings")[1]["accounts"][0]["id"] == cloud_id, "Configuration survives a server restart")
     check(fresh.request("GET", "/api/tokens")[1]["tokens"][0]["invalidated"], "Invalidated tokens are labeled in the management API")
     legacy = Installation(legacy=True)
     original = (legacy.root / "config/config.php").read_bytes()
     check(legacy.request("GET", "/api/setup/status")[1]["configured"], "Existing deployments skip first-run initialization")
+    check(legacy.request("POST", "/api/setup", admin)[0] == 409, "Legacy administrator cannot be overwritten through setup")
     identity = legacy.request("POST", "/api/login", {"user": "legacy", "pass": "legacy-password-test"})[1]
     check(identity["ok"], "Legacy login remains usable")
     legacy.request("POST", "/api/accounts", cloud, csrf=identity["csrf_token"])

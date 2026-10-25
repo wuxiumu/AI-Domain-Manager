@@ -4,12 +4,12 @@
 
 新安装不需要预先创建 `config/config.php`，也没有默认管理员密码。
 
-1. 运行 `./start.sh`，终端会显示一次性初始化凭据；也可单独运行 `php scripts/setup-key.php` 获取。
-2. 打开工作台，首次配置页提示输入初始化凭据、管理员账号和密码。新密码为 12–72 字节。
+1. 运行 `./start.sh`，或将网站根目录指向 `public/` 后直接访问站点。
+2. 首次打开工作台时，页面自动进入管理员创建流程，只需填写管理员账号和密码。新密码为 12–72 字节，提交后自动保存配置并登录。
 3. 初始化成功后进入“云账号”，添加阿里云、腾讯云或 GoDaddy 凭据；也可以先手工登记 IP。
 4. 保存云账号后，点击测试连接，再明确点击同步域名。保存配置本身不会查询云商或修改 DNS。
 
-初始化凭据证明操作者可以访问安装服务器，HTTP 不会返回它。初始化成功后凭据失效，初始化接口关闭。虚拟主机部署时，网站根目录仍须指向 `public/`；在服务器 CLI 中执行上述初始化命令。
+无需通过服务器 CLI 生成初始化凭据。首次成功提交的账号成为管理员，初始化接口随即关闭；提交需要当前浏览器会话的 CSRF 验证，配置保存使用文件锁，避免并发初始化覆盖管理员。
 
 已有 `config/config.php` 的安装会继续沿用账号、密码、云凭据和代理设置，直接进入登录。通过界面保存的字段存入 `data/settings.json`，原配置文件不被重写。
 
@@ -91,7 +91,7 @@ python3 scripts/workspace-api.py PUT /api/health/ips/ASSET_ID --json @asset-upda
 ```sh
 php tests/settings_test.php
 python3 tests/product_api_test.py
-node --test tests/api_test.mjs tests/client_cache_test.mjs tests/relationship_graph_test.mjs tests/settings_ui_test.mjs
+node --test tests/api_test.mjs tests/client_cache_test.mjs tests/relationship_graph_test.mjs tests/settings_ui_test.mjs tests/setup_ui_test.mjs
 ```
 
 产品 HTTP 测试会创建独立安装、假凭据和临时服务，覆盖首次配置、配置编辑、密码登录、Bearer 权限、密钥撤销、密码修改后的失效、重启持久化和旧配置兼容，不访问真实云商。

@@ -15,16 +15,20 @@ function cleanup(string $dir): void { foreach (scandir($dir) as $name) { if ($na
 try {
     $settings = new SettingsService($root . '/config', $root . '/data');
     verify(!$settings->configured(), 'Fresh installation is unconfigured');
-    file_put_contents($root . '/config/setup.key', 'local-owner-setup-key');
-    $body = ['user' => 'admin', 'password' => 'test-password-1234', 'setup_key' => 'wrong'];
-    rejects(fn () => $settings->setup($body), InvalidArgumentException::class);
+    $competing = new SettingsService($root . '/config', $root . '/data');
+    verify(!$competing->configured(), 'Another visitor sees the unconfigured installation');
+    $body = ['user' => 'admin', 'password' => 'test-password-1234'];
+    rejects(fn () => $settings->setup(['user' => 'admin', 'password' => 'short']), InvalidArgumentException::class);
+    rejects(fn () => $settings->setup(['user' => '!', 'password' => $body['password']]), InvalidArgumentException::class);
     verify(!is_file($root . '/data/settings.json'), 'Rejected setup does not initialize');
-    $body['setup_key'] = 'local-owner-setup-key'; $settings->setup($body);
+    $settings->setup($body);
     verify($settings->configured() && $settings->verifyPassword('test-password-1234'), 'New administrator can authenticate');
-    verify(!is_file($root . '/config/setup.key'), 'One-time setup key consumed');
     verify(strpos(file_get_contents($root . '/data/settings.json'), 'test-password-1234') === false, 'Password never stored in plaintext');
     verify((fileperms($root . '/data/settings.json') & 0777) === 0600, 'Private file permissions');
     rejects(fn () => $settings->setup($body), DomainException::class);
+    rejects(fn () => $competing->setup(['user' => 'other', 'password' => 'another-password-1234']), DomainException::class);
+    $persisted = new SettingsService($root . '/config', $root . '/data');
+    verify($persisted->all()['auth']['user'] === 'admin' && $persisted->verifyPassword($body['password']), 'Stale visitor cannot overwrite the saved administrator');
     rejects(fn () => $settings->saveAccount(['provider' => 'unknown', 'name' => 'X']), InvalidArgumentException::class);
     $rawSecrets = [];
     foreach (SettingsService::providerSchema() as $provider) {

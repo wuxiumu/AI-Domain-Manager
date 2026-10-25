@@ -109,8 +109,8 @@ TEXT;
             $paths[$path][strtolower($method)] = $op;
         };
         $add('GET', '/api/setup/status', 'getSetupStatus', '首次配置状态', null, null, [], 'public');
-        $add('POST', '/api/setup', 'initializeWorkspace', '使用服务器初始化凭据创建管理员', null,
-            self::object(['user' => $string, 'password' => $secret, 'setup_key' => $secret], ['user', 'password', 'setup_key']), [], 'public');
+        $add('POST', '/api/setup', 'initializeWorkspace', '首次使用时设置管理员账号和密码，自动登录', null,
+            self::object(['user' => $string, 'password' => $secret], ['user', 'password']), [], 'public');
         $add('POST', '/api/login', 'login', '账号密码登录，返回 Session 和 CSRF Token', null,
             self::object(['user' => $string, 'pass' => $secret], ['user', 'pass']), [], 'public',
             self::object(['ok' => $boolean, 'user' => $string, 'csrf_token' => $string]));

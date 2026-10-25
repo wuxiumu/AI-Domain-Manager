@@ -8,7 +8,7 @@ window.WorkspaceSetup = (() => {
         $('#login-view').classList.add('hidden');
         $('#app-view').classList.add('hidden');
         $('#setup-view').classList.remove('hidden');
-        $('#setup-key').focus();
+        $('#setup-user').focus();
         return true;
     }
 
@@ -16,13 +16,10 @@ window.WorkspaceSetup = (() => {
         event.preventDefault();
         const error = $('#setup-error'), button = $('#setup-submit');
         error.classList.add('hidden');
-        if ($('#setup-password').value !== $('#setup-confirm').value) {
-            error.textContent = '两次输入的密码不一致'; error.classList.remove('hidden'); return;
-        }
         button.disabled = true;
         try {
             const result = await api('/api/setup', {method: 'POST', body: JSON.stringify({
-                setup_key: $('#setup-key').value.trim(), user: $('#setup-user').value.trim(), password: $('#setup-password').value,
+                user: $('#setup-user').value.trim(), password: $('#setup-password').value,
             })});
             state.csrf = result.csrf_token;
             window.WorkspaceCache?.setUser(result.user);

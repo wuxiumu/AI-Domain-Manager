@@ -7,8 +7,7 @@ class SettingsController
         header('Cache-Control: no-store');
         $configured = settings_service()->configured();
         json_out(['configured' => $configured, 'needs_setup' => !$configured,
-            'csrf_token' => !$configured ? Auth::csrfToken() : null,
-            'setup_key_ready' => !$configured && is_file(CONFIG_DIR . '/setup.key')]);
+            'csrf_token' => !$configured ? Auth::csrfToken() : null]);
     }
 
     public function setup(): void
