@@ -1,0 +1,94 @@
+/* Foundations: theme tokens, reset, shared typography and motion preferences. */
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+.hidden {
+    display: none !important;
+}
+
+.view {
+    min-height: 100vh;
+}
+
+:root {
+    --primary: #16705d;
+    --primary-dark: #105846;
+    --bg: #f5f6f2;
+    --card: #fff;
+    --border: #e2e6df;
+    --text: #25322d;
+    --muted: #7b857d;
+    --green: #258366;
+    --red: #c45748;
+    --amber: #b48b39;
+    --sidebar-width: 220px;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-size: 14px;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+}
+
+button, input, select, textarea {
+    font: inherit;
+}
+
+button, a, input, select, textarea {
+    -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible, a:focus-visible {
+    outline: 2px solid var(--primary);
+    outline-offset: 3px;
+}
+
+input:focus-visible, select:focus-visible, textarea:focus-visible {
+    outline: 2px solid #16705d26;
+    outline-offset: 1px;
+}
+
+.icon-library {
+    position: absolute;
+    width: 0;
+    height: 0;
+    overflow: hidden;
+}
+
+.muted {
+    color: var(--muted);
+    font-size: 12px;
+}
+
+@media (max-width: 1200px) {
+:root {
+    --sidebar-width: 190px;
+}
+
+}
+
+@media (max-width: 760px) {
+:root {
+    --sidebar-width: 0px;
+}
+
+}
+
+@media (prefers-reduced-motion: reduce) {
+*, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+}
+
+}
+

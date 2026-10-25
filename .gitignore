@@ -1,0 +1,16 @@
+# Local configuration & secrets
+/config/config.php
+/config/setup.key
+.env
+.env.*
+
+# Runtime data & cache
+/data/*
+
+# Logs & OS noise
+*.log
+.DS_Store
+
+# Dependencies & build artifacts
+node_modules/
+vendor/

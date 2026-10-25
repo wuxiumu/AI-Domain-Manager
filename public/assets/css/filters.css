@@ -1,0 +1,343 @@
+/* Shared search fields, colored choice tabs and compact form choices. */
+
+.filters {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 16px;
+    flex-wrap: wrap;
+}
+
+.filters select, .filters input {
+    padding: 8px 10px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--card);
+    outline: none;
+}
+
+.filters select:focus, .filters input:focus {
+    border-color: var(--primary);
+}
+
+.filters input[type="search"] {
+    flex: 1;
+    min-width: 180px;
+}
+
+.asset-panel > .filters {
+    padding: 0 22px 17px;
+    margin: 0;
+    gap: 9px;
+}
+
+.asset-panel > .domain-filters {
+    padding-top: 20px;
+}
+
+.search-field {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    gap: 8px;
+    min-width: 190px;
+    border: 1px solid #e2e7dd;
+    border-radius: 5px;
+    padding-left: 11px;
+    background: #fff;
+}
+
+.search-field > .icon {
+    width: 15px;
+    height: 15px;
+    color: #98a18f;
+}
+
+.filters .search-field input[type="search"] {
+    width: 100%;
+    flex: 1;
+    min-width: 0;
+    border: 0;
+    padding: 9px 10px 9px 0;
+    background: transparent;
+}
+
+.search-field:focus-within {
+    border-color: #8caf96;
+    box-shadow: 0 0 0 2px #16705d0a;
+}
+
+.search-field input:focus-visible {
+    outline: none;
+}
+
+.filters select {
+    padding: 8px 31px 8px 10px;
+    min-height: 35px;
+    font-size: 11px;
+    border-color: #e2e7dd;
+    border-radius: 5px;
+    color: #73806c;
+}
+
+.filters input {
+    font-size: 11px;
+    color: var(--text);
+    border-radius: 5px;
+}
+
+.domain-filters .search-field {
+    min-width: 230px;
+}
+
+@media (max-width: 760px) {
+.asset-panel > .filters {
+    padding: 0 15px 15px;
+    gap: 8px;
+}
+
+.asset-panel > .domain-filters {
+    padding-top: 15px;
+}
+
+.health-filters .search-field, .domain-filters .search-field {
+    flex: 1 0 100%;
+    min-width: 0;
+}
+
+.filters select {
+    font-size: 10px;
+}
+
+}
+
+.domain-filters {
+    display:flex;
+    flex-direction:column;
+    align-items:stretch;
+    gap:12px;
+}
+
+.domain-filters>.search-field {
+    max-width:none;
+}
+
+.domain-filter-group {
+    display:flex;
+    align-items:flex-start;
+    gap:12px;
+}
+
+.domain-filter-label {
+    flex:0 0 64px;
+    font-size:12px;
+    color:var(--muted);
+    line-height:32px;
+}
+
+.domain-filter-tabs {
+    display:flex;
+    flex-wrap:wrap;
+    gap:7px;
+}
+
+.domain-filter-tab {
+    border:1px solid #e2e6de;
+    border-radius:7px;
+    padding:7px 12px;
+    font-size:12px;
+    background:#f8faf6;
+    color:#65715f;
+    cursor:pointer;
+}
+
+.domain-filter-tab:hover {
+    border-color:var(--primary);
+}
+
+.domain-filter-tab[aria-pressed=true] {
+    background:#dfeae1;
+    border-color:#96b49e;
+    color:#2b5c42;
+    font-weight:600;
+}
+
+.domain-filter-tab[data-color=unhealthy] {
+    color:#a85b44;
+    background:#fcf1ec;
+}
+
+.domain-filter-tab[data-color=unhealthy][aria-pressed=true] {
+    background:#f1d6c9;
+    border-color:#d6a18b;
+    color:#843b29;
+}
+
+.domain-filter-tab[data-color=healthy] {
+    color:#386952;
+    background:#edf5ee;
+}
+
+.domain-filter-tab[data-color=healthy][aria-pressed=true] {
+    background:#cfe5d3;
+    border-color:#80ad8a;
+}
+
+.domain-filter-tab[data-color=stale] {
+    color:#9b7a29;
+    background:#faf5e8;
+}
+
+.domain-filter-tab[data-color=stale][aria-pressed=true] {
+    background:#efe0b7;
+    border-color:#d5bd74;
+}
+
+.domain-filter-tab[data-color=tencent] {
+    color:#3b7189;
+    background:#edf5f8;
+}
+
+.domain-filter-tab[data-color=tencent][aria-pressed=true] {
+    background:#cee4ef;
+    border-color:#8cb9cc;
+}
+
+.domain-filter-tab[data-color=aliyun] {
+    color:#996033;
+    background:#faf2e7;
+}
+
+.domain-filter-tab[data-color=aliyun][aria-pressed=true] {
+    background:#f1dfc3;
+    border-color:#d1a96e;
+}
+
+.domain-filter-tab[data-color=godaddy] {
+    color:#386a63;
+    background:#edf6f4;
+}
+
+.domain-filter-tab[data-color=godaddy][aria-pressed=true] {
+    background:#cfe7e0;
+    border-color:#7dad9e;
+}
+
+@media(max-width:760px) {
+.domain-filter-group {
+    gap:6px;
+}
+
+.domain-filter-label {
+    flex-basis:50px;
+    font-size:11px;
+}
+
+.domain-filter-tab {
+    padding:7px 9px;
+    font-size:11px;
+}
+
+}
+
+.unified-filters>.search-field {
+    width:100%;
+    flex:none;
+}
+
+.choice-control[hidden],select[hidden] {
+    display:none!important;
+}
+
+.choice-control {
+    min-width:0;
+}
+
+.choice-control>.domain-filter-tabs {
+    flex:1;
+}
+
+.choice-native {
+    width:100%;
+    max-width:100%;
+    min-height:36px;
+    background:var(--card);
+}
+
+.form-choice>.domain-filter-label {
+    display:none;
+}
+
+.form-choice {
+    margin:3px 0;
+}
+
+.domain-filter-tab:focus-visible {
+    outline:2px solid var(--primary);
+    outline-offset:2px;
+}
+
+.domain-filter-tab:disabled {
+    cursor:not-allowed;
+    opacity:.6;
+}
+
+.domain-filter-tab[data-color=violet] {
+    color:#73528b;
+    background:#f5eff9;
+}
+
+.domain-filter-tab[data-color=violet][aria-pressed=true],.domain-filter-tab[data-color=violet][aria-selected=true] {
+    background:#e4d6ed;
+    border-color:#b99cc9;
+}
+
+.domain-filter-tab[data-color=unhealthy][aria-selected=true] {
+    background:#f1d6c9;
+    border-color:#d6a18b;
+    color:#843b29;
+}
+
+.domain-filter-tab[data-color=healthy][aria-selected=true] {
+    background:#cfe5d3;
+    border-color:#80ad8a;
+    color:#386952;
+}
+
+.domain-filter-tab[data-color=stale][aria-selected=true] {
+    background:#efe0b7;
+    border-color:#d5bd74;
+    color:#9b7a29;
+}
+
+.domain-filter-tab[data-color=tencent][aria-selected=true] {
+    background:#cee4ef;
+    border-color:#8cb9cc;
+    color:#3b7189;
+}
+
+.rel-quick-tabs button.domain-filter-tab,.rel-view-tabs button.domain-filter-tab {
+    border:1px solid #e2e6de;
+}
+
+.rec-form-grid>.form-choice {
+    grid-column:1/-1;
+}
+
+@media(max-width:760px) {
+.unified-filters .domain-filter-label {
+    flex-basis:54px;
+    font-size:11px;
+}
+
+.unified-filters .domain-filter-group {
+    gap:6px;
+}
+
+.unified-filters .domain-filter-tab {
+    font-size:11px;
+    padding:7px 9px;
+}
+
+}
+

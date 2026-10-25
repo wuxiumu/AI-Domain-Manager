@@ -1,0 +1,62 @@
+# 前端维护与桌面适配
+
+页面保持 PHP 模板 + 原生 CSS / JavaScript，不需要构建工具。`public/views/app.php` 只负责页面结构和资源入口；CSS、JS 均使用独立文件。资源 URL 带文件修改时间，修改后刷新即可获取新版本。
+
+## CSS 文件职责
+
+| 文件 | 修改范围 |
+| --- | --- |
+| `public/assets/css/app.css` | 主题变量、重置、基础字体、焦点和减少动画偏好 |
+| `public/assets/css/components.css` | 按钮、卡片、表格、表单、弹窗、通知等共享组件 |
+| `public/assets/css/layout.css` | 登录、导航、侧栏、顶栏、页面标题与基础响应式布局 |
+| `public/assets/css/health.css` | 健康指标、状态、IP 登记、健康详情抽屉 |
+| `public/assets/css/domains.css` | 域名详情、DNS 编辑浮层及台账专用样式 |
+| `public/assets/css/relations.css` | 环图、排行、关系图、分页、全屏 |
+| `public/assets/css/filters.css` | 统一搜索、彩色 Tab、动态选项样式 |
+| `public/assets/css/settings.css` | 首次配置、云账号编辑、产品设置和 AI API 授权 |
+| `public/assets/css/desktop.css` | 大屏布局、密度、侧栏收起、固定表头与列、桌面弹窗尺寸 |
+
+这些文件按上表顺序加载。基础组件的视觉修改放回对应文件；跨页面的屏幕适配和显示偏好放到 `desktop.css`，避免继续把全部样式追加到入口文件。
+
+## JavaScript 文件职责
+
+| 文件 | 修改范围 |
+| --- | --- |
+| `core.js` | 共享状态、DOM 查询、API / CSRF、格式化工具 |
+| `cache.js` | 浏览器快照缓存、并发请求去重、失效广播、本地域名过滤 |
+| `ui.js` | Toast、确认弹窗、输入弹窗 |
+| `filter-tabs.js` | 少量选项转彩色 Tab，保留原控件值和 change 事件 |
+| `dashboard.js` | 域名指标、服务商分布、同步记录、手动同步 |
+| `domains.js` | 域名列表、筛选、多选、台账编辑、跳转选定域名关系 |
+| `records.js` | 完整 DNS 管理、批量修改与解析检查 |
+| `accounts.js` | 账号连接卡片、连接测试与记录 |
+| `health.js` | 健康看板、IP 列表、检查队列与健康证据抽屉 |
+| `relationship-graph.js` | 纯 SVG 绘制：节点、连线、文字截断、两列 / 三列布局 |
+| `relations.js` | 关系查询、选定范围、图表数据、节点交互、编辑绑定与分页 |
+| `domain-details.js` | 子域名明细、反查 IP、快捷解析编辑 |
+| `workspace-ui.js` | 显示偏好、侧栏、清除搜索、快捷键、滚动区域可访问性 |
+| `settings.js` | 云账号配置、网络和登录设置、一次性 API 密钥显示与撤销 |
+| `setup.js` | 首次配置检测和初始化流程 |
+| `app.js` | 登录、登出、页面切换与最后的应用初始化 |
+
+沿用有序经典脚本以兼容现有 PHP 部署。`core.js` 提供共享函数；各功能模块先绑定事件，`app.js` 最后执行初始化。关系图渲染器必须先于 `relations.js` 加载。当前共享函数仍为经典脚本作用域，新增公共函数需避免同名。
+
+## 屏幕与交互约定
+
+- 761px 起：表格提供独立滚动，固定表头、资产标识与末列操作。列表高度随视口增长，避免查找操作时需要滚过整张长表。
+- 1280px 起：增加正文和次要文字字号，健康指标提供更宽松的间距。
+- 1440px 起：彩色筛选按两列排布，关键词及云账号跨整行。
+- 1920px 起：增大侧栏、指标、面板留白。内容宽度最多 2280px，避免超宽屏上的阅读距离过大。
+- 关系图根据容器宽度重新计算列距，节点与文字保持可读尺寸。尺寸改变由 `ResizeObserver` 合并到动画帧处理，不重新读取接口。较窄屏幕使用图内横向滚动。
+- 顶栏“舒适 / 紧凑”与侧栏收起状态保存在 `localStorage` 的 `asset-workspace:display:v1`，与资产缓存分开。存储不可用时仍支持当前会话操作。
+- 在非编辑状态按 `/` 聚焦当前页面搜索；搜索框内按 `Esc` 或点击 × 清除关键词。
+- 小屏保留原有移动布局，隐藏桌面显示控件。
+
+## 验证
+
+```sh
+node --test tests/api_test.mjs tests/client_cache_test.mjs tests/relationship_graph_test.mjs tests/settings_ui_test.mjs
+php -l public/views/app.php
+```
+
+浏览器验证使用独立配置、无云端凭据的项目缓存副本。检查笔记本 1440×900、显示器 1920×1080、大屏 2560×1440 与移动端 390×844；重点检查页面横向溢出、筛选排列、固定列、偏好刷新保留、关系图展开和编辑入口。

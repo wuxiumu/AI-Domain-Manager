@@ -1,0 +1,80 @@
+/* Domain inventory details and DNS editing overlays. */
+
+.row-invalid {
+    opacity: .55;
+}
+
+.domain-name {
+    white-space: nowrap;
+}
+
+.note-cell {
+    max-width: 220px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.domain-name, .hc-asset-name {
+    color: #344931;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.inventory-toolbar {
+    display:flex;
+    gap:12px;
+    align-items:center;
+    flex-wrap:wrap;
+    margin-bottom:16px;
+}
+
+.domain-detail-metrics,.domain-detail-actions {
+    display:flex;
+    flex-wrap:wrap;
+    gap:12px;
+    padding:14px 20px;
+    border-bottom:1px solid var(--border);
+    font-size:12px;
+    align-items:center;
+}
+
+.domain-detail-overlay {
+    z-index:150;
+}
+
+.dns-edit-overlay {
+    z-index:180;
+}
+
+.domain-detail .modal-body {
+    padding-top:6px;
+}
+
+.domain-detail table {
+    min-width:680px;
+}
+
+@media(max-width:760px) {
+.domain-detail-actions {
+    gap:6px;
+    padding:12px;
+}
+
+.inventory-toolbar {
+    gap:8px;
+}
+
+.domain-detail-metrics {
+    padding:12px;
+    gap:8px;
+}
+
+}
+
+#domains-table th:first-child,#domains-table td:first-child {
+    width:36px;
+    min-width:36px;
+    text-align:center;
+}
+

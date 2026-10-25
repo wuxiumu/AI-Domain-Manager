@@ -1,0 +1,272 @@
+/* Desktop composition and display preferences. Component colors stay in their own files. */
+:root {
+    --content-max: 2280px;
+    --page-gutter: clamp(24px, 2.25vw, 52px);
+    --table-row-padding: 16px;
+    --table-font: 13px;
+    --table-secondary-font: 11px;
+}
+
+.topbar-start {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+    gap: 12px;
+}
+
+.shell-toggle {
+    color: #6f7f72;
+    background: transparent;
+    box-shadow: none;
+}
+
+.display-density {
+    display: inline-flex;
+    gap: 3px;
+    padding: 3px;
+    margin-right: 10px;
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    background: #edf1e9;
+}
+
+.display-density button {
+    border: 0;
+    border-radius: 4px;
+    padding: 5px 12px;
+    color: #7c8878;
+    background: transparent;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.display-density button[aria-pressed="true"] {
+    background: #fff;
+    color: var(--primary);
+    box-shadow: 0 1px 4px #263b2210;
+    font-weight: 600;
+}
+
+.search-clear {
+    flex: 0 0 30px;
+    align-self: stretch;
+    border: 0;
+    border-radius: 4px;
+    font-size: 20px;
+    color: var(--muted);
+    background: transparent;
+    cursor: pointer;
+}
+
+.search-clear:hover { color: var(--primary); background: #eef4ed; }
+.search-clear[hidden] { display: none; }
+.search-field { min-width: 0; }
+.table-wrap:focus-visible { outline: 2px solid #96b49e; outline-offset: -2px; }
+
+@media (min-width: 761px) {
+    .container { padding: 30px var(--page-gutter) 24px; }
+    .tab-view, .workspace-footer { max-width: var(--content-max); }
+    .topbar-inner {
+        max-width: calc(var(--content-max) + 2 * var(--page-gutter));
+        padding: 10px var(--page-gutter);
+    }
+    .page-head { margin-bottom: 22px; }
+    .page-head h1 { font-size: clamp(26px, 1.65vw, 32px); }
+    .head-actions { flex-wrap: wrap; }
+    .breadcrumb { font-size: 12px; }
+    .sidebar { overflow-y: auto; }
+
+    /* Keep long lists within reach of their filters and actions. */
+    .asset-panel > .table-wrap {
+        max-height: clamp(360px, 62dvh, 1120px);
+        overscroll-behavior-x: contain;
+        scrollbar-gutter: stable;
+        scroll-padding-top: 44px;
+    }
+    .asset-panel table {
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: var(--table-font);
+    }
+    .asset-panel thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        font-size: 11px;
+        color: #707f68;
+        background: #f5f8f1;
+        box-shadow: 0 1px 0 #dde5d6;
+    }
+    .asset-panel tbody td {
+        padding-top: var(--table-row-padding);
+        padding-bottom: var(--table-row-padding);
+        font-size: var(--table-font);
+        color: #53634d;
+        background: #fff;
+    }
+    .asset-panel tbody tr:hover td { background: #f4f8ef; }
+    .asset-panel tbody tr:focus-within td { background: #f1f7ed; }
+    .asset-panel .hc-asset-link, .asset-panel .domain-name { font-size: var(--table-font); }
+    .asset-panel .hc-subline, .asset-panel .hc-time, .asset-panel .hc-message,
+    .asset-panel .muted { font-size: var(--table-secondary-font); color: #7b896f; }
+    .asset-panel .hc-status, .asset-panel .badge { font-size: 11px; }
+    .asset-panel .hc-message { max-width: 420px; }
+    .asset-panel .hc-subline { max-width: 440px; }
+    .asset-panel .btn-sm { min-height: 30px; font-size: 12px; }
+    .asset-panel .row-actions { width: 1%; }
+    .asset-panel .badge { white-space: nowrap; }
+    .domain-registration-status {
+        display: block;
+        max-width: 180px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .row-invalid { opacity: 1; }
+    .asset-panel .row-invalid td { color: #87917e; background: #fbfcf9; }
+    #health-table { min-width: 1100px; }
+    #domains-table { min-width: 1080px; }
+    #ip-table { min-width: 1020px; }
+
+    /* Freeze identity and row actions while horizontally scrolling a list. */
+    #health-table th:first-child, #health-table td:first-child,
+    #domains-table th:first-child, #domains-table td:first-child {
+        position: sticky;
+        left: 0;
+        width: 42px;
+        min-width: 42px;
+        max-width: 42px;
+        padding: 10px;
+        z-index: 2;
+        text-align: center;
+    }
+    #health-table th:nth-child(2), #health-table td:nth-child(2),
+    #domains-table th:nth-child(2), #domains-table td:nth-child(2) {
+        position: sticky;
+        left: 42px;
+        min-width: 190px;
+        z-index: 2;
+        box-shadow: 1px 0 0 #e7ecdf;
+    }
+    #ip-table th:first-child, #ip-table td:first-child {
+        position: sticky;
+        left: 0;
+        min-width: 230px;
+        z-index: 2;
+        box-shadow: 1px 0 0 #e7ecdf;
+    }
+    #health-table th:last-child, #health-table td:last-child,
+    #domains-table th:last-child, #domains-table td:last-child,
+    #ip-table th:last-child, #ip-table td:last-child {
+        position: sticky;
+        right: 0;
+        z-index: 2;
+        box-shadow: -1px 0 0 #e7ecdf;
+    }
+    .asset-panel #health-table thead th,
+    .asset-panel #domains-table thead th,
+    .asset-panel #ip-table thead th { z-index: 3; }
+    .asset-panel #health-table thead th:is(:first-child, :nth-child(2), :last-child),
+    .asset-panel #domains-table thead th:is(:first-child, :nth-child(2), :last-child),
+    .asset-panel #ip-table thead th:is(:first-child, :last-child) { z-index: 6; }
+    #health-table th:nth-child(2) { width: 22%; }
+    #health-table th:nth-child(3) { width: 13%; }
+    #health-table th:nth-child(4) { width: 12%; }
+    #health-table th:nth-child(5) { width: 25%; }
+    #health-table th:nth-child(6) { width: 170px; }
+    .note-cell { max-width: 300px; }
+
+    /* A graph expands its column spacing without magnifying node text. */
+    .rel-graph { max-height: clamp(420px, 64dvh, 1120px); scrollbar-gutter: stable; }
+    .rel-graph svg { max-width: 1800px; min-width: 1040px; margin: 0 auto; }
+    .rel-graph svg[data-graph="detail"] { min-width: 1100px; }
+    .rel-pagination { padding: 14px 22px; justify-content: flex-end; gap: 12px; }
+    .rel-pagination label:first-child { margin-right: auto; }
+    .rel-summary { gap: 18px; }
+    .rel-charts { grid-template-columns: minmax(340px, .8fr) minmax(0, 1.2fr); gap: 18px; }
+    .rel-rank > span { width: 200px; }
+    .rel-rank { font-size: 13px; padding: 10px 0; }
+    .rel-panel:fullscreen .rel-graph, .rel-fallback-fullscreen .rel-graph { max-height: none; }
+    .rel-panel:fullscreen .rel-pagination, .rel-fallback-fullscreen .rel-pagination { flex: none; }
+
+    .modal-wide { width: min(1380px, calc(100vw - 100px)); }
+    .hc-detail.modal { width: clamp(600px, 37vw, 860px); }
+    .domain-detail table { font-size: 13px; }
+    .domain-detail tbody td { font-size: 12px; }
+    .domain-detail .modal-body { padding: 12px 26px; }
+
+    html[data-sidebar="collapsed"] { --sidebar-width: 76px; }
+    html[data-sidebar="collapsed"] .sidebar { padding-left: 12px; padding-right: 12px; }
+    html[data-sidebar="collapsed"] .sidebar .brand { padding: 0; justify-content: center; }
+    html[data-sidebar="collapsed"] .brand > span:last-child,
+    html[data-sidebar="collapsed"] .nav-caption,
+    html[data-sidebar="collapsed"] .sidebar-note,
+    html[data-sidebar="collapsed"] .sidebar-foot,
+    html[data-sidebar="collapsed"] .tab-btn > span,
+    html[data-sidebar="collapsed"] .tab-btn.active::after { display: none; }
+    html[data-sidebar="collapsed"] .nav-tabs { margin-top: 35px; }
+    html[data-sidebar="collapsed"] .tab-btn { justify-content: center; padding: 14px 8px; }
+    html[data-sidebar="collapsed"] .shell-toggle svg { transform: rotate(180deg); }
+}
+
+@media (min-width: 1280px) {
+    .health-stats { gap: 16px; }
+    .hc-stat-card { min-height: 142px; padding: 20px; }
+    .hc-stat-card .hc-stat-label { font-size: 12px; }
+    .hc-stat-card .hc-stat-value { font-size: clamp(32px, 2.2vw, 42px); }
+    .hc-stat-note { font-size: 11px; color: #89967e; }
+    .filters input, .filters select, .filters .search-field input[type="search"] { font-size: 13px; }
+    .domain-filter-tab { font-size: 12px; padding: 7px 12px; }
+    .domain-filter-label { color: #7b8973; }
+    .panel-heading h2, .panel-title h2, .section-heading h2 { font-size: 16px; }
+    .panel-heading p, .panel-caption { font-size: 12px; }
+}
+
+@media (min-width: 1440px) {
+    .unified-filters, .domain-filters {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px 28px !important;
+    }
+    .unified-filters > .search-field, .domain-filters > .search-field,
+    .unified-filters > .choice-native, .domain-filters > .domain-filter-group:first-of-type {
+        grid-column: 1 / -1;
+    }
+    .choice-control, .domain-filter-group { align-items: center; }
+    .health-distribution { padding: 16px 22px; }
+    .hc-legend .hc-status, .hc-legend b { font-size: 11px; }
+    .ip-add-form { grid-template-columns: minmax(200px, 1fr) minmax(280px, 1.4fr) 140px auto; }
+}
+
+@media (min-width: 1920px) {
+    :root { --sidebar-width: 240px; --table-row-padding: 19px; }
+    .sidebar { padding: 34px 22px 24px; }
+    .tab-btn { font-size: 14px; padding: 14px; }
+    .page-head { margin-bottom: 28px; }
+    .asset-panel, .panel { border-radius: 12px; }
+    .panel-heading { padding: 24px 26px 18px; }
+    .asset-panel > .filters { padding-left: 26px; padding-right: 26px; }
+    .health-stats { gap: 20px; }
+    .hc-stat-card { min-height: 156px; padding: 24px; }
+    .hc-detail.modal { width: 800px; }
+    .rel-summary strong { font-size: 36px; }
+    .rel-summary .panel { padding: 24px; }
+    .rel-charts > .panel { padding: 24px 28px; }
+    #rel-coverage { min-height: 200px; }
+}
+
+/* Density affects presentation only. It does not reload or invalidate snapshots. */
+html[data-density="compact"] { --table-row-padding: 9px; }
+html[data-density="compact"] .hc-stat-card { min-height: 112px; padding: 15px 18px; }
+html[data-density="compact"] .hc-stat-card .hc-stat-value { font-size: 30px; margin: 7px 0 4px; }
+html[data-density="compact"] .asset-panel .btn-sm { min-height: 26px; padding-top: 3px; padding-bottom: 3px; }
+html[data-density="compact"] .health-stats { gap: 12px; }
+
+@media (max-width: 760px) {
+    .shell-toggle, .display-density { display: none; }
+    .topbar-start { gap: 0; }
+    .topbar-inner { gap: 8px; }
+    .nav-tabs .tab-btn > span { white-space: nowrap; }
+    .rel-graph svg { min-width: 1040px; }
+    .rel-graph svg[data-graph="detail"] { min-width: 1100px; }
+}
