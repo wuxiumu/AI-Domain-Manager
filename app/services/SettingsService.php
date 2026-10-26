@@ -78,7 +78,7 @@ class SettingsService
                 }
             }
             return ['id' => $account['id'], 'name' => $account['name'], 'provider' => $account['provider'],
-                'enabled' => ($account['enabled'] ?? true) !== false, 'credentials' => $fields,
+                'enabled' => ($account['enabled'] ?? true) !== false, 'note' => $account['note'] ?? '', 'credentials' => $fields,
                 'key_masked' => mask_secret((string) ($account['access_key_id'] ?? $account['secret_id'] ?? $account['api_key'] ?? ''))];
         }, $this->all()['accounts']));
     }
@@ -156,7 +156,7 @@ class SettingsService
 
     public function saveAccount(array $body, ?string $id = null): string
     {
-        self::stringFields($body, ['provider', 'name', 'access_key_id', 'access_key_secret', 'secret_id', 'secret_key', 'api_key', 'api_secret']);
+        self::stringFields($body, ['provider', 'name', 'note', 'access_key_id', 'access_key_secret', 'secret_id', 'secret_key', 'api_key', 'api_secret']);
         $savedId = $id ?? '';
         $this->change(function (array $all) use ($body, $id, &$savedId): array {
             $accounts = $all['accounts'];
@@ -171,8 +171,10 @@ class SettingsService
             if (!$schema) { throw new InvalidArgumentException('请选择支持的云商'); }
             $name = trim((string) ($body['name'] ?? $previous['name'] ?? ''));
             if ($name === '' || mb_strlen($name) > 100) { throw new InvalidArgumentException('账号名称需为 1–100 个字符'); }
+            $note = trim($body['note'] ?? $previous['note'] ?? '');
+            if (mb_strlen($note) > 2000) { throw new InvalidArgumentException('备注不能超过 2000 个字符'); }
             $savedId = $id ?? $providerId . '_' . bin2hex(random_bytes(6));
-            $next = array_replace($previous, ['id' => $savedId, 'name' => $name, 'provider' => $providerId,
+            $next = array_replace($previous, ['id' => $savedId, 'name' => $name, 'provider' => $providerId, 'note' => $note,
                 'enabled' => $body['enabled'] ?? $previous['enabled'] ?? true]);
             if (!is_bool($next['enabled'])) { throw new InvalidArgumentException('启用状态必须为布尔值'); }
             foreach ($schema['fields'] as $field) {
@@ -187,6 +189,15 @@ class SettingsService
             return ['accounts' => array_values($accounts)];
         });
         return $savedId;
+    }
+
+    public function deleteAccount(string $id): void
+    {
+        $this->change(static function (array $all) use ($id): array {
+            $accounts = array_values(array_filter($all['accounts'], static function ($account) use ($id) { return $account['id'] !== $id; }));
+            if (count($accounts) === count($all['accounts'])) { throw new OutOfBoundsException('云账号不存在'); }
+            return ['accounts' => $accounts];
+        });
     }
 
     public function updateHttp(array $body): void

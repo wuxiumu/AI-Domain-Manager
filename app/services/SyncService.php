@@ -11,6 +11,7 @@ class SyncService
     public static function syncAll(): array
     {
         @set_time_limit(300);
+        $epoch = WorkspaceData::locked(DATA_DIR, static function () { return WorkspaceData::epoch(DATA_DIR); });
 
         $results       = [];
         $successIds    = [];
@@ -45,8 +46,20 @@ class SyncService
             }
         }
 
-        $stats = self::mergeStore($freshByProvider, $successIds);
         $failed = count(array_filter($results, fn ($r) => !$r['ok']));
+        $syncedAt = date('Y-m-d H:i:s');
+        $syncStatus = !$results ? 'skipped' : (!$successIds ? 'failed' : ($failed ? 'partial' : 'success'));
+        $saved = WorkspaceData::locked(DATA_DIR, static function () use ($freshByProvider, $successIds, $epoch, $failed, $syncedAt, $syncStatus) {
+            if ($epoch !== WorkspaceData::epoch(DATA_DIR)) { throw new DomainException('同步期间资产已恢复，本次结果已丢弃，请重新同步'); }
+            $stats = self::mergeStore($freshByProvider, $successIds);
+            $meta = WorkspaceData::read(DATA_DIR . '/meta.json');
+            $meta = array_merge($meta, ['last_attempt_at' => $syncedAt, 'status' => $syncStatus, 'success' => count($successIds), 'failed' => $failed]);
+            if ($successIds) { $meta['last_sync'] = $syncedAt; }
+            if ($syncStatus === 'success') { $meta['last_full_sync_at'] = $syncedAt; }
+            JsonStore::write(DATA_DIR . '/meta.json', $meta);
+            return ['stats' => $stats, 'meta' => $meta];
+        });
+        $stats = $saved['stats'];
 
         Logger::log('sync', [
             'accounts' => $results,
@@ -55,16 +68,12 @@ class SyncService
             'stale'    => $stats['stale'],
         ]);
 
-        JsonStore::write(DATA_DIR . '/meta.json', [
-            'last_sync' => date('Y-m-d H:i:s'),
-            'success'   => count($successIds),
-            'failed'    => $failed,
-        ]);
-
         return [
             'results' => $results,
             'stats'   => $stats,
-            'last_sync' => date('Y-m-d H:i:s'),
+            'last_sync' => $saved['meta']['last_sync'] ?? null,
+            'last_attempt_at' => $syncedAt,
+            'status' => $syncStatus,
         ];
     }
 
@@ -73,6 +82,13 @@ class SyncService
      * 仅对"本次成功"的账号，把未再返回的旧域名标记为失效（valid=false）。
      */
     private static function mergeStore(array $freshByProvider, array $successIds): array
+    {
+        return WorkspaceData::locked(DATA_DIR, static function () use ($freshByProvider, $successIds) {
+            return self::mergeLocked($freshByProvider, $successIds);
+        });
+    }
+
+    private static function mergeLocked(array $freshByProvider, array $successIds): array
     {
         $store = JsonStore::read(DATA_DIR . '/domains.json', []);
         if (!is_array($store)) {

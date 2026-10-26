@@ -1,5 +1,7 @@
 #!/bin/bash
-# 域名管家启动脚本
+# Local development only; production uses a Web server rooted at public/.
 cd "$(dirname "$0")"
-echo "域名管家已启动: http://localhost:8080"
-exec php -S 0.0.0.0:8080 -t public public/index.php
+workspace_host="${WORKSPACE_HOST:-127.0.0.1}"
+workspace_port="${WORKSPACE_PORT:-8080}"
+echo "资产工作台（本地开发）: http://${workspace_host}:${workspace_port}"
+exec php -S "${workspace_host}:${workspace_port}" -t public public/index.php

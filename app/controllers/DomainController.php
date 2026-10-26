@@ -172,6 +172,9 @@ class DomainController
         $stats['provider_names'] = $names;
         $meta = JsonStore::read(DATA_DIR . '/meta.json', []);
         $stats['last_sync'] = $meta['last_sync'] ?? null;
+        $stats['sync_status'] = $meta['status'] ?? null;
+        $stats['last_attempt_at'] = $meta['last_attempt_at'] ?? null;
+        $stats['restored_at'] = $meta['restored_at'] ?? null;
 
         json_out($stats);
     }
@@ -293,7 +296,7 @@ class DomainController
     }
 
     /** 仅保存可公开解析的完整域名；实际探测仍须校验 DNS 返回的 IP。 */
-    private static function normalizeDomain($value): string
+    public static function normalizeDomain($value): string
     {
         if (!is_string($value) || trim($value) === '') {
             throw new InvalidArgumentException('请填写有效的域名');
@@ -333,7 +336,7 @@ class DomainController
         return $domain;
     }
 
-    private static function validateDate($value, string $label): string
+    public static function validateDate($value, string $label): string
     {
         if ($value === null || $value === '') {
             return '';

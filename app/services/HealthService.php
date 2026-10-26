@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/../core/WorkspaceData.php';
+
 /**
  * Public-asset health inventory. Existing domain files are read-only inputs;
  * all new state is changed under a stable lock, with atomic replacement.
@@ -29,7 +31,7 @@ class HealthService
         // Keep injected-clock tests deterministic; production expires on the next
         // minute so health-age and calendar classifications remain accurate.
         if (!class_exists('SnapshotCache') || $this->probe || $this->dnsLookup || $this->httpProbe) { return $this->buildDashboard(); }
-        return SnapshotCache::remember($this->dir, 'health-dashboard-v4',
+        return SnapshotCache::remember($this->dir, 'health-dashboard-v5',
             array_merge([$this->dir . '/domains.json', $this->dir . '/health.json', $this->dir . '/access_check.json'], glob($this->dir . '/cache/dns-*.json') ?: []),
             function () { return $this->buildDashboard(); }, time() + 60);
     }
@@ -79,15 +81,17 @@ class HealthService
             throw new InvalidArgumentException('端口必须是 1 至 65535 的整数');
         }
         $port = (int) $port;
-        $name = trim((string) ($input['name'] ?? ''));
-        if (strlen($name) > 160) {
-            throw new InvalidArgumentException('名称不能超过 160 字节');
+        if (isset($input['name']) && !is_string($input['name'])) { throw new InvalidArgumentException('名称必须为文本'); }
+        $name = trim($input['name'] ?? '');
+        if (mb_strlen($name) > 120) {
+            throw new InvalidArgumentException('名称不能超过 120 个字符');
         }
         $entry = ['id' => self::ipId($ip, $port), 'ip' => $ip, 'port' => $port,
-            'name' => $name !== '' ? $name : $ip, 'created_at' => $this->timestamp()];
+            'name' => $name !== '' ? $name : $ip, 'note' => self::note($input['note'] ?? ''),
+            'links' => self::links($input['links'] ?? []), 'created_at' => $this->timestamp()];
         $this->transaction(function (&$state) use ($entry) {
             if (isset($state['manual_ips'][$entry['id']])) {
-                throw new DomainException('此 IP 和端口已经添加');
+                throw new DomainException('此 IP 资产已经添加');
             }
             $state['manual_ips'][$entry['id']] = $entry;
         });
@@ -117,7 +121,8 @@ class HealthService
         if (!isset($assets[$id]) || $assets[$id]['kind'] !== 'ip') { throw new OutOfBoundsException('IP 资产不存在'); }
         $asset = $assets[$id];
         $name = trim((string) ($input['name'] ?? $asset['name']));
-        $note = trim((string) ($input['note'] ?? $asset['note'] ?? ''));
+        $note = self::note($input['note'] ?? $asset['note'] ?? '');
+        $links = self::links($input['links'] ?? $asset['links'] ?? []);
         $provider = trim((string) ($input['server_provider'] ?? $asset['server_provider'] ?? ''));
         $expires = trim((string) ($input['expires_at'] ?? $asset['expires_at'] ?? ''));
         if (mb_strlen($name) > 120 || mb_strlen($note) > 2000 || mb_strlen($provider) > 120) {
@@ -127,12 +132,38 @@ class HealthService
         if ($expires !== '' && (!$date || $date->format('Y-m-d') !== $expires)) {
             throw new InvalidArgumentException('请输入有效的到期日期');
         }
-        $this->transaction(function (&$state) use ($id, $asset, $name, $note, $provider, $expires) {
-            $state['manual_ips'][$id] = ['id' => $id, 'ip' => $asset['ip'], 'port' => $asset['port'],
-                'name' => $name ?: $asset['ip'], 'note' => $note, 'server_provider' => $provider,
-                'expires_at' => $expires, 'updated_at' => $this->timestamp()];
+        $this->transaction(function (&$state) use ($id, $asset, $name, $note, $links, $provider, $expires) {
+            $state['manual_ips'][$id] = array_replace($state['manual_ips'][$id] ?? [], ['id' => $id, 'ip' => $asset['ip'], 'port' => $asset['port'],
+                'name' => $name ?: $asset['ip'], 'note' => $note, 'links' => $links, 'server_provider' => $provider,
+                'expires_at' => $expires, 'updated_at' => $this->timestamp()]);
         });
         return ['ok' => true];
+    }
+
+    private static function note($value): string
+    {
+        if (!is_string($value) || mb_strlen($value) > 2000) { throw new InvalidArgumentException('备注需为不超过 2000 个字符的文本'); }
+        return trim($value);
+    }
+
+    public static function links($value): array
+    {
+        if (!is_array($value) || count($value) > 30) { throw new InvalidArgumentException('网站链接最多添加 30 项'); }
+        $links = [];
+        foreach ($value as $link) {
+            if (!is_array($link) || !is_string($link['name'] ?? null) || !is_string($link['url'] ?? null)) {
+                throw new InvalidArgumentException('网站链接需包含名称和 URL');
+            }
+            $name = trim($link['name']); $url = trim($link['url']);
+            $parts = parse_url($url);
+            if ($name === '' || mb_strlen($name) > 120 || strlen($url) > 2048 || preg_match('/[\x00-\x20\x7f]/', $url)
+                || !$parts || !in_array(strtolower($parts['scheme'] ?? ''), ['http', 'https'], true) || empty($parts['host'])
+                || isset($parts['user']) || isset($parts['pass']) || !filter_var($url, FILTER_VALIDATE_URL)) {
+                throw new InvalidArgumentException('请填写网站名称（最多 120 字）和有效的 http(s):// 网站 URL');
+            }
+            $links[] = ['name' => $name, 'url' => $url];
+        }
+        return $links;
     }
 
     public function saveBindings(string $domainId, array $input): array
@@ -177,6 +208,7 @@ class HealthService
 
     public function check(array $ids): array
     {
+        $epoch = WorkspaceData::locked($this->dir, function () { return WorkspaceData::epoch($this->dir); });
         if (!$ids || count($ids) > self::MAX_BATCH) {
             throw new InvalidArgumentException('每批请选择 1 至 5 个资产');
         }
@@ -218,10 +250,12 @@ class HealthService
             $health['checks'] = $health['checks'] ?? [];
             $health['resolved_ips'] = array_values(array_unique(array_filter($health['resolved_ips'] ?? [], [self::class, 'isPublicIp'])));
             $health['source'] = 'verified';
+            if ($asset['kind'] === 'ip') { $health['check_type'] = 'http'; }
             $observations[$id] = $health;
         }
         $histories = [];
-        $this->transaction(function (&$state) use ($observations, &$histories) {
+        $this->transaction(function (&$state) use ($observations, &$histories, $epoch) {
+            if ($epoch !== WorkspaceData::epoch($this->dir)) { throw new DomainException('检查期间资产已恢复，本批结果已丢弃，请重新检查'); }
             foreach ($observations as $id => $health) {
                 $history = $state['observations'][$id]['history'] ?? [];
                 array_unshift($history, $health);
@@ -323,7 +357,7 @@ class HealthService
             'provider' => 'manual', 'provider_name' => $source === 'manual' ? '手工添加' : 'DNS 解析发现',
             'source' => $source, 'linked_domains' => [], 'bound_domains' => [],
             'linked_subdomains' => [], 'dns_links' => [],
-            'server_provider' => $entry['server_provider'] ?? '', 'note' => $entry['note'] ?? '',
+            'server_provider' => $entry['server_provider'] ?? '', 'note' => $entry['note'] ?? '', 'links' => $entry['links'] ?? [],
             'expires_at' => $entry['expires_at'] ?? null, 'health' => $this->healthOf($id, $state),
             'history' => $state['observations'][$id]['history'] ?? []];
     }
@@ -336,6 +370,11 @@ class HealthService
                 'message' => '尚未检测', 'checks' => [], 'resolved_ips' => []];
         }
         $health['last_status'] = $health['last_status'] ?? $health['status'];
+        if (strpos($id, 'ip_') === 0 && ($health['check_type'] ?? '') !== 'http') {
+            $health['status'] = 'stale';
+            $health['message'] = '旧版端口检查记录，请重新执行 HTTP 访问检查';
+            return $health;
+        }
         $checked = strtotime($health['checked_at'] ?? '');
         if (!empty($health['invalidated']) || !$checked || $this->now() - $checked >= self::FRESHNESS_SECONDS || $checked > $this->now() + 300) {
             $health['status'] = 'stale';
@@ -352,22 +391,22 @@ class HealthService
     private function probeIp(array $asset): array
     {
         $ip = $asset['ip'];
-        $port = (int) $asset['port'];
         if (!self::isPublicIp($ip)) {
             throw new RuntimeException('拒绝探测非公网 IP');
         }
-        $address = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
         $start = microtime(true);
-        $socket = @stream_socket_client('tcp://' . $address . ':' . $port, $errno, $error, 3, STREAM_CLIENT_CONNECT);
-        $ok = is_resource($socket);
-        if ($ok) {
-            fclose($socket);
+        $response = $this->request($ip, $ip, true, 4000, 'http');
+        if (in_array($response['code'], [405, 501], true) && $response['errno'] === 0) {
+            $remaining = 4000 - (int) round((microtime(true) - $start) * 1000);
+            if ($remaining > 100) { $response = $this->request($ip, $ip, false, $remaining, 'http'); }
         }
-        $message = $ok ? 'TCP ' . $port . ' 端口可连接；不代表应用或整台服务器健康'
-            : 'TCP ' . $port . ' 端口连接失败，可能由防火墙、端口关闭或网络造成；不能据此认定服务器宕机';
+        $ok = $response['errno'] === 0 && $response['code'] >= 200 && $response['code'] < 400;
+        $url = 'http://' . (strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip) . '/';
+        $message = $response['errno'] !== 0 ? 'HTTP 访问失败：' . $response['error'] : 'HTTP 返回 ' . $response['code'];
+        if ($response['code'] >= 300 && $response['code'] < 400 && $response['errno'] === 0) { $message .= '（未跟随重定向）'; }
         return ['status' => $ok ? 'healthy' : 'unhealthy', 'message' => $message,
-            'latency_ms' => (int) round((microtime(true) - $start) * 1000),
-            'checks' => [['label' => 'TCP ' . $port, 'status' => $ok ? 'healthy' : 'unhealthy', 'message' => $ok ? '连接成功' : ($error ?: '连接失败')]],
+            'latency_ms' => $response['ms'], 'http_code' => $response['code'], 'url' => $url,
+            'checks' => [['label' => 'HTTP', 'status' => $ok ? 'healthy' : 'unhealthy', 'message' => $url . ' · ' . $message]],
             'resolved_ips' => []];
     }
 
@@ -464,26 +503,27 @@ class HealthService
                 ['label' => 'HTTP', 'status' => 'unchecked', 'message' => 'DNS 检查未通过']]];
     }
 
-    private function request(string $host, string $ip, bool $head, int $timeoutMs): array
+    private function request(string $host, string $ip, bool $head, int $timeoutMs, string $scheme = 'https'): array
     {
-        return $this->httpProbe ? call_user_func($this->httpProbe, $host, $ip, $head, $timeoutMs)
-            : $this->httpsRequest($host, $ip, $head, $timeoutMs);
+        return $this->httpProbe ? call_user_func($this->httpProbe, $host, $ip, $head, $timeoutMs, $scheme)
+            : $this->httpRequest($host, $ip, $head, $timeoutMs, $scheme);
     }
 
-    private function httpsRequest(string $host, string $ip, bool $head, int $timeoutMs): array
+    private function httpRequest(string $host, string $ip, bool $head, int $timeoutMs, string $scheme): array
     {
-        if (!self::isPublicIp($ip) || self::normalizeHost($host) !== $host) {
+        if (!self::isPublicIp($ip) || ($scheme === 'http' ? $host !== $ip : ($scheme !== 'https' || self::normalizeHost($host) !== $host))) {
             throw new RuntimeException('拒绝不安全的探测目标');
         }
         if (!function_exists('curl_init')) {
             throw new RuntimeException('服务器缺少 cURL 扩展');
         }
-        $ch = curl_init('https://' . $host . '/');
+        $urlHost = strpos($host, ':') !== false ? '[' . $host . ']' : $host;
+        $ch = curl_init($scheme . '://' . $urlHost . '/');
         $bytes = 0;
         $limited = false;
         $pinned = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
         curl_setopt_array($ch, [
-            CURLOPT_RESOLVE => [$host . ':443:' . $pinned], CURLOPT_PROXY => '',
+            CURLOPT_RESOLVE => $scheme === 'https' ? [$host . ':443:' . $pinned] : [], CURLOPT_PROXY => '',
             CURLOPT_NOBODY => $head, CURLOPT_FOLLOWLOCATION => false, CURLOPT_MAXREDIRS => 0,
             CURLOPT_CONNECTTIMEOUT_MS => min(2000, $timeoutMs), CURLOPT_TIMEOUT_MS => $timeoutMs,
             CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
@@ -495,7 +535,7 @@ class HealthService
             },
         ]);
         if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
-            curl_setopt($ch, CURLOPT_PROTOCOLS, CURLPROTO_HTTPS);
+            curl_setopt($ch, CURLOPT_PROTOCOLS, $scheme === 'http' ? CURLPROTO_HTTP : CURLPROTO_HTTPS);
         }
         if (!$head) {
             curl_setopt($ch, CURLOPT_RANGE, '0-1023');
@@ -591,6 +631,11 @@ class HealthService
     }
 
     private function transaction(callable $mutate): void
+    {
+        WorkspaceData::locked($this->dir, function () use ($mutate) { $this->transactionLocked($mutate); });
+    }
+
+    private function transactionLocked(callable $mutate): void
     {
         if (!is_dir($this->dir) && !@mkdir($this->dir, 0770, true) && !is_dir($this->dir)) {
             throw new RuntimeException('无法创建健康数据目录');

@@ -35,9 +35,12 @@ try {
         $account = ['provider' => $provider['id'], 'name' => $provider['name']];
         foreach ($provider['fields'] as $field) { $account[$field['key']] = $provider['id'] . '-' . $field['key'] . '-private-test'; $rawSecrets[] = $account[$field['key']]; }
         $id = $settings->saveAccount($account);
-        $settings->saveAccount(['name' => 'Renamed', 'enabled' => false, $provider['fields'][0]['key'] => ''], $id);
+        $settings->saveAccount(['name' => 'Renamed', 'enabled' => false, 'note' => "生产账号\n用途说明", $provider['fields'][0]['key'] => ''], $id);
         $saved = array_values(array_filter($settings->all()['accounts'], fn ($item) => $item['id'] === $id))[0];
         verify($saved['id'] === $id && $saved['enabled'] === false, 'Stable account ID and explicit disabled state');
+        $settings->saveAccount(['enabled' => true], $id);
+        $shown = array_values(array_filter($settings->publicAccounts(), fn ($item) => $item['id'] === $id))[0];
+        verify($shown['enabled'] && $shown['note'] === "生产账号\n用途说明", 'Toggle preserves and exposes account note');
         verify($saved[$provider['fields'][0]['key']] === $account[$provider['fields'][0]['key']], 'Empty credential edit preserves existing secret');
         rejects(fn () => $settings->saveAccount(['provider' => 'other'], $id), InvalidArgumentException::class);
     }
@@ -84,5 +87,14 @@ try {
     verify(strpos(file_get_contents($root . '/legacy-data/settings.json'), 'legacy-secret') === false, 'Saving other settings does not copy plaintext legacy credentials');
     $latest = new SettingsService($root . '/config', $root . '/data');
     verify(count($latest->all()['accounts']) === 3 && $latest->all()['auth']['user'] === 'next-admin', 'Settings survive a new process/service instance');
+    rejects(fn () => $latest->saveAccount(['note' => str_repeat('x', 2001)], $id), InvalidArgumentException::class);
+    rejects(fn () => $latest->saveAccount(['note' => ['invalid']], $id), InvalidArgumentException::class);
+    $latest->deleteAccount($id);
+    rejects(fn () => $latest->deleteAccount($id), OutOfBoundsException::class);
+    verify(count((new SettingsService($root . '/config', $root . '/data'))->all()['accounts']) === 2, 'Account deletion persists across service instances');
+    file_put_contents($root . '/legacy-config/config.php', '<?php return ' . var_export(['accounts' => [['id' => 'old-account', 'provider' => 'aliyun', 'name' => 'Old', 'access_key_id' => 'old-key', 'access_key_secret' => 'old-secret']]], true) . ';');
+    $legacy = new SettingsService($root . '/legacy-config', $root . '/legacy-data');
+    $legacy->deleteAccount('old-account');
+    verify((new SettingsService($root . '/legacy-config', $root . '/legacy-data'))->all()['accounts'] === [], 'Deleting a legacy account does not restore it from config.php');
     echo "Settings / API tokens: {$count} assertions passed\n";
 } finally { cleanup($root); }

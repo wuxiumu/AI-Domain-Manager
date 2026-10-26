@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Small dependency-free client for AI tools, scripts and administrator sessions."""
 import argparse
+import base64
 import getpass
 import http.cookiejar
 import json
 import os
 from pathlib import Path
 import sys
+import tempfile
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -22,7 +24,7 @@ def main():
     parser.add_argument("method", choices=["GET", "POST", "PUT", "DELETE"])
     parser.add_argument("path", help="Relative API path, such as /api/health")
     parser.add_argument("--base-url", default=os.environ.get("WORKSPACE_URL", "http://127.0.0.1:8080"))
-    parser.add_argument("--username", default=os.environ.get("WORKSPACE_USER"), help="Use password login instead of bearer auth")
+    parser.add_argument("--username", default=os.environ.get("WORKSPACE_USER"), help="Interactive password login with a human-entered image captcha; automation should use an API token")
     parser.add_argument("--json", dest="payload", help="JSON string, @file, or - for stdin")
     args = parser.parse_args()
     base = urllib.parse.urlsplit(args.base_url)
@@ -44,13 +46,23 @@ def main():
 
     authorization = {}
     if args.username:
+        if not sys.stdin.isatty():
+            parser.error("Password login requires an interactive image captcha; set WORKSPACE_API_TOKEN for automation")
         password = os.environ.get("WORKSPACE_PASSWORD") or getpass.getpass("Workspace password: ")
-        login = request("POST", "/api/login", {"user": args.username, "pass": password})
+        challenge = request("GET", "/api/login/captcha")
+        with tempfile.TemporaryDirectory(prefix="workspace-captcha-") as directory:
+            image = Path(directory) / "captcha.svg"
+            image.write_bytes(base64.b64decode(challenge["image"].split(",", 1)[1], validate=True))
+            image.chmod(0o600)
+            print(f"Open the local captcha image (valid for 2 minutes): {image}", file=sys.stderr)
+            answer = input("Captcha: ").strip()
+            login = request("POST", "/api/login", {"user": args.username, "pass": password,
+                            "captcha_id": challenge["captcha_id"], "captcha": answer}, {"X-CSRF-Token": challenge["csrf_token"]})
         authorization["X-CSRF-Token"] = login["csrf_token"]
     elif os.environ.get("WORKSPACE_API_TOKEN"):
         authorization["Authorization"] = "Bearer " + os.environ["WORKSPACE_API_TOKEN"]
     elif args.path.split("?")[0] not in ["/api/openapi.json", "/api/capabilities", "/api/setup/status"]:
-        parser.error("Set WORKSPACE_API_TOKEN, or provide WORKSPACE_USER / WORKSPACE_PASSWORD for session login")
+        parser.error("Set WORKSPACE_API_TOKEN, or use --username for interactive password and captcha login")
     body = None
     if args.payload is not None:
         raw = sys.stdin.read() if args.payload == "-" else Path(args.payload[1:]).read_text() if args.payload.startswith("@") else args.payload

@@ -54,23 +54,20 @@ code { background: #f1f5f9; padding: 1px 5px; border-radius: 4px; font-size: 12p
         <h3>常见部署问题速查</h3>
         <ul>
             <li><b>白屏/500</b>：多为 PHP 版本低于 7.4 或扩展缺失，先看上方「PHP 版本 / 扩展」两项，再到主机面板升级 PHP。</li>
-            <li><b>登录后跳回登录页</b>：Session 不可写（看「Session」项），将 session.save_path 目录改为可写。</li>
-            <li><b>页面没样式/按钮点了没反应</b>：静态资源 404，多半是把整个项目文件夹放在网站根目录下访问（如 https://域名/项目名/），应直接访问 public 目录，或把 public 内容放到网站根目录。</li>
-            <li><b>「登录配置」失败</b>：config/config.php 未上传或上传不完整，请用二进制模式完整上传。</li>
-            <li>仍无法定位时，在主机面板临时开启 <code>display_errors</code>（php.ini 或面板开关），刷新页面查看具体报错文本。</li>
+            <li><b>登录后跳回登录页</b>：请维护人员检查 PHP Session 存储权限与 HTTPS Cookie 配置。</li>
+            <li><b>页面没样式/按钮无响应</b>：确认网站根目录严格指向项目 public 目录，静态文件可访问。</li>
+            <li><b>首次使用</b>：回到工作台初始化管理员，再检查网络与云账号配置。</li>
+            <li>仍无法定位时，请维护人员查看服务器错误日志；生产环境保持 display_errors 关闭。</li>
         </ul>
     </div>
 </div>
 <script>
 'use strict';
 fetch('/api/env-check')
-    .then(function (r) { return r.json(); })
+    .then(function (r) { return r.json().then(function (d) { if (!r.ok) throw new Error(d.error || '请先登录管理员'); return d; }); })
     .then(function (d) {
-        document.getElementById('loading').textContent = '检查完成于 ' + d.time;
-        document.getElementById('meta').innerHTML =
-            '<span>PHP 版本：<b>' + escapeHtml(d.php_version) + '</b></span>' +
-            '<span>服务器：<b>' + escapeHtml(d.server) + '</b></span>' +
-            '<span>SAPI：<b>' + escapeHtml(d.sapi) + '</b></span>';
+        document.getElementById('loading').textContent = d.time ? '检查完成于 ' + d.time : '安装环境基础检查；初始化后可查看交付自检';
+        document.getElementById('meta').textContent = '详细检查仅管理员会话可读取，不公开服务器路径与配置。';
         var el = document.getElementById('checks');
         el.innerHTML = (d.checks || []).map(function (c) {
             var icon = c.status === 'ok' ? '<span class="icon ok">✓</span>'

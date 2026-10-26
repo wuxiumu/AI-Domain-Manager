@@ -1,25 +1,6 @@
 'use strict';
 
 /* ---------- 登录 ---------- */
-$('#login-form').addEventListener('submit', async (e) => {
-    e.preventDefault();
-    const btn = $('#login-btn');
-    btn.disabled = true;
-    $('#login-error').classList.add('hidden');
-    try {
-        const data = await api('/api/login', {
-            method: 'POST',
-            body: JSON.stringify({ user: $('#login-user').value, pass: $('#login-pass').value }),
-        });
-        if (data.ok) { state.csrf = data.csrf_token || ''; window.WorkspaceCache?.setUser(data.user); showApp(); }
-        else showLoginError(data.error || '登录失败');
-    } catch (err) {
-        showLoginError(err.message);
-    } finally {
-        btn.disabled = false;
-    }
-});
-
 function showLoginError(msg) {
     const el = $('#login-error');
     el.textContent = msg;
@@ -44,10 +25,12 @@ function showLogin() {
     $('#setup-view').classList.add('hidden');
     $('#login-view').classList.remove('hidden');
     $('#login-pass').value = '';
+    window.WorkspaceLogin.load();
 }
 
 /* ---------- 视图 / Tab ---------- */
 async function showApp() {
+    window.WorkspaceLogin.leave();
     $('#setup-view').classList.add('hidden');
     $('#login-view').classList.add('hidden');
     $('#app-view').classList.remove('hidden');

@@ -17,6 +17,7 @@ $router->get('/.well-known/asset-workspace.json', [ApiDescriptionController::cla
 $router->get('/llms.txt', [ApiDescriptionController::class, 'instructions']);
 
 // 鉴权
+$router->get('/api/login/captcha', [AuthController::class, 'captcha']);
 $router->post('/api/login',  [AuthController::class, 'login']);
 $router->post('/api/logout', [AuthController::class, 'logout']);
 $router->get('/api/me',      [AuthController::class, 'me']);
@@ -28,6 +29,15 @@ $router->put('/api/auth/credentials', [SettingsController::class, 'credentials']
 $router->get('/api/tokens', [SettingsController::class, 'tokens']);
 $router->post('/api/tokens', [SettingsController::class, 'createToken']);
 $router->delete('/api/tokens/{id}', [SettingsController::class, 'revokeToken']);
+
+// Private delivery tools: administrator session + CSRF for writes.
+$router->get('/api/maintenance', [MaintenanceController::class, 'index']);
+$router->post('/api/maintenance/backups', [MaintenanceController::class, 'backup']);
+$router->get('/api/maintenance/backups/{id}', [MaintenanceController::class, 'download']);
+$router->delete('/api/maintenance/backups/{id}', [MaintenanceController::class, 'deleteBackup']);
+$router->get('/api/maintenance/export', [MaintenanceController::class, 'export']);
+$router->post('/api/maintenance/preview', [MaintenanceController::class, 'preview']);
+$router->post('/api/maintenance/restore', [MaintenanceController::class, 'restore']);
 
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
 $router->get('/api/health', [HealthController::class, 'index']);
@@ -41,6 +51,7 @@ $router->put('/api/health/domains/{id}/bindings', [HealthController::class, 'bin
 $router->get('/api/accounts',            [AccountController::class, 'index']);
 $router->post('/api/accounts',           [AccountController::class, 'create']);
 $router->put('/api/accounts/{id}',       [AccountController::class, 'update']);
+$router->delete('/api/accounts/{id}',    [AccountController::class, 'delete']);
 $router->post('/api/accounts/{id}/test', [AccountController::class, 'test']);
 $router->post('/api/test-all',           [AccountController::class, 'testAll']);
 
@@ -64,7 +75,7 @@ $router->post('/api/domains/{provider}/{domain}/records/access-check', [RecordCo
 $router->get('/api/access-check',  [AccessCheckController::class, 'index']);
 $router->post('/api/access-check', [AccessCheckController::class, 'check']);
 
-// 环境检查（免登录，用于虚拟主机部署排查）
+// 初始化后仅管理员会话可读取环境诊断。
 $router->get('/env-check',     [EnvCheckController::class, 'page']);
 $router->get('/api/env-check', [EnvCheckController::class, 'index']);
 

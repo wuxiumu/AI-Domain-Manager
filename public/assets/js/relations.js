@@ -1,6 +1,6 @@
 'use strict';
 window.Relationships = (() => {
-    let data = null, tab = 'all', view = 'graph', page = 0, generation = 0;
+    let data = null, tab = 'all', view = 'table', page = 0, generation = 0;
     let selectedRoots = null, focusedDomain = null, focusedHost = null, focusedIp = null;
     const h = escapeHtml;
     const domainAssets = () => (data?.assets || []).filter(a => a.kind === 'domain' && (!selectedRoots || selectedRoots.has(a.id)));
@@ -23,6 +23,7 @@ window.Relationships = (() => {
             const selected = $('#rel-ip').value;
             $('#rel-ip').innerHTML = '<option value="">全部 IP / 服务器</option>' + ipAssets().map(a => `<option value="${h(a.id)}">${h(a.name)} · ${h(endpoint(a))}</option>`).join('');
             if (ipAssets().some(a => a.id === selected)) $('#rel-ip').value = selected;
+            $('#rel-cache-note').dataset.error = 'false';
             $('#rel-cache-note').textContent = `文件快照 ${data.cache?.saved_at || data.generated_at} · Tab 与筛选复用已加载数据 · 保存后刷新缓存`;
             const query = new URLSearchParams(location.hash.split('?')[1] || '');
             selectedRoots = query.has('domains') ? new Set(query.get('domains').split(',').filter(Boolean)) : null;
@@ -31,7 +32,7 @@ window.Relationships = (() => {
             if (query.has('ip') && ipAssets().some(a => a.id === query.get('ip'))) $('#rel-ip').value = query.get('ip');
             if (['all','confirmed','dns','unlinked','unhealthy'].includes(query.get('tab'))) tab = query.get('tab');
             render();
-        } catch (error) { $('#rel-cache-note').textContent = '加载失败：' + error.message; }
+        } catch (error) { $('#rel-cache-note').dataset.error = 'true'; $('#rel-cache-note').textContent = '加载失败：' + error.message; }
     }
     function filtered() {
         const query = $('#rel-query').value.trim().toLowerCase(), ip = $('#rel-ip').value;
@@ -70,13 +71,12 @@ window.Relationships = (() => {
         const slice = rows.slice(page*size,(page+1)*size);
         $('#rel-count').textContent = `${rows.length} 个域名`;
         $$('[data-rel-tab]').forEach(b => b.setAttribute('aria-selected',String(b.dataset.relTab === tab)));
-        $$('[data-rel-view]').forEach(b => b.setAttribute('aria-selected',String(b.dataset.relView === view)));
-        $('#rel-graph').classList.toggle('hidden',view !== 'graph');
-        $('#rel-table').classList.toggle('hidden',view !== 'table');
+        $('#rel-graph').classList.toggle('hidden', view !== 'graph');
+        $('#rel-table').classList.remove('hidden');
         $('#rel-prev').disabled = page === 0;
         $('#rel-next').disabled = (page+1)*size >= rows.length;
         $('#rel-page').textContent = rows.length ? `${page*size+1}–${Math.min((page+1)*size,rows.length)} / ${rows.length} · 每页 ${size} 个域名` : '无匹配域名';
-        renderGraph(slice);
+        if (view === 'graph') renderGraph(slice);
         $('#rel-table').innerHTML = `<table><thead><tr><th>域名</th><th>DNS 解析 IP</th><th>确认绑定服务器</th><th>健康</th><th>操作</th></tr></thead><tbody>${slice.length ? slice.map(d=>`<tr><td><button class="hc-asset-link" data-rel-detail="${h(d.id)}">${h(d.name)}</button></td><td>${(d.health.resolved_ips||[]).map(h).join('<br>')||'暂无解析证据'}</td><td>${d.bound_ips.map(id=>byId(id)).filter(Boolean).map(a=>`<button class="btn btn-link" data-rel-detail="${h(a.id)}">${h(a.name)} · ${h(a.ip)}</button>`).join('')||'尚未确认'}</td><td>${badge(d)}</td><td><button class="btn btn-sm" data-rel-detail="${h(d.id)}">关系详情</button><button class="btn btn-sm" data-rel-edit="${h(d.id)}">编辑</button><button class="btn btn-sm" data-rel-bind="${h(d.id)}">绑定</button></td></tr>`).join('') : '<tr><td colspan="5" class="hc-empty">暂无匹配关系，可调整筛选条件。</td></tr>'}</tbody></table>`;
     }
     function renderGraph(domains) {
@@ -113,11 +113,23 @@ window.Relationships = (() => {
     }).observe($('#rel-graph'));
     window.addEventListener('workspace-display-changed', refreshGraphLayout);
 
+    function openView(nextView) {
+        window.WorkspaceUI.closeDialog();
+        view = nextView;
+        window.WorkspaceUI.openDialog({
+            title: view === 'graph' ? '资产关联图' : '关联统计',
+            anchor: document.querySelector(`[data-rel-open="${nextView}"]`), align: 'end',
+            panels: [{nodes: view === 'graph' ? ['rel-graph-panel', 'rel-pagination'] : ['rel-summary-panel']}],
+            onOpen: () => { if (data) render(); },
+            onClose: () => { view = 'table'; if (data) renderResults(); },
+        });
+    }
     function showDomains(ids) {
         selectedRoots=new Set(ids);focusedDomain=null;tab='all';page=0;view='graph';
         $('#rel-query').value='';$('#rel-ip').value='';
         history.pushState(null,'','#relations?domains='+ids.join(','));
         switchTab('relations');
+        openView('graph');
     }
     function renderDomainGraph(id) {
         const d=byId(id);
@@ -155,7 +167,7 @@ window.Relationships = (() => {
         if(a) window.HealthWorkbench.openDetail(a.id);
     }
     async function edit(id) {
-        if(!data) await load();
+        await load();
         const a=byId(id); if(!a)return;
         window.HealthWorkbench.closeDetail();
         if(a.kind==='domain') {
@@ -164,8 +176,12 @@ window.Relationships = (() => {
             openDomainModal('edit',{domain:a.name,provider:a.provider});
             return;
         }
-        const modal=dialog(`编辑服务器 / IP`, `<form id="rel-edit-form" class="form-grid"><label>名称<input id="rel-name" value="${h(a.name)}" maxlength="120"></label><label>IP 与检查端口<input value="${h(endpoint(a))}" readonly></label><label>供应商<input id="rel-provider" value="${h(a.server_provider||'')}" maxlength="120"></label><label>到期日期<input type="date" id="rel-expiry" value="${h(a.expires_at||'')}"></label><label class="span-2">用途与备注<textarea id="rel-note" rows="3" maxlength="2000">${h(a.note||'')}</textarea></label></form>`, '保存资产');
-        modal.save.addEventListener('click',()=>save(modal,()=>api('/api/health/ips/'+encodeURIComponent(id),{method:'PUT',body:JSON.stringify({name:$('#rel-name').value,server_provider:$('#rel-provider').value,expires_at:$('#rel-expiry').value,note:$('#rel-note').value})})));
+        const modal=dialog(`编辑服务器 / IP`, `<form id="rel-edit-form" class="form-grid"><label>名称<input id="rel-name" value="${h(a.name)}" maxlength="120"></label><label>IP 地址<input value="${h(a.ip)}" readonly></label><label>供应商<input id="rel-provider" value="${h(a.server_provider||'')}" maxlength="120"></label><label>到期日期<input type="date" id="rel-expiry" value="${h(a.expires_at||'')}"></label><label class="span-2">用途与备注<textarea id="rel-note" rows="3" maxlength="2000">${h(a.note||'')}</textarea></label><fieldset class="asset-links-field span-2"><legend>网站链接</legend><div id="rel-links-editor"></div></fieldset></form>`, '保存资产');
+        const links = window.AssetLinks.editor(modal.overlay.querySelector('#rel-links-editor'), a.links || []);
+        modal.save.addEventListener('click', () => {
+            if (!modal.overlay.querySelector('form').reportValidity()) return;
+            save(modal, () => api('/api/health/ips/' + encodeURIComponent(id), {method: 'PUT', body: JSON.stringify({name: $('#rel-name').value, server_provider: $('#rel-provider').value, expires_at: $('#rel-expiry').value, note: $('#rel-note').value, links: links.read()})}));
+        });
     }
     async function bind(id) {
         await load(); const a=byId(id); if(!a)return;
@@ -192,23 +208,23 @@ window.Relationships = (() => {
         finally{modal.save.disabled=false;}
     }
     document.addEventListener('click',async event=>{
-        const target=event.target.closest('[data-rel-detail],[data-rel-dns],[data-rel-edit],[data-rel-bind],[data-rel-tab],[data-rel-view],[data-rel-focus]'); if(!target)return;
+        const target=event.target.closest('[data-rel-detail],[data-rel-dns],[data-rel-edit],[data-rel-bind],[data-rel-tab],[data-rel-open],[data-rel-focus]'); if(!target)return;
         if(target.dataset.relDns){ if(!data)await load();const a=byId(target.dataset.relDns);if(a){window.HealthWorkbench.closeDetail();openRecordsModal(a.name,a.provider);}}
-        else if(target.dataset.relDetail) {const a=byId(target.dataset.relDetail);if(a?.kind==='domain'){focusedDomain=a.id;focusedHost=null;focusedIp=null;view='graph';updateUrl();renderResults();}else await window.HealthWorkbench.openDetail(target.dataset.relDetail);}
+        else if(target.dataset.relDetail) {const a=byId(target.dataset.relDetail);if(a?.kind==='domain'){focusedDomain=a.id;focusedHost=null;focusedIp=null;updateUrl();openView('graph');}else await window.HealthWorkbench.openDetail(target.dataset.relDetail);}
         else if(target.dataset.relEdit) await edit(target.dataset.relEdit);
         else if(target.dataset.relBind) await bind(target.dataset.relBind);
-        else if(target.dataset.relFocus){$('#rel-ip').value=target.dataset.relFocus;tab='all';page=0;updateUrl();renderResults();}
-        else if(target.dataset.relTab){tab=target.dataset.relTab;if(tab==='all'){$('#rel-query').value='';$('#rel-ip').value='';}page=0;updateUrl();renderResults();}
-        else if(target.dataset.relView){view=target.dataset.relView;renderResults();}
+        else if(target.dataset.relFocus){$('#rel-ip').value=target.dataset.relFocus;tab='all';page=0;updateUrl();openView('graph');}
+        else if(target.dataset.relTab){tab=target.dataset.relTab;const fromSummary=view==='summary';if(tab==='all'){$('#rel-query').value='';$('#rel-ip').value='';}page=0;updateUrl();if(fromSummary)openView('graph');else renderResults();}
+        else if(target.dataset.relOpen){openView(target.dataset.relOpen);}
     });
     document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.rel-node')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
     ['rel-query','rel-ip'].forEach(id=>$('#'+id).addEventListener(id==='rel-query'?'input':'change',()=>{page=0;updateUrl();renderResults();}));
     try { $('#rel-page-size').value=localStorage.getItem('relation-page-size')||'12';$('#rel-show-all').checked=localStorage.getItem('relation-show-all')==='1';$('#rel-page-size').disabled=$('#rel-show-all').checked; } catch {}
     $('#rel-page-size').oninput=()=>{page=0;try{localStorage.setItem('relation-page-size',$('#rel-page-size').value);}catch{}renderResults();};
     $('#rel-show-all').onchange=()=>{page=0;try{localStorage.setItem('relation-show-all',$('#rel-show-all').checked?'1':'0');}catch{}$('#rel-page-size').disabled=$('#rel-show-all').checked;renderResults();};
-    $('#rel-fullscreen').onclick=async()=>{const panel=$('.rel-panel');if(panel.classList.contains('rel-fallback-fullscreen')){panel.classList.remove('rel-fallback-fullscreen');$('#rel-fullscreen').textContent='全屏展示';return;}if(document.fullscreenElement){await document.exitFullscreen();}else{try{await panel.requestFullscreen();}catch{panel.classList.add('rel-fallback-fullscreen');$('#rel-fullscreen').textContent='退出全屏';}}};
+    $('#rel-fullscreen').onclick=async()=>{const panel=$('#rel-graph-panel').closest('.workspace-content-modal') || $('.rel-panel');if(panel.classList.contains('rel-fallback-fullscreen')){panel.classList.remove('rel-fallback-fullscreen');$('#rel-fullscreen').textContent='全屏展示';return;}if(document.fullscreenElement){await document.exitFullscreen();}else{try{await panel.requestFullscreen();}catch{panel.classList.add('rel-fallback-fullscreen');$('#rel-fullscreen').textContent='退出全屏';}}};
     document.addEventListener('fullscreenchange',()=>{$('#rel-fullscreen').textContent=document.fullscreenElement?'退出全屏':'全屏展示';});
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('.rel-panel').classList.remove('rel-fallback-fullscreen');if(!document.fullscreenElement)$('#rel-fullscreen').textContent='全屏展示';}});
+    document.addEventListener('keydown',e=>{if(e.key==='Escape'){$('.rel-fallback-fullscreen')?.classList.remove('rel-fallback-fullscreen');if(!document.fullscreenElement)$('#rel-fullscreen').textContent='全屏展示';}});
     $('#rel-prev').onclick=()=>{page--;renderResults();}; $('#rel-next').onclick=()=>{page++;renderResults();};
     $('#rel-refresh').onclick=async()=>{window.WorkspaceCache.clear();await load(true);};
     window.addEventListener('workspace-invalidated',()=>{data=null;generation++;if(state.tab==='relations'&&!$('#app-view').classList.contains('hidden'))setTimeout(()=>{if(state.tab==='relations'&&!$('#app-view').classList.contains('hidden'))load();},0);});

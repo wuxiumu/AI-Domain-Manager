@@ -18,6 +18,7 @@ window.WorkspaceSettings = (() => {
 
     async function load() {
         const revision = ++generation;
+        if (document.querySelector('[data-settings-tab="maintenance"]')?.getAttribute('aria-selected') === 'true') window.WorkspaceMaintenance?.load();
         $('#settings-error').classList.add('hidden');
         try {
             const [result, authorization] = await Promise.all([api('/api/settings'), api('/api/tokens')]);
@@ -114,7 +115,7 @@ window.WorkspaceSettings = (() => {
             if (id && !account) throw new Error('云账号不存在，请刷新列表');
             let provider = account?.provider || 'aliyun';
             const overlay = document.createElement('div'); overlay.className = 'modal-overlay';
-            overlay.innerHTML = `<section class="modal account-config-modal" role="dialog" aria-modal="true" aria-label="${account ? '编辑云账号' : '添加云账号'}"><div class="modal-head"><h3>${account ? '编辑云账号' : '添加云账号'}</h3><button class="modal-close" aria-label="关闭云账号配置">×</button></div><form class="settings-form"><div class="modal-body"><label>账号名称<input name="name" required maxlength="100" value="${escapeHtml(account?.name || '')}" placeholder="如：阿里云 · 生产账号"></label><label>云商类型</label><div class="domain-filter-tabs" role="group" aria-label="云商类型">${Object.entries(providerNames).map(([value, name]) => `<button type="button" class="domain-filter-tab" data-account-provider="${value}" data-color="${value}" aria-pressed="${value === provider}" ${account ? 'disabled' : ''}>${name}</button>`).join('')}</div><div class="account-credential-fields"></div><p class="form-help">${account ? '密钥留空会保留已保存的值。停用仅停止云端操作，资产台账与缓存会保留。' : '凭据保存到服务器的私有配置文件，后续仅显示配置状态。'}</p><label class="settings-checkbox"><input type="checkbox" name="enabled" ${account?.enabled === false ? '' : 'checked'}>启用此云账号</label><p class="error-text hidden" role="alert"></p></div><div class="modal-foot"><button type="button" class="btn account-cancel">取消</button><button type="submit" class="btn btn-primary">保存配置</button></div></form></section>`;
+            overlay.innerHTML = `<section class="modal account-config-modal" role="dialog" aria-modal="true" aria-label="${account ? '编辑云账号' : '添加云账号'}"><div class="modal-head"><h3>${account ? '编辑云账号' : '添加云账号'}</h3><button class="modal-close" aria-label="关闭云账号配置">×</button></div><form class="settings-form"><div class="modal-body"><label>账号名称<input name="name" required maxlength="100" value="${escapeHtml(account?.name || '')}" placeholder="如：阿里云 · 生产账号"></label><label>云商类型</label><div class="domain-filter-tabs" role="group" aria-label="云商类型">${Object.entries(providerNames).map(([value, name]) => `<button type="button" class="domain-filter-tab" data-account-provider="${value}" data-color="${value}" aria-pressed="${value === provider}" ${account ? 'disabled' : ''}>${name}</button>`).join('')}</div><div class="account-credential-fields"></div><p class="form-help">${account ? '密钥留空会保留已保存的值。停用仅停止云端操作，资产台账与缓存会保留。' : '凭据保存到服务器的私有配置文件，后续仅显示配置状态。'}</p><label>备注<textarea name="note" rows="3" maxlength="2000" placeholder="账号用途或其他说明">${escapeHtml(account?.note || '')}</textarea></label><label class="account-state"><span>启用此云账号</span><input class="account-switch-input" type="checkbox" role="switch" name="enabled" ${account?.enabled === false ? '' : 'checked'}></label><p class="error-text hidden" role="alert"></p></div><div class="modal-foot"><button type="button" class="btn account-cancel">取消</button><button type="submit" class="btn btn-primary">保存配置</button></div></form></section>`;
             (document.fullscreenElement || document.body).appendChild(overlay);
             const form = overlay.querySelector('form');
             const fields = () => {
@@ -129,7 +130,7 @@ window.WorkspaceSettings = (() => {
             overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
             form.addEventListener('submit', async event => {
                 event.preventDefault(); const button = form.querySelector('[type="submit"]'); button.disabled = true; errorFor(form);
-                const body = {provider, name: form.elements.name.value.trim(), enabled: form.elements.enabled.checked};
+                const body = {provider, name: form.elements.name.value.trim(), enabled: form.elements.enabled.checked, note: form.elements.note.value.trim()};
                 providerFields[provider].forEach(([key]) => { body[key] = form.elements[key].value; });
                 try {
                     await api('/api/accounts' + (account ? '/' + encodeURIComponent(account.id) : ''), {method: account ? 'PUT' : 'POST', body: JSON.stringify(body)});
@@ -145,6 +146,7 @@ window.WorkspaceSettings = (() => {
     window.addEventListener('hashchange', () => { if (!location.hash.startsWith('#settings')) hideToken(); });
     function leave() {
         generation++;
+        window.WorkspaceMaintenance?.leave();
         hideToken();
         $('#settings-auth-form').reset();
         $('#settings-proxy').value = '';

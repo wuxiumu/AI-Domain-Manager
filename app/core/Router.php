@@ -44,6 +44,16 @@ class Router
                 $controller = new $handler[0]();
                 try {
                     Auth::authorizeRoute($method, $p);
+                    if (strpos($p, '/api/') === 0 && Auth::check()) {
+                        WorkspaceData::recover(DATA_DIR);
+                        AuditLog::begin($method, $p, $params);
+                        // Hold the local lock through JSON output. Request shutdown
+                        // releases the resource, including controllers that exit.
+                        if (in_array($p, ['/api/domains', '/api/domains/stats', '/api/health', '/api/health/ips',
+                            '/api/health/ips/{id}', '/api/health/domains/{id}/bindings'], true) || strpos($p, '/api/maintenance') === 0) {
+                            WorkspaceData::acquire(DATA_DIR);
+                        }
+                    }
                     call_user_func_array([$controller, $handler[1]], $params);
                 } catch (InvalidArgumentException $e) {
                     json_out(['ok' => false, 'error' => $e->getMessage(), 'code' => 'validation_error'], 422);

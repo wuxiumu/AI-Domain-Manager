@@ -30,6 +30,9 @@ function renderStats(s) {
     $('#dash-sub').textContent = s.last_sync
         ? `域名资料上次同步于 ${s.last_sync} · 健康结果以各项检测时间为准`
         : '尚未同步域名资料，可先同步域名或添加 IP。';
+    if (s.sync_status === 'failed') $('#dash-sub').textContent = `最近一次同步失败（${s.last_attempt_at}），当前展示保留资料；请查看同步记录。`;
+    if (s.sync_status === 'partial') $('#dash-sub').textContent = `最近一次仅部分账号同步成功（${s.last_attempt_at}），失败账号保留旧资料。`;
+    if (s.sync_status === 'restored') $('#dash-sub').textContent = `资产已于 ${s.restored_at} 从备份恢复；同步时间已重置，请按需重新同步与检查。`;
 }
 
 function renderProviderDist(s) {
@@ -63,6 +66,7 @@ $('#provider-dist').addEventListener('click', (e) => {
 });
 
 function navigateToDomains(filters) {
+    window.WorkspaceUI?.closeDialog();
     $('#f-provider').value = filters.provider ?? '';
     $('#f-valid').value = filters.valid !== undefined ? String(filters.valid) : '';
     $('#f-access').value = filters.access ?? '';
@@ -100,6 +104,7 @@ async function runSync(btn) {
         const okCount = (res.results || []).filter((r) => r.ok).length;
         const fail = (res.results || []).filter((r) => !r.ok);
         let msg = `同步完成：${res.stats?.total ?? 0} 个域名（${okCount} 个账号成功，${fail.length} 个失败）`;
+        if (res.status === 'skipped') msg = '没有已启用的云账号，本次未同步；原有资料已保留。';
         if (fail.length) {
             msg += '\n失败：' + fail.map((f) => f.name + ' ' + f.error).join('\n');
         }

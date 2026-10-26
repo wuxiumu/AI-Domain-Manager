@@ -1224,3 +1224,9 @@ thead th:last-child, tbody td:last-child {
 
 }
 
+
+.workspace-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 20px; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+.workspace-tabs > button { border: 1px solid transparent; border-radius: 6px; padding: 9px 16px; background: transparent; color: var(--muted); font: inherit; font-size: 13px; cursor: pointer; }
+.workspace-tabs > button:hover { background: #eef3e9; color: var(--text); }
+.workspace-tabs > button[aria-selected="true"] { color: #44673b; background: #eaf1e8; border-color: #dce7d7; font-weight: 600; }
+.workspace-tabs > button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }

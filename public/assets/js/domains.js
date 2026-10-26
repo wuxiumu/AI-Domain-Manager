@@ -290,6 +290,7 @@ function renderDomainFilterTabs(){
     }
 }
 function renderDomainSelection(){
+    $('#domain-selected-count').closest('.health-selection-bar').classList.toggle('hidden', selectedDomainRows.size === 0);
     $('#domain-selected-count').textContent=selectedDomainRows.size?`已选择 ${selectedDomainRows.size} 个域名（筛选切换时保留）`:'未选择域名';
     $('#domains-to-relations').disabled=selectedDomainRows.size===0;
     const rows=visibleDomainRows.filter(d=>d.valid!==false),n=rows.filter(d=>selectedDomainRows.has(domainRowKey(d))).length;

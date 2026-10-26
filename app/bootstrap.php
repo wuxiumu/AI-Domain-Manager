@@ -12,6 +12,8 @@ define('PUBLIC_DIR', APP_ROOT . '/public');
 date_default_timezone_set('Asia/Shanghai');
 
 if (session_status() === PHP_SESSION_NONE) {
+    ini_set('session.use_strict_mode', '1');
+    ini_set('session.use_only_cookies', '1');
     // Keep this installation's sessions separate from other local PHP apps.
     session_name('AW_' . substr(hash('sha256', APP_ROOT), 0, 12));
     session_set_cookie_params(['httponly' => true, 'samesite' => 'Lax', 'secure' => !empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off']);
@@ -56,6 +58,7 @@ function config(?string $key = null)
 /** 输出 JSON 并结束 */
 function json_out($data, int $code = 200): void
 {
+    AuditLog::finish($data, $code);
     http_response_code($code);
     header('Content-Type: application/json; charset=utf-8');
     echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);

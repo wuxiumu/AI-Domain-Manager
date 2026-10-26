@@ -24,6 +24,13 @@ class AccountController
         json_out(['ok' => true, 'id' => $id]);
     }
 
+    public function delete(string $id): void
+    {
+        Auth::requireSession();
+        settings_service()->deleteAccount($id);
+        json_out(['ok' => true]);
+    }
+
     /** 测试单个账号密钥（真实调用云商 API） */
     public function test(string $id): void
     {
@@ -46,6 +53,7 @@ class AccountController
         Auth::requireLogin();
         $results = [];
         foreach (config('accounts') as $a) {
+            if (($a['enabled'] ?? true) === false) { continue; }
             try {
                 $result = provider_factory($a)->testConnection();
                 $results[] = ['id' => $a['id'], 'name' => $a['name'], 'ok' => true, 'result' => $result];

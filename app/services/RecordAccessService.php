@@ -18,6 +18,7 @@ class RecordAccessService
     public static function runCheck(string $provider, string $domain, array $records): array
     {
         @set_time_limit(300);
+        $epoch = WorkspaceData::locked(DATA_DIR, static function () { return WorkspaceData::epoch(DATA_DIR); });
 
         // 每条记录 → 探测目标列表（主机名优先，记录值为 IP/域名时补充）
         $tasks = [];   // recordId => [url, ...]
@@ -94,9 +95,12 @@ class RecordAccessService
             'results'    => $results,
         ];
 
-        $store = JsonStore::read(DATA_DIR . '/' . self::FILE, []);
-        $store[$provider . '|' . $domain] = $data;
-        JsonStore::write(DATA_DIR . '/' . self::FILE, $store);
+        WorkspaceData::locked(DATA_DIR, static function () use ($provider, $domain, $data, $epoch) {
+            if ($epoch !== WorkspaceData::epoch(DATA_DIR)) { throw new DomainException('检测期间资产已恢复，旧结果已丢弃'); }
+            $store = WorkspaceData::read(DATA_DIR . '/' . self::FILE);
+            $store[$provider . '|' . $domain] = $data;
+            JsonStore::write(DATA_DIR . '/' . self::FILE, $store);
+        });
 
         return [
             'checked_at' => $checkedAt,

@@ -1,12 +1,10 @@
 <?php
 
 /**
- * 登录鉴权：Session + 登录失败限流（同一 IP 连续失败锁定 5 分钟）。
+ * Session / Bearer authentication. Password entry is guarded by AuthController.
  */
 class Auth
 {
-    public const MAX_ATTEMPTS = 5;
-    public const LOCK_SECONDS = 300;
     private static bool $bearerResolved = false;
     private static ?array $bearerIdentity = null;
 
@@ -48,22 +46,11 @@ class Auth
         return hash_equals($_SESSION['auth_fingerprint'], $fingerprint) ? $user : null;
     }
 
-    /** 执行登录，成功返回 true，失败返回错误信息字符串 */
-    public static function attempt(string $user, string $pass)
+    public static function verifyCredentials(string $user, string $pass): bool
     {
-        if (self::isLocked()) {
-            return '尝试次数过多，请 ' . self::remainingLockSeconds() . ' 秒后再试';
-        }
         $cfg = config('auth');
         $validPassword = settings_service()->verifyPassword($pass);
-        $ok = hash_equals((string) ($cfg['user'] ?? ''), $user) && $validPassword;
-        if ($ok) {
-            self::clearFailures();
-            self::establish($user);
-            return true;
-        }
-        self::recordFailure();
-        return '用户名或密码错误';
+        return hash_equals((string) ($cfg['user'] ?? ''), $user) && $validPassword;
     }
 
     public static function establish(string $user): void
@@ -81,7 +68,7 @@ class Auth
     /** Deny unlisted routes to tokens; browser sessions keep CSRF protection. */
     public static function authorizeRoute(string $method, string $route): void
     {
-        if (in_array($route, ['/api/login', '/api/me', '/api/setup/status', '/api/setup', '/api/openapi.json', '/api/capabilities', '/api/env-check'], true)) { return; }
+        if (in_array($route, ['/api/login', '/api/login/captcha', '/api/me', '/api/setup/status', '/api/setup', '/api/openapi.json', '/api/capabilities', '/api/env-check'], true)) { return; }
         if (strpos($route, '/api/') !== 0) { return; }
         self::requireLogin();
         if (!self::isBearer()) {
@@ -134,50 +121,4 @@ class Auth
         }
     }
 
-    private static function ip(): string
-    {
-        return $_SERVER['REMOTE_ADDR'] ?? 'cli';
-    }
-
-    private static function state(): array
-    {
-        return JsonStore::read(DATA_DIR . '/ratelimit.json', []);
-    }
-
-    private static function save(array $state): void
-    {
-        JsonStore::write(DATA_DIR . '/ratelimit.json', $state);
-    }
-
-    public static function isLocked(): bool
-    {
-        $s = self::state();
-        $ip = self::ip();
-        return isset($s[$ip]['lock_until']) && time() < $s[$ip]['lock_until'];
-    }
-
-    public static function remainingLockSeconds(): int
-    {
-        $s = self::state();
-        $ip = self::ip();
-        return max(0, (int) ($s[$ip]['lock_until'] ?? 0) - time());
-    }
-
-    private static function recordFailure(): void
-    {
-        $s = self::state();
-        $ip = self::ip();
-        $s[$ip]['count'] = (int) ($s[$ip]['count'] ?? 0) + 1;
-        if ($s[$ip]['count'] >= self::MAX_ATTEMPTS) {
-            $s[$ip]['lock_until'] = time() + self::LOCK_SECONDS;
-        }
-        self::save($s);
-    }
-
-    private static function clearFailures(): void
-    {
-        $s = self::state();
-        unset($s[self::ip()]);
-        self::save($s);
-    }
 }

@@ -508,7 +508,7 @@ button.hc-stat, button.hc-stat-card {
 
 .ip-add-form {
     display: grid;
-    grid-template-columns: 1.3fr 1.5fr .65fr auto;
+    grid-template-columns: 1fr 1fr;
     gap: 14px;
     align-items: end;
 }
@@ -1312,3 +1312,27 @@ button.hc-stat, button.hc-stat-card {
     text-align:center;
 }
 
+
+/* IP metadata and editable website links. */
+.ip-add-form > .ip-note-field, .ip-add-form > .asset-links-field { grid-column: 1 / -1; }
+.ip-add-form textarea { display: block; width: 100%; margin-top: 7px; padding: 10px; border: 1px solid #dfe6d7; border-radius: 5px; background: #fff; color: var(--text); font: inherit; resize: vertical; }
+.asset-links-field { min-width: 0; margin: 0; padding: 14px; border: 1px solid var(--border); border-radius: 6px; }
+.asset-links-field legend { padding: 0 5px; font-size: 12px; color: var(--muted); }
+.asset-link-rows { display: grid; gap: 12px; }
+.asset-link-rows:not(:empty) { margin-bottom: 12px; }
+.asset-link-row { display: grid; grid-template-columns: minmax(100px, 1fr) minmax(160px, 2fr) auto; align-items: end; gap: 10px; }
+.asset-link-row label { display: grid; gap: 7px; color: var(--muted); font-size: 12px; }
+.asset-link-row input { min-width: 0; width: 100%; margin: 0; padding: 9px 10px; border: 1px solid #dfe6d7; border-radius: 5px; background: #fff; color: var(--text); font: inherit; }
+.asset-site-links { display: flex; flex-wrap: wrap; gap: 6px; }
+.asset-site-link { display: inline-block; padding: 4px 7px; border-radius: 4px; background: #edf3e9; color: #4b6d40; font-size: 12px; overflow-wrap: anywhere; }
+.asset-note { white-space: pre-wrap; overflow-wrap: anywhere; max-width: 30ch; min-width: 10ch; font-size: 12px; }
+.hc-detail .asset-note { max-width: none; }
+.hc-status-button { padding: 3px; border: 0; background: none; cursor: pointer; border-radius: 5px; }
+.hc-status-button:hover { background: #edf3e9; }
+.hc-status-button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+.hc-status-button:disabled { cursor: wait; opacity: .6; }
+@media (max-width: 640px) { .asset-link-row { grid-template-columns: minmax(0, 1fr) auto; }.asset-link-row label { grid-column: 1 / -1; }.asset-link-row button { justify-self: start; } }
+.ip-create-modal { width: 680px; }
+.ip-create-form { display: flex; flex-direction: column; min-height: 0; }
+.ip-create-form .ip-add-form { margin: 0; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+.asset-site-link { white-space: nowrap; }

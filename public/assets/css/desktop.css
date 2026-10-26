@@ -126,7 +126,12 @@
     .asset-panel .row-invalid td { color: #87917e; background: #fbfcf9; }
     #health-table { min-width: 1100px; }
     #domains-table { min-width: 1080px; }
-    #ip-table { min-width: 1020px; }
+    #ip-table { min-width: 1240px; }
+    #ip-table th:nth-child(2), #ip-table td:nth-child(2) { min-width: 140px; }
+    #ip-table th:nth-child(3), #ip-table td:nth-child(3) { min-width: 180px; width: auto; }
+    #ip-table th:nth-child(4), #ip-table td:nth-child(4) { min-width: 185px; }
+    #ip-table th:nth-child(5), #ip-table td:nth-child(5) { min-width: 90px; }
+    #ip-table th:nth-child(6), #ip-table td:nth-child(6) { min-width: 175px; }
 
     /* Freeze identity and row actions while horizontally scrolling a list. */
     #health-table th:first-child, #health-table td:first-child,
@@ -269,4 +274,73 @@ html[data-density="compact"] .health-stats { gap: 12px; }
     .nav-tabs .tab-btn > span { white-space: nowrap; }
     .rel-graph svg { min-width: 1040px; }
     .rel-graph svg[data-graph="detail"] { min-width: 1100px; }
+}
+
+/* Inventory pages prioritize the working list; secondary information lives in dialogs. */
+.inventory-page .page-head { align-items: center; margin-bottom: 14px; gap: 14px; }
+.inventory-page .page-head > div:first-child { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.inventory-page .page-head h1 { margin: 0; font-size: 22px; line-height: 1.4; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.inventory-page .eyebrow, .inventory-page .heading-dot, .inventory-page .page-head p.muted,
+.inventory-page .panel-heading, .inventory-page .panel-caption, #rel-cache-note { display: none; }
+#rel-cache-note[data-error="true"] { display: block; color: #a34332; margin-bottom: 12px; }
+.inventory-page .asset-panel { border-radius: 7px; }
+.inventory-page .asset-panel > .filters { display: flex; flex-wrap: nowrap; align-items: center; gap: 10px !important; padding: 12px 14px; margin: 0; }
+.inventory-page .filters > .search-field { flex: 1; min-width: 120px; margin: 0; }
+.inventory-page .filters > .btn { flex: none; }
+.inventory-page .filters input[type="search"] { height: 36px; font-size: 13px; }
+.inventory-page .count-tag { font-size: 12px; font-weight: 500; white-space: nowrap; }
+.inventory-filter-options { display: grid; gap: 20px; }
+.inventory-filter-options .domain-filter-group { display: flex; align-items: flex-start; gap: 14px; }
+.inventory-filter-options .domain-filter-label { min-width: 70px; padding-top: 8px; }
+.inventory-filter-options .domain-filter-tabs { flex: 1; flex-wrap: wrap; }
+.workspace-content-modal { width: min(1200px, calc(100vw - 40px)); }
+.workspace-filter-modal { width: 760px; }
+.workspace-content-modal .modal-body { padding: 20px; }
+.workspace-content-modal .health-stats, .workspace-content-modal .stats-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.workspace-content-modal .hc-stat-card { min-height: 132px; padding: 20px; }
+.workspace-content-modal .hc-stat-card .hc-stat-value, .workspace-content-modal .stat-value { font-size: 46px; line-height: 1.1; font-weight: 700; color: #234d3d; margin: 12px 0; }
+.workspace-content-modal .hc-stat-note, .workspace-content-modal .panel-meta { display: none; }
+.workspace-content-modal .hc-stat-card[data-status="unhealthy"] .hc-stat-value, .workspace-content-modal .stat-value.v-red { color: #b54432; }
+.workspace-content-modal .rel-summary strong { font-size: 46px; color: #234d3d; }
+.workspace-content-modal .rel-summary { margin-top: 0; }
+.workspace-content-modal .rel-ring-value { font-size: 34px; fill: #234d3d; }
+.workspace-content-modal .dist-count { font-size: 20px; font-weight: 700; color: #234d3d; }
+.workspace-content-modal .rel-rank strong { font-size: 22px; color: #234d3d; }
+.workspace-content-modal .section-heading { margin-top: 0; }
+.workspace-content-modal .inventory-toolbar { margin-bottom: 16px; }
+.workspace-content-modal .rel-graph { min-height: 360px; }
+.workspace-content-modal .rel-pagination { margin-top: 12px; }
+.sidebar-note, .workspace-footer { display: none; }
+@media (max-width: 760px) {
+    .inventory-page .page-head { flex-direction: column; align-items: stretch; }
+    .inventory-page .page-head h1 { font-size: 20px; }
+    .inventory-page .head-actions { justify-content: flex-start; gap: 6px; }
+    .inventory-page .head-actions .btn { padding: 7px 10px; font-size: 12px; }
+    .workspace-content-modal .health-stats, .workspace-content-modal .stats-grid, .workspace-content-modal .rel-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .workspace-content-modal .hc-stat-card .hc-stat-value, .workspace-content-modal .stat-value { font-size: 36px; }
+    .inventory-filter-options .domain-filter-group { flex-direction: column; gap: 8px; }
+}
+.workspace-content-modal:fullscreen, .workspace-content-modal.rel-fallback-fullscreen { max-width: none; width: 100vw; height: 100dvh; max-height: none; border-radius: 0; }
+.inventory-page .asset-panel > .filters { flex-direction: row; padding-top: 12px !important; }
+.inventory-page .asset-panel > .filters > .search-field { width: auto; max-width: none; flex: 1 1 auto; }
+.inventory-page #rel-fullscreen { display: none; }
+
+/* Popups follow the control that opened them. */
+.workspace-anchored-overlay.modal-overlay { background: transparent; backdrop-filter: none; }
+.workspace-anchored-overlay > .workspace-content-modal { position: fixed; margin: 0; max-width: calc(100vw - 24px); box-shadow: 0 10px 36px #243c2c30; }
+.workspace-anchored-overlay > .workspace-filter-modal { width: 760px; }
+.workspace-anchored-overlay > .workspace-content-modal:is(:fullscreen, .rel-fallback-fullscreen) { inset: 0 !important; max-width: none !important; max-height: none !important; }
+
+/* Let the list use the remaining desktop viewport, with scrolling inside it. */
+@media (min-width: 761px) {
+    #app-view { height: 100dvh; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
+    #app-view > .topbar { flex: none; }
+    #app-view > .container { flex: 1; min-height: 0; margin-right: 0; padding-top: 16px; padding-bottom: 12px; overflow: auto; }
+    .container > .inventory-page:not(.hidden) { display: flex; flex-direction: column; height: 100%; min-height: 0; max-width: none; }
+    .inventory-page > .page-head, .inventory-page > .health-progress, .inventory-page > .rel-scope-note { flex: none; }
+    #health-list-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+    .inventory-page > .asset-panel, #health-list-panel > .asset-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; margin-bottom: 0; }
+    .inventory-page .asset-panel > .filters, .inventory-page .health-selection-bar, .inventory-page .rel-pagination { flex: none; }
+    .inventory-page .asset-panel > .table-wrap { flex: 1; min-height: 0; max-height: none; overflow: auto; }
+    .inventory-page .asset-panel > .empty-state { flex: 1; }
 }

@@ -1,0 +1,33 @@
+# Replace the reserved host, deployment directory and PHP-FPM socket locally.
+# Configure your TLS certificate before exposing this instance to customers.
+server {
+    listen 443 ssl;
+    server_name workspace.example.com;
+    root /srv/asset-workspace/public;
+    index index.php;
+
+    ssl_certificate /etc/nginx/tls/workspace.fullchain.pem;
+    ssl_certificate_key /etc/nginx/tls/workspace.key.pem;
+    client_max_body_size 12m;
+
+    location / { try_files $uri $uri/ /index.php?$query_string; }
+    location = /index.php {
+        include fastcgi_params;
+        fastcgi_param SCRIPT_FILENAME $document_root/index.php;
+        fastcgi_param HTTPS on;
+        fastcgi_pass unix:/run/php/php-fpm.sock;
+    }
+    # Only the front controller is executable. Internal PHP views stay private.
+    location ~ \.php$ { return 404; }
+    location ~ /\. { deny all; }
+    location ~ ^/(data|config|app|docs|scripts|deploy|vendor|tests)(/|$) { return 404; }
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+    add_header X-Frame-Options SAMEORIGIN always;
+}
+
+server {
+    listen 80;
+    server_name workspace.example.com;
+    return 301 https://$host$request_uri;
+}

@@ -3,7 +3,7 @@
 window.WorkspaceCache = (() => {
     let user = null, revision = 0;
     const memory = new Map(), pending = new Map();
-    const prefix = 'asset-workspace-v4:';
+    const prefix = 'asset-workspace-v5:';
     const keyFor = path => prefix + user + ':' + path;
     function clear(broadcast = true) {
         revision++;

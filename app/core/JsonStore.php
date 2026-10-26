@@ -1,5 +1,7 @@
 <?php
 
+require_once __DIR__ . '/WorkspaceData.php';
+
 /**
  * 文件数据库（JSON）：读加共享锁，写采用临时文件 + rename 原子替换。
  */
@@ -25,6 +27,14 @@ class JsonStore
 
     public static function write(string $file, $data): bool
     {
+        if (in_array(basename($file), WorkspaceData::FILES, true)) {
+            return WorkspaceData::locked(dirname($file), static function () use ($file, $data) { return self::writeUnlocked($file, $data); });
+        }
+        return self::writeUnlocked($file, $data);
+    }
+
+    private static function writeUnlocked(string $file, $data): bool
+    {
         $json = json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         if ($json === false) {
             throw new RuntimeException('数据保存失败：JSON 编码错误（' . json_last_error_msg() . '）');
@@ -36,6 +46,7 @@ class JsonStore
         $tmp = $file . '.tmp.' . bin2hex(random_bytes(8));
         try {
             $written = @file_put_contents($tmp, $json);
+            @chmod($tmp, 0600);
             if ($written === false || $written !== strlen($json)) {
                 throw new RuntimeException('数据保存失败：无法完整写入临时文件');
             }

@@ -26,11 +26,17 @@ async function api(path, opts = {}) {
         const data = await res.json().catch(() => { throw new Error('服务返回了无法读取的结果，请重试'); });
         if (res.status === 401 && typeof document !== 'undefined' && typeof showLogin === 'function'
             && !document.querySelector('#app-view')?.classList.contains('hidden')) showLogin();
-        if (!res.ok || data?.ok === false) throw new Error(data.error || ('请求失败 HTTP ' + res.status));
+        if (!res.ok || data?.ok === false) {
+            const error = new Error(data.error || ('请求失败 HTTP ' + res.status));
+            error.status = res.status;
+            error.code = data.code;
+            error.retryAfter = Number(data.retry_after || res.headers?.get('Retry-After')) || 0;
+            throw error;
+        }
         if (method !== 'GET' || (path.includes('/records') && data.cached === false)) cache?.clear();
         return data;
     };
-    const privateResponse = ['/api/me', '/api/env-check', '/api/setup/status', '/api/settings', '/api/tokens'].some(endpoint => path.split('?')[0] === endpoint);
+    const privateResponse = path.startsWith('/api/maintenance') || path.startsWith('/api/login') || ['/api/me', '/api/env-check', '/api/setup/status', '/api/settings', '/api/tokens'].some(endpoint => path.split('?')[0] === endpoint);
     return method === 'GET' && !privateResponse
         ? (cache ? cache.read(path, fetcher, opts.refresh || path.includes('refresh=1')) : fetcher()) : fetcher();
 }

@@ -32,9 +32,12 @@ function renderCards(accounts) {
                 <span class="badge ${acc.enabled === false ? 'b-gray' : cls}">${acc.enabled === false ? '已停用' : escapeHtml(acc.provider)}</span>
             </div>
             <div class="key-line">密钥 ${escapeHtml(acc.key_masked)}</div>
+            ${acc.note ? `<p class="account-note">${escapeHtml(acc.note)}</p>` : ''}
+            <div class="account-state"><span>启用云账号</span><button type="button" class="account-switch" role="switch" aria-checked="${acc.enabled !== false}" aria-label="启用 ${escapeHtml(acc.name)}" data-account-toggle="${escapeHtml(acc.id)}"><span></span></button></div>
             <div class="card-actions">
                 <button class="btn btn-sm test-btn" ${acc.enabled === false ? 'disabled' : ''}>测试连接</button>
                 <button class="btn btn-sm" data-account-edit="${escapeHtml(acc.id)}">编辑配置</button>
+                <button class="btn btn-sm btn-link-danger" data-account-delete="${escapeHtml(acc.id)}">删除</button>
                 <div class="status-line"><span class="pending">${acc.enabled === false ? '已停用' : '未测试'}</span></div>
             </div>`;
         card.querySelector('.test-btn').addEventListener('click', () => testAccount(acc.id, card));
@@ -54,7 +57,7 @@ async function testAccount(id, card) {
     } catch (err) {
         statusEl.innerHTML = `<span class="fail">测试失败</span><span class="detail">${escapeHtml(err.message)}</span>`;
     } finally {
-        btn.disabled = false;
+        btn.disabled = state.accounts.find(account => account.id === id)?.enabled === false;
     }
 }
 
@@ -62,6 +65,7 @@ $('#test-all-btn').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     btn.disabled = true;
     $$('#accounts-grid .card').forEach((c) => {
+        if (state.accounts.find(account => account.id === c.dataset.id)?.enabled === false) return;
         c.querySelector('.status-line').innerHTML = '<span class="pending">测试中…</span>';
         c.querySelector('.test-btn').disabled = true;
     });
@@ -118,3 +122,19 @@ function addResultItem(data) {
         </div>`;
     list.prepend(item);
 }
+
+$('#accounts-grid').addEventListener('click', async event => {
+    const toggle = event.target.closest('[data-account-toggle]');
+    const remove = event.target.closest('[data-account-delete]');
+    const button = toggle || remove;
+    if (!button || button.disabled) return;
+    const account = state.accounts.find(item => item.id === (toggle?.dataset.accountToggle || remove?.dataset.accountDelete));
+    if (!account) return;
+    if (remove && !await confirmDialog({title: '删除云账号', message: `删除“${account.name}”的云账号配置？已有域名资产与缓存会保留，后续云端操作需要重新配置账号。`, confirmText: '删除账号', danger: true})) return;
+    button.disabled = true;
+    try {
+        await api('/api/accounts/' + encodeURIComponent(account.id), toggle ? {method: 'PUT', body: JSON.stringify({enabled: account.enabled === false})} : {method: 'DELETE'});
+        await loadKeys();
+        toast(toggle ? (account.enabled === false ? '云账号已启用' : '云账号已停用') : '云账号已删除');
+    } catch (error) { toast(error.message, 'error'); button.disabled = false; }
+});

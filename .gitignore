@@ -7,6 +7,10 @@
 # Runtime data & cache
 /data/*
 
+# Private working notes, exports, screenshots and filled customer forms
+/.local/
+__pycache__/
+
 # Logs & OS noise
 *.log
 .DS_Store
@@ -14,3 +18,4 @@
 # Dependencies & build artifacts
 node_modules/
 vendor/
+/dist/

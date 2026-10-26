@@ -16,6 +16,7 @@ class AccessService
     public static function runCheck(): array
     {
         @set_time_limit(600);
+        $epoch = WorkspaceData::locked(DATA_DIR, static function () { return WorkspaceData::epoch(DATA_DIR); });
 
         $domains = JsonStore::read(DATA_DIR . '/domains.json', []);
         if (!is_array($domains)) {
@@ -67,7 +68,10 @@ class AccessService
             'fail'       => $failCount,
             'results'    => $results,
         ];
-        JsonStore::write(DATA_DIR . '/' . self::FILE, $data);
+        WorkspaceData::locked(DATA_DIR, static function () use ($data, $epoch) {
+            if ($epoch !== WorkspaceData::epoch(DATA_DIR)) { throw new DomainException('检测期间资产已恢复，旧结果已丢弃'); }
+            JsonStore::write(DATA_DIR . '/' . self::FILE, $data);
+        });
 
         return [
             'checked_at' => $checkedAt,

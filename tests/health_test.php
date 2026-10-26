@@ -135,6 +135,48 @@ try {
         expect(HealthService::normalizeHost($host) === null, 'reject host injection ' . $host);
     }
 
+    $ipDir = $root . '/http-ips'; fixture($ipDir, []);
+    $ipCalls = []; $code = 200; $errno = 0;
+    $ipService = new HealthService($ipDir, null, $clock, null, static function ($host, $ip, $head, $timeout, $scheme) use (&$ipCalls, &$code, &$errno) {
+        $ipCalls[] = compact('host', 'ip', 'head', 'timeout', 'scheme');
+        return ['code' => $head && $code === 405 ? 405 : ($code === 405 ? 200 : $code), 'errno' => $errno, 'error' => $errno ? 'timeout' : '', 'ms' => 12];
+    });
+    $links = [['name' => '管理后台', 'url' => 'https://example.com/admin?x=1&y=2']];
+    $ipAsset = $ipService->addIp(['ip' => '8.8.4.4', 'name' => '服务器', 'note' => "生产用途\n运维备注", 'links' => $links])['asset'];
+    expect($ipAsset['links'] === $links && $ipAsset['note'] === "生产用途\n运维备注", 'create returns links and multiline notes');
+    $httpHealth = $ipService->check([$ipAsset['id']])['results'][0]['health'];
+    expect($httpHealth['status'] === 'healthy' && $httpHealth['url'] === 'http://8.8.4.4/' && $httpHealth['check_type'] === 'http', 'IP checks use HTTP default URL rather than the legacy port');
+    expect(count($ipCalls) === 1 && $ipCalls[0]['scheme'] === 'http' && $ipCalls[0]['host'] === '8.8.4.4', 'HTTP transport uses validated IP literal');
+    $persistedIp = assetByName((new HealthService($ipDir, null, $clock))->dashboard(), '服务器');
+    expect($persistedIp['health']['checked_at'] === $httpHealth['checked_at'] && $persistedIp['health']['status'] === 'healthy', 'IP status and check time survive a fresh service');
+    $ipService->updateIp($ipAsset['id'], ['name' => 'Updated']);
+    $updated = assetByName($ipService->dashboard(), 'Updated');
+    expect($updated['links'] === $links && $updated['note'] === $ipAsset['note'], 'partial IP edits preserve links and notes');
+    foreach (['javascript:alert(1)', 'file:///etc/passwd', 'https://user:password@example.com', 'https://example.com/\" onclick=alert(1)'] as $url) {
+        throwsClass(fn () => $ipService->updateIp($ipAsset['id'], ['links' => [['name' => 'bad', 'url' => $url]]]), InvalidArgumentException::class, 'unsafe link rejected');
+    }
+    throwsClass(fn () => $ipService->updateIp($ipAsset['id'], ['links' => array_fill(0, 31, $links[0])]), InvalidArgumentException::class, 'bound website list');
+    expect(assetByName($ipService->dashboard(), 'Updated')['links'] === $links, 'invalid link writes preserve stored links');
+    $ipService->updateIp($ipAsset['id'], ['links' => [], 'note' => '']);
+    expect(assetByName($ipService->dashboard(), 'Updated')['links'] === [], 'all links can be removed');
+    foreach ([301, 404, 503] as $statusCode) {
+        $code = $statusCode;
+        $health = $ipService->check([$ipAsset['id']])['results'][0]['health'];
+        expect($health['status'] === ($code === 301 ? 'healthy' : 'unhealthy') && $health['http_code'] === $code, 'HTTP status classification ' . $code);
+    }
+    $code = 200; $errno = 28;
+    expect($ipService->check([$ipAsset['id']])['results'][0]['health']['status'] === 'unhealthy', 'HTTP transport errors are abnormal');
+    $code = 405; $errno = 0; $ipCalls = [];
+    $ipService->check([$ipAsset['id']]);
+    expect(count($ipCalls) === 2 && $ipCalls[0]['head'] && !$ipCalls[1]['head'] && $ipCalls[1]['timeout'] <= 4000, 'IP HEAD fallback uses bounded GET');
+    $v6 = $ipService->addIp(['ip' => '2606:4700:4700::1111'])['asset'];
+    $batch = $ipService->check([$ipAsset['id'], $v6['id']]);
+    expect($batch['checked'] === 2 && $batch['results'][1]['health']['url'] === 'http://[2606:4700:4700::1111]/', 'batch checks include bracketed IPv6 HTTP URLs');
+    $stateFile = $ipDir . '/health.json'; $state = json_decode(file_get_contents($stateFile), true);
+    unset($state['observations'][$ipAsset['id']]['health']['check_type']);
+    file_put_contents($stateFile, json_encode($state));
+    expect(assetByName($ipService->dashboard(), 'Updated')['health']['status'] === 'stale', 'legacy TCP success must be rechecked with HTTP');
+
     $corrupt = $root . '/corrupt'; mkdir($corrupt);
     file_put_contents($corrupt . '/health.json', '{broken');
     throwsClass(static function () use ($corrupt) { (new HealthService($corrupt))->addIp(['ip' => '8.8.8.8']); }, RuntimeException::class, 'corrupt storage must not be overwritten');
