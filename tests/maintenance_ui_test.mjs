@@ -29,6 +29,13 @@ const summary = {version:'1.1.0',backups:[],checks:[],audit:[{started_at:'2026-0
     via:'api',method:'PUT',route:'/api/domains',targets:[],outcome:'success'}]};
 const preview = {token:'fixture-token',expires_at:'2030-01-01',sha256:'fixture-sha',before:{domains:1,ips:1,bindings:1},after:{domains:1,ips:1,bindings:1},converted_domains:0};
 
+test('private DNS before and after values render as escaped text and uncertain results stay distinct',async()=>{
+    const f=fixture(async()=>({...summary,dns_changes:[{id:'fixture-change',started_at:'2026-01-01',actor:'admin',via:'browser',account:'fixture',domain:'example.com',action:'update',outcome:'unconfirmed',before:{value:'<img src=x onerror=alert(1)>'},requested:{value:'</pre><script>bad</script>'},after:null}]}));
+    await f.ui.load();
+    const html=f.element('#maintenance-dns-changes').innerHTML;
+    assert.match(html,/待核实/);assert.match(html,/&lt;img/);assert.match(html,/&lt;script&gt;/);assert.doesNotMatch(html,/<img|<script>/);
+});
+
 test('operation identities render as text; leaving clears password, confirmation and selected file', async()=>{
     const f=fixture(async()=>summary);await f.ui.load();
     assert.match(f.element('#maintenance-audit').innerHTML,/&lt;img/);

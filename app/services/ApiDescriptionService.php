@@ -41,8 +41,11 @@ Workflow:
 2. GET /api/domains for the domain inventory. provider means a cloud ACCOUNT ID, not a vendor name.
 3. GET /api/domains/{provider}/{domain}/records for cached DNS records and their IDs.
 4. Health checks require checks:run: POST /api/health/check with {"asset_ids":["<asset id>"]}; at most 5 IDs per request.
-5. To edit DNS, first read the record, then PUT /api/domains/{provider}/{domain}/records/{recordId}
-   with type, name, value, ttl, priority and line. Preserve fields the user did not ask to change. Requires dns:write.
+5. To edit DNS, first read the record and show the before/after difference, then PUT /api/domains/{provider}/{domain}/records/{recordId}
+   with expected_version from that record's version and only the fields to change. DELETE also requires expected_version in its JSON body.
+   POST requires expected_revision from the list response's revision plus the new record fields. All writes require dns:write.
+   A fresh cloud read rejects stale versions with HTTP 409. HTTP 202 / verified:false means unconfirmed; do not retry writes automatically.
+   Only verified:true confirms cloud readback, not worldwide DNS propagation. DNS change history is administrator-session-only at GET /api/dns/changes.
 6. POST /api/sync explicitly refreshes the cloud domain inventory. Requires sync:run.
 
 Interpretation:
@@ -72,7 +75,7 @@ TEXT;
             'type' => ['type' => 'string', 'enum' => ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA']],
             'name' => ['type' => 'string', 'description' => '相对主机记录，例如 @、www、api'],
             'value' => $string, 'ttl' => ['type' => 'integer', 'default' => 600],
-            'priority' => ['type' => 'integer', 'default' => 0], 'line' => ['type' => 'string', 'default' => '默认'],
+            'priority' => ['type' => 'integer', 'default' => 0], 'line' => ['type' => 'string', 'description' => '新增时省略使用云商默认；修改时省略保留当前线路'],
         ], ['type', 'name', 'value']);
         $domain = self::object(['provider' => ['type' => 'string', 'description' => '云账号 ID 或 manual'],
             'domain' => $string, 'status' => $string, 'expire_at' => ['type' => 'string', 'description' => 'YYYY-MM-DD 或空字符串'],
@@ -145,9 +148,25 @@ TEXT;
         $add('DELETE', '/api/domains', 'deleteDomain', '删除本地域名台账，不删除云端域名', 'assets:write', self::object(['provider' => $string, 'domain' => $string], ['provider', 'domain']));
         $dnsPath = '/api/domains/{provider}/{domain}/records';
         $add('GET', $dnsPath, 'listDnsRecords', '读取并缓存解析记录；refresh=1 显式刷新云端', 'dns:read', null, ['refresh' => ['type' => 'string', 'enum' => ['1']]]);
-        $add('POST', $dnsPath, 'createDnsRecord', '新增云端 DNS 解析记录', 'dns:write', $record);
-        $add('PUT', $dnsPath . '/{recordId}', 'updateDnsRecord', '修改云端解析，保留未请求修改的字段', 'dns:write', $record);
-        $add('DELETE', $dnsPath . '/{recordId}', 'deleteDnsRecord', '删除云端 DNS 记录', 'dns:write');
+        $recordAdd = $record;
+        $recordAdd['properties'] = clone $record['properties'];
+        $recordAdd['properties']->expected_revision = ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$', 'description' => 'DNS 列表返回的 revision；新增前核对整个区域'];
+        $recordAdd['required'][] = 'expected_revision';
+        $recordUpdate = $record;
+        $recordUpdate['properties'] = clone $record['properties'];
+        $recordUpdate['properties']->expected_version = ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$', 'description' => '目标 DNS 记录的 version；服务端读取云端最新值后核对'];
+        $recordUpdate['properties']->ttl = ['type' => 'integer', 'minimum' => 1, 'maximum' => 2147483647, 'description' => '省略保留当前 TTL'];
+        $recordUpdate['properties']->priority = ['type' => 'integer', 'minimum' => 0, 'maximum' => 65535, 'description' => '省略保留当前优先级'];
+        $recordUpdate['required'] = ['expected_version'];
+        $add('POST', $dnsPath, 'createDnsRecord', '按区域版本新增 DNS；只写一次并回读核实', 'dns:write', $recordAdd);
+        $add('PUT', $dnsPath . '/{recordId}', 'updateDnsRecord', '核对旧版本后修改 DNS，保留未提交字段，回读核实', 'dns:write', $recordUpdate);
+        $add('DELETE', $dnsPath . '/{recordId}', 'deleteDnsRecord', '核对旧版本后删除单条 DNS，保留同组其他记录，回读核实', 'dns:write',
+            self::object(['expected_version' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$']], ['expected_version']));
+        foreach ([[$dnsPath, 'post'], [$dnsPath . '/{recordId}', 'put'], [$dnsPath . '/{recordId}', 'delete']] as [$path, $method]) {
+            $paths[$path][$method]['responses']['202'] = ['description' => '云端结果未确认；verified:false，保留变更编号并刷新核实，不能直接重试',
+                'content' => ['application/json' => ['schema' => self::object(['ok' => $boolean, 'verified' => $boolean, 'status' => $string, 'change_id' => $string, 'message' => $string])]]];
+        }
+        $add('GET', '/api/dns/changes', 'listDnsChanges', '管理员查看最近 50 条 DNS 原值、拟提交值、回读值及结果（保留 200 条）', null, null, [], 'session');
         $add('POST', $dnsPath . '/access-check', 'checkDnsHosts', '检查解析记录对应的主机访问状态', 'checks:run');
         $add('GET', '/api/accounts', 'listCloudAccounts', '列出云账号标识和脱敏信息', 'assets:read', null, [], 'api', ['type' => 'array', 'items' => ['type' => 'object']]);
         $add('POST', '/api/accounts', 'createCloudAccount', '添加云账号配置', null, $account, [], 'session');

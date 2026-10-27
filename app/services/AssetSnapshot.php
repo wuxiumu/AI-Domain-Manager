@@ -4,7 +4,7 @@
 class AssetSnapshot
 {
     public const FORMAT = 'asset-workspace/assets-v1';
-    public const VERSION = '1.1.1';
+    public const VERSION = '1.2.0';
     public const MAX_BYTES = 5242880;
 
     public static function capture(string $dir): array

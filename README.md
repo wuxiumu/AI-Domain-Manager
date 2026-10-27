@@ -10,6 +10,8 @@ PHP 全栈域名管理工具：聚合阿里云 / 腾讯云 / GoDaddy 多账号�
 
 **1.1.1 登录防护**：本地图形验证码、一次性校验、登录及图片获取限流、失败锁定和等待倒计时。密码登录 API 同样需要验证码，自动化使用 API 密钥。[登录防护与限流](docs/04-交付与维护/05-登录防护与限流.md)。
 
+**当前版本 1.2.0：DNS 变更闭环**。提交前预览差异、核对云端版本，提交后回读；待核实结果单独显示，并保留 DNS 前后值记录。旧 DNS 写调用需补充版本条件。[DNS 变更与核实](docs/04-交付与维护/06-DNS变更与核实.md)。
+
 ```sh
 python3 scripts/package-release.py --output-dir dist
 ```
@@ -119,9 +121,10 @@ domain-manager/
 | PUT  | /api/domains | 编辑域名（备注/状态/到期时间等） |
 | DELETE | /api/domains | 删除域名（仅本地记录） |
 | GET  | /api/domains/{provider}/{domain}/records | 列出 DNS 解析记录 |
-| POST | /api/domains/{provider}/{domain}/records | 新增解析记录 |
-| PUT  | /api/domains/{provider}/{domain}/records/{id} | 修改解析记录 |
-| DELETE | /api/domains/{provider}/{domain}/records/{id} | 删除解析记录 |
+| POST | /api/domains/{provider}/{domain}/records | 按 expected_revision 新增并回读解析记录 |
+| PUT  | /api/domains/{provider}/{domain}/records/{id} | 按 expected_version 修改并回读解析记录 |
+| DELETE | /api/domains/{provider}/{domain}/records/{id} | 按 expected_version 删除单条解析记录 |
+| GET | /api/dns/changes | 仅管理员会话读取 DNS 前后值与结果 |
 | POST | /api/access-check | 执行全量访问检测（并发探测，结果持久化） |
 | GET  | /api/access-check | 上次访问检测结果（正常/异常汇总） |
 | GET  | /api/domains?access=fail | "无法访问"专题（基于最近一次检测） |

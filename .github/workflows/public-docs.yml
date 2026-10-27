@@ -1,0 +1,39 @@
+name: Public documentation
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python3 scripts/check-public-docs.py
+      - run: python3 -m unittest discover -s tests -p 'public_docs_test.py'
+      - run: python3 -m unittest discover -s tests -p 'package_release_test.py'
+
+  delivery-regressions:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install PHP test runtime
+        run: sudo apt-get update && sudo apt-get install --yes php-cli php-curl php-mbstring
+      - run: find app public -name '*.php' -print0 | xargs -0 -n1 php -l
+      - run: php tests/auth_test.php && php tests/maintenance_test.php && php tests/sync_state_test.php && php tests/health_test.php && php tests/settings_test.php
+      - run: php tests/provider_test.php && php tests/dns_pagination_test.php && php tests/dns_changes_test.php && php tests/public_probe_test.php && php tests/relationships_test.php && php tests/subdomain_test.php
+      - run: python3 tests/auth_api_test.py && python3 tests/dns_changes_api_test.py && python3 tests/maintenance_api_test.py && python3 tests/product_api_test.py
+      - run: php tests/public_probe_transport_test.php
+      - run: node --test tests/*_test.mjs

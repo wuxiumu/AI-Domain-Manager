@@ -159,11 +159,21 @@ class GoDaddyProvider extends CloudProvider
 
     public function deleteRecord(string $domain, string $recordId): bool
     {
-        [$type, $name] = array_pad(explode('|', $recordId, 3), 3, '');
-        if ($type === '' || $name === '') {
+        [$type, $name, $value] = array_pad(explode('|', $recordId, 3), 3, '');
+        if ($type === '' || $name === '' || $value === '') {
             throw new RuntimeException('无效的记录标识');
         }
-        $this->request('DELETE', '/v1/domains/' . rawurlencode($domain) . '/records/' . rawurlencode($type) . '/' . rawurlencode($name), null);
+        $path = '/v1/domains/' . rawurlencode($domain) . '/records/' . rawurlencode($type) . '/' . rawurlencode($name);
+        $records = $this->get($path); $remaining = []; $matched = 0;
+        foreach ($records as $record) {
+            if (($record['data'] ?? '') === $value) { $matched++; continue; }
+            unset($record['type'], $record['name']);
+            $remaining[] = $record;
+        }
+        if ($matched !== 1) { throw new RuntimeException('原解析记录已改变或无法唯一识别，请刷新 DNS 后重试'); }
+        // The DELETE endpoint removes the entire RRset. Replace it when siblings remain.
+        if ($remaining) { $this->request('PUT', $path, $remaining); }
+        else { $this->request('DELETE', $path, null); }
         return true;
     }
 }

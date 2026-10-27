@@ -189,7 +189,7 @@ class TencentProvider extends CloudProvider
 
     public function updateRecord(string $domain, string $recordId, array $params): bool
     {
-        $this->dns('ModifyRecord', [
+        $request = [
             'Domain'     => $domain,
             'RecordId'   => (int) $recordId, // DNSPod 要求 uint64
             'RecordType' => $params['type'] ?? 'A',
@@ -197,7 +197,11 @@ class TencentProvider extends CloudProvider
             'Value'      => $params['value'] ?? '',
             'SubDomain'  => $params['name'] ?? '@',
             'TTL'        => (int) ($params['ttl'] ?? 600) ?: 600,
-        ]);
+            'MX'         => (int) ($params['priority'] ?? 0),
+        ];
+        if (in_array($params['status'] ?? '', ['ENABLE', 'DISABLE'], true)) { $request['Status'] = $params['status']; }
+        if (isset($params['weight'])) { $request['Weight'] = (int) $params['weight']; }
+        $this->dns('ModifyRecord', $request);
         return true;
     }
 

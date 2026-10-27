@@ -239,6 +239,7 @@ class AliyunProvider extends CloudProvider
             'Value'      => $params['value'] ?? '',
             'TTL'        => (int) ($params['ttl'] ?? 600) ?: 600,
             'Priority'   => (int) ($params['priority'] ?? 0),
+            'Line'       => $params['line'] ?? 'default',
         ]);
         return ['id' => (string) ($json['RecordId'] ?? ''), 'raw' => $json];
     }
@@ -252,6 +253,7 @@ class AliyunProvider extends CloudProvider
             'Value'    => $params['value'] ?? '',
             'TTL'      => (int) ($params['ttl'] ?? 600) ?: 600,
             'Priority' => (int) ($params['priority'] ?? 0),
+            'Line'     => $params['line'] ?? 'default',
         ]);
         return true;
     }

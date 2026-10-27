@@ -34,7 +34,7 @@ class RecordAccessService
 
             $v = trim((string) ($r['value'] ?? ''));
             if (self::isIp($v)) {
-                $targets[] = 'http://' . $v;
+                $targets[] = 'http://' . (strpos($v, ':') !== false ? '[' . $v . ']' : $v);
             } elseif (self::isHost($v)) {
                 $targets[] = 'https://' . self::toAscii(rtrim($v, '.'));
             }
@@ -45,6 +45,7 @@ class RecordAccessService
             }
         }
 
+        $revision = DnsRecordCache::versioned(['records' => $records])['revision'];
         $probed = self::probeUrls(array_values($allUrls));
 
         $checkedAt = date('Y-m-d H:i:s');
@@ -87,6 +88,7 @@ class RecordAccessService
         }
 
         $data = [
+            'records_revision' => $revision,
             'checked_at' => $checkedAt,
             'total'      => count($records),
             'ok'         => $okCount,
@@ -95,8 +97,9 @@ class RecordAccessService
             'results'    => $results,
         ];
 
-        WorkspaceData::locked(DATA_DIR, static function () use ($provider, $domain, $data, $epoch) {
+        WorkspaceData::locked(DATA_DIR, static function () use ($provider, $domain, $data, $epoch, $revision) {
             if ($epoch !== WorkspaceData::epoch(DATA_DIR)) { throw new DomainException('检测期间资产已恢复，旧结果已丢弃'); }
+            if ((DnsRecordCache::peek(DATA_DIR, $provider, $domain)['revision'] ?? null) !== $revision) { throw new DomainException('DNS 在检测期间已改变，旧检测结果已丢弃'); }
             $store = WorkspaceData::read(DATA_DIR . '/' . self::FILE);
             $store[$provider . '|' . $domain] = $data;
             JsonStore::write(DATA_DIR . '/' . self::FILE, $store);
@@ -115,56 +118,17 @@ class RecordAccessService
     public static function mapOf(string $provider, string $domain): array
     {
         $store = JsonStore::read(DATA_DIR . '/' . self::FILE, []);
-        $results = $store[$provider . '|' . $domain]['results'] ?? [];
+        $group = $store[$provider . '|' . $domain] ?? [];
+        $revision = DnsRecordCache::peek(DATA_DIR, $provider, $domain)['revision'] ?? null;
+        if ($revision === null || ($group['records_revision'] ?? null) !== $revision) return [];
+        $results = $group['results'] ?? [];
         return is_array($results) ? $results : [];
     }
 
     /** 并发探测 URL 列表（HEAD），返回 url => ['http_code','ms','error'] */
     private static function probeUrls(array $urls): array
     {
-        $out = [];
-        foreach (array_chunk($urls, self::CONCURRENCY) as $chunk) {
-            $mh = curl_multi_init();
-            $handles = [];
-            foreach ($chunk as $u) {
-                $ch = curl_init($u);
-                curl_setopt_array($ch, [
-                    CURLOPT_NOBODY          => true,
-                    CURLOPT_FOLLOWLOCATION  => true,
-                    CURLOPT_MAXREDIRS       => 3,
-                    CURLOPT_TIMEOUT         => self::TIMEOUT,
-                    CURLOPT_CONNECTTIMEOUT  => 2,
-                    CURLOPT_RETURNTRANSFER  => true,
-                    CURLOPT_SSL_VERIFYPEER  => false,
-                    CURLOPT_SSL_VERIFYHOST  => 0,
-                    CURLOPT_USERAGENT       => 'DomainManager/1.0',
-                ]);
-                $proxy = config('http.proxy');
-                if (is_string($proxy) && $proxy !== '') {
-                    curl_setopt($ch, CURLOPT_PROXY, $proxy);
-                }
-                curl_multi_add_handle($mh, $ch);
-                $handles[$u] = $ch;
-            }
-            do {
-                $status = curl_multi_exec($mh, $running);
-                if ($running) {
-                    curl_multi_select($mh, 0.5);
-                }
-            } while ($running && $status === CURLM_OK);
-
-            foreach ($handles as $u => $ch) {
-                $out[$u] = [
-                    'http_code' => (int) curl_getinfo($ch, CURLINFO_HTTP_CODE),
-                    'ms'        => (int) round(curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000),
-                    'error'     => curl_error($ch),
-                ];
-                curl_multi_remove_handle($mh, $ch);
-                curl_close($ch);
-            }
-            curl_multi_close($mh);
-        }
-        return $out;
+        return PublicHttpProbe::run(array_combine($urls, $urls) ?: []);
     }
 
     private static function isIp(string $v): bool

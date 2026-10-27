@@ -10,6 +10,12 @@ define('DATA_DIR', APP_ROOT . '/data');
 define('PUBLIC_DIR', APP_ROOT . '/public');
 
 date_default_timezone_set('Asia/Shanghai');
+// Diagnostics belong in the server log, never mixed into JSON or public HTML.
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+header('X-Content-Type-Options: nosniff');
+header('Referrer-Policy: same-origin');
+header('X-Frame-Options: SAMEORIGIN');
 
 if (session_status() === PHP_SESSION_NONE) {
     ini_set('session.use_strict_mode', '1');

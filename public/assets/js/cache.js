@@ -3,13 +3,15 @@
 window.WorkspaceCache = (() => {
     let user = null, revision = 0;
     const memory = new Map(), pending = new Map();
-    const prefix = 'asset-workspace-v5:';
+    const prefix = 'asset-workspace-v6:';
+    const ownedKey = key => /^asset-workspace-v\d+:/.test(key);
+    try { Object.keys(sessionStorage).filter(key => ownedKey(key) && !key.startsWith(prefix)).forEach(key => sessionStorage.removeItem(key)); } catch {}
     const keyFor = path => prefix + user + ':' + path;
     function clear(broadcast = true) {
         revision++;
         memory.clear(); pending.clear();
         try {
-            Object.keys(sessionStorage).filter(k => k.startsWith(prefix)).forEach(k => sessionStorage.removeItem(k));
+            Object.keys(sessionStorage).filter(ownedKey).forEach(k => sessionStorage.removeItem(k));
             if (broadcast) localStorage.setItem(prefix + 'invalidate', String(Date.now()) + Math.random());
         } catch {}
         window.dispatchEvent(new CustomEvent('workspace-invalidated'));
@@ -30,7 +32,8 @@ window.WorkspaceCache = (() => {
         const started = revision;
         const request = fetcher().then(value => {
             if (started === revision) {
-                const entry = {value, expires: now + 30 * 60 * 1000};
+                const freshness = path.startsWith('/api/health') || path.startsWith('/api/domains/stats') ? 60000 : 30 * 60 * 1000;
+                const entry = {value, expires: now + freshness};
                 memory.set(key, entry);
                 try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch {}
             }

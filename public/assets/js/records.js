@@ -9,7 +9,7 @@ function openRecordsModal(domain, provider) {
     overlay.innerHTML = `
         <div class="modal modal-wide">
             <div class="modal-head">
-                <h3>解析记录 · ${escapeHtml(domain)} <span class="muted">（${escapeHtml(providerInfo(provider).name)}）</span> <span id="rec-count" class="muted"></span></h3>
+                <h3>解析记录 · ${escapeHtml(domain)} <span class="muted">（${escapeHtml(providerInfo(provider).name)}）</span> <span id="rec-count" class="muted" role="status" aria-live="polite"></span></h3>
                 <button class="modal-close">×</button>
             </div>
             <div class="modal-body">
@@ -19,12 +19,12 @@ function openRecordsModal(domain, provider) {
                     <div class="rec-form-grid">
                         <select id="rec-type">${RECORD_TYPES.map((t) => `<option>${t}</option>`).join('')}</select>
                         <input type="text" id="rec-name" placeholder="主机记录（@ 或 www）" value="@">
-                        <input type="text" id="rec-value" placeholder="记录值，如 1.2.3.4">
+                        <input type="text" id="rec-value" placeholder="记录值，如 192.0.2.1">
                         <input type="number" id="rec-ttl" placeholder="TTL" value="600">
                         <input type="number" id="rec-priority" placeholder="优先级(MX)" value="0">
                         <div class="rec-form-actions">
                             <button class="btn btn-sm btn-cancel">取消</button>
-                            <button class="btn btn-sm btn-primary" id="rec-save">保存</button>
+                            <button class="btn btn-sm btn-primary" id="rec-save">预览变更</button>
                         </div>
                     </div>
                 </div>
@@ -55,7 +55,18 @@ function openRecordsModal(domain, provider) {
     overlay.querySelector('.modal-close').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
 
-    const recApi = (path, opts) => api(`/api/domains/${encodeURIComponent(provider)}/${encodeURIComponent(domain)}/records${path}`, opts);
+    const $ = selector => overlay.querySelector(selector);
+    const $$ = selector => overlay.querySelectorAll(selector);
+    const endpoint = `/api/domains/${encodeURIComponent(provider)}/${encodeURIComponent(domain)}/records`;
+    const recApi = (path, opts) => api(endpoint + path, opts);
+    let busy = false, zoneRevision = '', editingRecord = null, loadGeneration = 0;
+    const target = `${domain} · ${providerInfo(provider).name}`;
+    const plan = (action, record, params) => window.WorkspaceDns.prepare({endpoint: endpoint + (record ? '/' + encodeURIComponent(record.id) : ''), action, record, params, revision: zoneRevision, owner: overlay, target});
+    function setBusy(value) {
+        busy = value;
+        $$('button:not(.modal-close), input[type=checkbox]').forEach(control => { control.disabled = value; });
+        if (!value) updateBatchUI();
+    }
     let editingId = null;
     let recordsById = {}; // recordId => 记录（供批量操作/编辑回填）
 
@@ -81,15 +92,18 @@ function openRecordsModal(domain, provider) {
         : escapeHtml(text);
 
     async function loadRecords(refresh = false) {
+        const request = ++loadGeneration;
         const tbody = $('#rec-table tbody');
         tbody.innerHTML = '<tr><td colspan="8" class="muted">加载中…</td></tr>';
         try {
             const data = await recApi(refresh ? '?refresh=1' : '');
+            if (request !== loadGeneration || !overlay.isConnected) return;
             if (!data.ok) throw new Error(data.error || '加载失败');
+            zoneRevision = data.revision;
             $('#rec-loading').classList.add('hidden');
             $('#rec-empty').classList.toggle('hidden', data.records.length !== 0);
             $('#rec-count').textContent = `共 ${data.records.length} 条 · 快照 ${data.snapshot_at || '未知'}`;
-            recordsById = {};
+            recordsById = Object.create(null);
             data.records.forEach((r) => { recordsById[r.id] = r; });
             tbody.innerHTML = data.records.map((r) => `
                 <tr>
@@ -107,6 +121,7 @@ function openRecordsModal(domain, provider) {
                 </tr>`).join('');
             updateBatchUI();
         } catch (err) {
+            if (request !== loadGeneration || !overlay.isConnected) return;
             $('#rec-loading').classList.add('hidden');
             $('#rec-table tbody').innerHTML = '<tr><td colspan="8" class="fail">' + escapeHtml(err.message) + '</td></tr>';
         }
@@ -121,9 +136,9 @@ function openRecordsModal(domain, provider) {
         const ids = selectedIds();
         const count = ids.length;
         $('#rec-sel-count').textContent = count ? `已选择 ${count} 条` : '未选择';
-        $('#rec-batch-ttl').disabled = count === 0;
-        $('#rec-batch-value').disabled = count === 0;
-        $('#rec-batch-del').disabled = count === 0;
+        $('#rec-batch-ttl').disabled = busy || count === 0;
+        $('#rec-batch-value').disabled = busy || count === 0;
+        $('#rec-batch-del').disabled = busy || count === 0;
         const all = $$('#rec-table tbody .rec-check');
         $('#rec-check-all').checked = all.length > 0 && all.length === ids.length;
     }
@@ -137,117 +152,52 @@ function openRecordsModal(domain, provider) {
         if (e.target.classList.contains('rec-check')) updateBatchUI();
     });
 
+    async function runBatch(plans, caption) {
+        if (busy || !plans.length) return;
+        setBusy(true);
+        try {
+            if (!await window.WorkspaceDns.confirm(plans)) return;
+            let verified = 0, unconfirmed = 0, attempted = 0, failure = '';
+            for (const change of plans) {
+                if (!overlay.isConnected) break;
+                attempted++;
+                $('#rec-count').textContent = `正在提交 ${attempted} / ${plans.length} · 已核实 ${verified} 条`;
+                try {
+                    const result = await window.WorkspaceDns.write(change);
+                    if (result.verified) verified++;
+                    else { unconfirmed++; failure = result.message; break; }
+                } catch (error) { failure = error.message; break; }
+            }
+            toast(`${caption}：已核实 ${verified} 条，待核实 ${unconfirmed} 条，未执行 ${plans.length - attempted} 条${failure ? '；已停止后续提交：' + failure : ''}`, failure ? 'error' : 'success', 9000);
+            await loadRecords();
+        } finally { setBusy(false); }
+    }
+
     $('#rec-batch-ttl').addEventListener('click', async () => {
-        const ids = selectedIds();
-        if (!ids.length) return;
-        const input = await promptDialog({
-            title: '批量修改 TTL',
-            message: `将 ${ids.length} 条记录的 TTL 统一修改为（秒）：`,
-            value: '600',
-            placeholder: '1-86400',
-            okText: '修改',
-        });
+        if (busy) return;
+        const records = selectedIds().map(id => recordsById[id]).filter(Boolean);
+        if (!records.length) return;
+        const input = await promptDialog({title: '批量修改 TTL', message: `修改 ${records.length} 条记录的 TTL（秒），下一步预览差异：`, value: '600', okText: '预览差异'});
         if (input === null) return;
-        const ttl = parseInt(input, 10);
-        if (!ttl || ttl < 1 || ttl > 86400) {
-            toast('TTL 需为 1-86400 之间的整数', 'error');
-            return;
-        }
-        const btn = $('#rec-batch-ttl');
-        btn.disabled = true;
-        let okCount = 0;
-        const failed = [];
-        for (const id of ids) {
-            const rec = recordsById[id];
-            if (!rec) continue;
-            try {
-                await recApi('/' + encodeURIComponent(id), {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        type: rec.type, name: rec.name || '@', value: rec.value,
-                        ttl, priority: rec.priority || 0,
-                    }),
-                });
-                okCount++;
-            } catch (err) {
-                failed.push(`${rec.name || '@'} (${err.message})`);
-            }
-        }
-        let msg = `批量修改 TTL 完成：成功 ${okCount} 条`;
-        if (failed.length) msg += `，失败 ${failed.length} 条\n` + failed.slice(0, 5).join('\n');
-        toast(msg, failed.length ? 'error' : 'success', 5000);
-        loadRecords();
+        const ttl = Number(input);
+        if (!Number.isInteger(ttl) || ttl < 1 || ttl > 86400) return toast('TTL 需为 1–86400 的整数', 'error');
+        try { await runBatch(records.map(record => plan('update', record, {ttl})), '批量修改 TTL'); }
+        catch (error) { toast(error.message, 'error'); }
     });
-
     $('#rec-batch-value').addEventListener('click', async () => {
-        const ids = selectedIds();
-        if (!ids.length) return;
-        const input = await promptDialog({
-            title: '批量修改记录值',
-            message: `将 ${ids.length} 条记录的记录值统一修改为：`,
-            value: '',
-            placeholder: '如 1.2.3.4 或 target.example.com',
-            okText: '修改',
-        });
+        if (busy) return;
+        const records = selectedIds().map(id => recordsById[id]).filter(Boolean);
+        if (!records.length) return;
+        const input = await promptDialog({title: '批量修改记录值', message: `修改 ${records.length} 条记录，下一步预览差异：`, value: '', okText: '预览差异'});
         if (input === null) return;
-        const newValue = input.trim();
-        if (!newValue) {
-            toast('记录值不能为空', 'error');
-            return;
-        }
-        const btn = $('#rec-batch-value');
-        btn.disabled = true;
-        let okCount = 0;
-        const failed = [];
-        for (const id of ids) {
-            const rec = recordsById[id];
-            if (!rec) continue;
-            try {
-                await recApi('/' + encodeURIComponent(id), {
-                    method: 'PUT',
-                    body: JSON.stringify({
-                        type: rec.type, name: rec.name || '@', value: newValue,
-                        ttl: rec.ttl || 600, priority: rec.priority || 0,
-                    }),
-                });
-                okCount++;
-            } catch (err) {
-                failed.push(`${rec.name || '@'} (${err.message})`);
-            }
-        }
-        let msg = `批量修改记录值完成：成功 ${okCount} 条`;
-        if (failed.length) msg += `，失败 ${failed.length} 条\n` + failed.slice(0, 5).join('\n');
-        toast(msg, failed.length ? 'error' : 'success', 5000);
-        loadRecords();
+        if (!input.trim()) return toast('记录值不能为空', 'error');
+        try { await runBatch(records.map(record => plan('update', record, {value: input.trim()})), '批量修改记录值'); }
+        catch (error) { toast(error.message, 'error'); }
     });
-
     $('#rec-batch-del').addEventListener('click', async () => {
-        const ids = selectedIds();
-        if (!ids.length) return;
-        const ok = await confirmDialog({
-            title: '批量删除',
-            message: `确定删除选中的 ${ids.length} 条解析记录吗？`,
-            confirmText: '删除',
-            danger: true,
-        });
-        if (!ok) return;
-        const btn = $('#rec-batch-del');
-        btn.disabled = true;
-        let okCount = 0;
-        const failed = [];
-        for (const id of ids) {
-            const rec = recordsById[id] || {};
-            try {
-                await recApi('/' + encodeURIComponent(id), { method: 'DELETE' });
-                okCount++;
-            } catch (err) {
-                failed.push(`${rec.name || '@'} (${err.message})`);
-            }
-        }
-        let msg = `批量删除完成：成功 ${okCount} 条`;
-        if (failed.length) msg += `，失败 ${failed.length} 条\n` + failed.slice(0, 5).join('\n');
-        toast(msg, failed.length ? 'error' : 'success', 5000);
-        loadRecords();
+        if (busy) return;
+        try { await runBatch(selectedIds().map(id => recordsById[id]).filter(Boolean).map(record => plan('delete', record, null)), '批量删除'); }
+        catch (error) { toast(error.message, 'error'); }
     });
 
     /* 解析记录访问状态展示 */
@@ -264,6 +214,8 @@ function openRecordsModal(domain, provider) {
     }
 
     function showForm(record) {
+        if (busy) return;
+        editingRecord = record ? {...record} : null;
         editingId = record ? record.id : null;
         $('#rec-form').classList.remove('hidden');
         $('#rec-add-btn').classList.add('hidden');
@@ -284,6 +236,7 @@ function openRecordsModal(domain, provider) {
     }
 
     function hideForm() {
+        editingRecord = null;
         editingId = null;
         $('#rec-form').classList.add('hidden');
         $('#rec-add-btn').classList.remove('hidden');
@@ -311,70 +264,36 @@ function openRecordsModal(domain, provider) {
     });
 
     $('#rec-save').addEventListener('click', async () => {
-        const payload = {
-            type: $('#rec-type').value,
-            name: $('#rec-name').value.trim() || '@',
-            value: $('#rec-value').value.trim(),
-            ttl: parseInt($('#rec-ttl').value, 10) || 600,
-            priority: parseInt($('#rec-priority').value, 10) || 0,
-        };
-        if (!payload.value) {
-            toast('记录值不能为空', 'error');
-            return;
-        }
-        const btn = $('#rec-save');
-        btn.disabled = true;
+        if (busy) return;
+        const payload = {type: $('#rec-type').value, name: $('#rec-name').value.trim() || '@', value: $('#rec-value').value.trim(),
+            ttl: Number($('#rec-ttl').value), priority: Number($('#rec-priority').value)};
+        if (!payload.value || !Number.isInteger(payload.ttl) || payload.ttl < 1 || !Number.isInteger(payload.priority) || payload.priority < 0) return toast('请填写有效记录值、TTL 和优先级整数', 'error');
+        setBusy(true);
         try {
-            if (editingId) {
-                await recApi('/' + encodeURIComponent(editingId), { method: 'PUT', body: JSON.stringify(payload) });
-                toast(`记录 ${payload.name || '@'} 已更新`);
-            } else {
-                await recApi('', { method: 'POST', body: JSON.stringify(payload) });
-                toast(`记录 ${payload.name || '@'} 已添加`);
-            }
+            const change = plan(editingRecord ? 'update' : 'add', editingRecord, payload);
+            if (!await window.WorkspaceDns.confirm([change])) return;
+            const result = await window.WorkspaceDns.write(change);
+            window.WorkspaceDns.notify(result);
             hideForm();
-            loadRecords();
-        } catch (err) {
-            toast((editingId ? '修改' : '添加') + '失败：' + err.message, 'error');
-        } finally {
-            btn.disabled = false;
-        }
+            await loadRecords();
+        } catch (error) { toast('变更未完成：' + error.message, 'error', 7000); }
+        finally { setBusy(false); }
     });
 
     $('#rec-table tbody').addEventListener('click', async (e) => {
+        if (busy) return;
         const editBtn = e.target.closest('.rec-edit');
-        if (editBtn) {
-            const rec = recordsById[editBtn.dataset.id];
-            if (rec) {
-                showForm({
-                    id: rec.id,
-                    type: rec.type,
-                    name: rec.name || '@',
-                    value: rec.value,
-                    ttl: rec.ttl,
-                    priority: rec.priority || 0,
-                });
-            }
-            return;
-        }
-        const delBtn = e.target.closest('.rec-del');
-        if (delBtn) {
-            const rec = recordsById[delBtn.dataset.id] || {};
-            const ok = await confirmDialog({
-                title: '删除解析记录',
-                message: `确定删除记录「${rec.type || ''} ${rec.name || '@'} → ${rec.value || ''}」吗？`,
-                confirmText: '删除',
-                danger: true,
-            });
-            if (!ok) return;
-            try {
-                await recApi('/' + encodeURIComponent(delBtn.dataset.id), { method: 'DELETE' });
-                toast('记录已删除');
-                loadRecords();
-            } catch (err) {
-                toast('删除失败：' + err.message, 'error');
-            }
-        }
+        if (editBtn) { const record = recordsById[editBtn.dataset.id]; if (record) showForm(record); return; }
+        const deleteBtn = e.target.closest('.rec-del');
+        if (!deleteBtn) return;
+        const record = recordsById[deleteBtn.dataset.id];
+        if (!record) return;
+        setBusy(true);
+        try {
+            const result = await window.WorkspaceDns.perform({endpoint: endpoint + '/' + encodeURIComponent(record.id), action: 'delete', record, owner: overlay, target});
+            if (result) { window.WorkspaceDns.notify(result); await loadRecords(); }
+        } catch (error) { toast('删除未完成：' + error.message, 'error', 7000); }
+        finally { setBusy(false); }
     });
 
     loadRecords();

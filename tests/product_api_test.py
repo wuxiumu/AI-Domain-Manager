@@ -34,6 +34,16 @@ try:
     check(not (fresh.root / "config/setup.key").exists(), "Fresh browser setup needs no server-generated key")
     status, page, _ = fresh.request("GET", "/")
     check(status == 200 and 'id="setup-user"' in page and 'id="setup-password"' in page, "Page offers administrator account and password")
+    check(fresh.request('GET','/index.php')[0] == 200, 'Explicit front controller remains available')
+    for internal in ['/views/app.php','/views/settings.php','/views/env.php','/views/setup.php','/views/app.php/extra']:
+        status, body, _ = fresh.request('GET', internal)
+        check(status == 404 and str(fresh.root) not in json.dumps(body), 'Internal PHP template is blocked without path disclosure')
+    check(fresh.request('GET','/assets/js/core.js')[0] == 200, 'Legitimate static assets remain available')
+    (fresh.root/'public/outside-public.txt').symlink_to(fresh.root/'config/config.example-secret')
+    (fresh.root/'config/config.example-secret').write_text('PRIVATE-STATIC-SENTINEL')
+    status, body, _ = fresh.request('GET','/outside-public.txt')
+    check(status == 404 and 'PRIVATE-STATIC-SENTINEL' not in json.dumps(body), 'A public symlink cannot expose a private file')
+    check(fresh.request('GET','/api/setup/status')[2].get('X-Content-Type-Options') == 'nosniff', 'API responses include browser content protection')
     check('id="setup-key"' not in page and 'id="setup-confirm"' not in page, "First-run form has no extra credential fields")
     csrf = setup["csrf_token"]
     check(fresh.request("GET", "/api/health")[0] == 401, "Anonymous health is protected")

@@ -26,7 +26,7 @@ class AuditLog
         $success = $status < 400 && !(is_array($data) && (($data['ok'] ?? true) === false || isset($data['error'])));
         $outcome = $success ? 'success' : 'failed';
         if ($success && is_array($data)) {
-            if (in_array($data['status'] ?? '', ['failed', 'partial', 'skipped'], true)) { $outcome = $data['status']; }
+            if (in_array($data['status'] ?? '', ['failed', 'partial', 'skipped', 'unconfirmed'], true)) { $outcome = $data['status']; }
             else {
                 $items = $data['results'] ?? $data;
                 if (is_array($items)) {

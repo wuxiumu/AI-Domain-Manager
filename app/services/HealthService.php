@@ -31,7 +31,7 @@ class HealthService
         // Keep injected-clock tests deterministic; production expires on the next
         // minute so health-age and calendar classifications remain accurate.
         if (!class_exists('SnapshotCache') || $this->probe || $this->dnsLookup || $this->httpProbe) { return $this->buildDashboard(); }
-        return SnapshotCache::remember($this->dir, 'health-dashboard-v5',
+        return SnapshotCache::remember($this->dir, 'health-dashboard-v6',
             array_merge([$this->dir . '/domains.json', $this->dir . '/health.json', $this->dir . '/access_check.json'], glob($this->dir . '/cache/dns-*.json') ?: []),
             function () { return $this->buildDashboard(); }, time() + 60);
     }

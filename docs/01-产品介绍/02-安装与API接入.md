@@ -85,7 +85,9 @@ python3 scripts/workspace-api.py PUT /api/health/ips/ASSET_ID --json @asset-upda
 
 先读取 `/api/domains` 获得域名和 `provider`（云账号 ID，例如 `aliyun_1`），再读取 `/api/domains/{provider}/{domain}/records` 获得记录 ID。`provider` 不能用 `aliyun` 这类云商类型代替。
 
-编辑记录时调用 `PUT /api/domains/{provider}/{domain}/records/{recordId}`，提供 `type`、`name`、`value`、`ttl`、`priority`、`line`，保留不需要修改的字段。该接口真正修改云端 DNS，需要 `dns:write`。查询使用缓存；`refresh=1` 才显式刷新已有云端快照。
+1.2.0 起，编辑记录时调用 `PUT /api/domains/{provider}/{domain}/records/{recordId}`，提交目标记录的 `version` 为 `expected_version`，以及需要修改的字段。省略的字段保留原值；删除也需 JSON `expected_version`。新增需列表响应的 `revision` 作为 `expected_revision`。接口真正修改云端 DNS，需要 `dns:write`。
+
+提交前展示差异，服务器读取云端核对旧版本，冲突返回 409。写入后回读；HTTP 202 或 `verified:false` 表示待核实，不能直接重复提交。仅 `verified:true` 确认云端回读一致，不能据此判断全球解析已传播。管理员在 `/api/dns/changes` 查看前后值，Bearer 不能读取历史。详细规则见 [DNS 变更与核实](../04-交付与维护/06-DNS变更与核实.md)。日常查询使用缓存；`refresh=1` 才显式刷新已有云端快照，写入的前后核对总是读取云端。
 
 调用健康检查 `POST /api/health/check` 时，`asset_ids` 每批最多 5 项。IP 请求 `http://IP/`（IPv6 加方括号），HTTP 2xx / 3xx 视为正常，不继续跟随重定向；该结果不代表关联网站的业务一定正常。`unchecked` 和 `stale` 不能计为健康。DNS 观察线索与人工确认的源站绑定应分别解释。
 
@@ -93,14 +95,22 @@ python3 scripts/workspace-api.py PUT /api/health/ips/ASSET_ID --json @asset-upda
 
 ## 验证
 
+以下命令在源码仓库中执行。发行包不含合成测试夹具；客户部署验收按交付维护说明进行。
+
 ```sh
 php tests/settings_test.php
 php tests/maintenance_test.php
 php tests/sync_state_test.php
+php tests/auth_test.php
+php tests/dns_changes_test.php
+php tests/dns_pagination_test.php
+python3 tests/auth_api_test.py
+python3 tests/dns_changes_api_test.py
 python3 tests/maintenance_api_test.py
 python3 tests/product_api_test.py
 node --test tests/api_test.mjs tests/client_cache_test.mjs tests/relationship_graph_test.mjs tests/settings_ui_test.mjs tests/setup_ui_test.mjs
 node --test tests/maintenance_ui_test.mjs
+node --test tests/dns_changes_ui_test.mjs tests/login_ui_test.mjs
 python3 -m unittest discover -s tests -p 'package_release_test.py'
 ```
 

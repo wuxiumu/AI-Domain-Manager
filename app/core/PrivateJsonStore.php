@@ -9,6 +9,7 @@ class PrivateJsonStore
 
     public function read(): array
     {
+        if (file_exists($this->path) && !is_file($this->path)) { throw new RuntimeException('配置存储不是有效文件'); }
         if (!is_file($this->path)) { return []; }
         $raw = file_get_contents($this->path);
         $data = json_decode((string) $raw, true);

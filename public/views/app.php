@@ -4,7 +4,7 @@ $assetUrl = static function (string $path): string {
     return $path . '?v=' . filemtime(PUBLIC_DIR . $path);
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
-$scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'records', 'accounts',
+$scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'accounts',
     'asset-links', 'health', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login', 'app'];
 ?>
 <!DOCTYPE html>

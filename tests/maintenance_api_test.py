@@ -123,7 +123,7 @@ class MaintenanceAPI(unittest.TestCase):
                     self.assertEqual(request("POST", "/api/maintenance/restore", {"token": preview["token"], "confirmation": "恢复资产", "password": password})[0], 409)
                     status, maintenance, headers = request("GET", "/api/maintenance")
                     self.assertEqual(status, 200)
-                    self.assertEqual(maintenance["version"], "1.1.1")
+                    self.assertEqual(maintenance["version"], "1.2.0")
                     self.assertEqual(len(maintenance["backups"]), 2)
                     self.assertEqual(headers.get("Cache-Control"), "no-store")
                     self.assertNotIn(password, json.dumps(maintenance))

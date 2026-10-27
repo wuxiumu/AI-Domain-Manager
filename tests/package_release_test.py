@@ -44,7 +44,7 @@ class ReleaseTest(unittest.TestCase):
             self.assertTrue(all(name.startswith("asset-workspace/") for name in package.namelist()))
             manifest = json.loads(package.read("asset-workspace/manifest.json"))
             self.assertEqual(len(manifest["files"]), count)
-            self.assertEqual(manifest["version"], "1.1.1")
+            self.assertEqual(manifest["version"], "1.2.0")
             for name, checksum in manifest["files"].items():
                 raw = package.read("asset-workspace/" + name)
                 self.assertEqual(hashlib.sha256(raw).hexdigest(), checksum)

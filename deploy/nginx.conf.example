@@ -11,6 +11,9 @@ server {
     client_max_body_size 12m;
 
     location / { try_files $uri $uri/ /index.php?$query_string; }
+    # API path parameters can contain a literal .php suffix (for example a DNS record ID).
+    # Always route them to the front controller, never to a physical file.
+    location ^~ /api/ { rewrite ^ /index.php last; }
     location = /index.php {
         include fastcgi_params;
         fastcgi_param SCRIPT_FILENAME $document_root/index.php;

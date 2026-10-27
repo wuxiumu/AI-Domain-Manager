@@ -132,84 +132,12 @@ class AccessService
         return $out;
     }
 
-    /** 并发探测一批域名（https HEAD，405/失败时回退 http HEAD） */
+    /** Public-only HTTPS HEAD checks; no insecure HTTP fallback or redirect following. */
     private static function probeBatch(array $targets): array
     {
-        $mh      = curl_multi_init();
-        $handles = [];
-
-        foreach ($targets as $key => $t) {
-            $host = self::toAscii($t['domain']);
-            $ch = curl_init('https://' . $host);
-            self::setProbeOpts($ch);
-            curl_multi_add_handle($mh, $ch);
-            $handles[$key] = $ch;
-        }
-
-        do {
-            $status = curl_multi_exec($mh, $running);
-            if ($running) {
-                curl_multi_select($mh, 0.5);
-            }
-        } while ($running && $status === CURLM_OK);
-
-        $out = [];
-        foreach ($handles as $key => $ch) {
-            $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
-            $ms   = (int) round(curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000);
-            $err  = curl_error($ch);
-            $scheme = 'https';
-            curl_multi_remove_handle($mh, $ch);
-            curl_close($ch);
-
-            // HEAD 不支持或连接失败：回退 http HEAD 单发探测
-            if ($code === 0 || $code === 405) {
-                $host = self::toAscii($targets[$key]['domain']);
-                $ch2 = curl_init('http://' . $host);
-                self::setProbeOpts($ch2);
-                curl_exec($ch2);
-                $code2 = (int) curl_getinfo($ch2, CURLINFO_HTTP_CODE);
-                $ms2   = (int) round(curl_getinfo($ch2, CURLINFO_TOTAL_TIME) * 1000);
-                $err2  = curl_error($ch2);
-                curl_close($ch2);
-                if ($code2 > 0 && $code2 !== 405) {
-                    $code = $code2;
-                    $ms   = $ms2;
-                    $err  = $err2;
-                    $scheme = 'http';
-                } elseif ($code === 0) {
-                    $err = $err2 !== '' ? $err2 : ($err !== '' ? $err : '连接失败');
-                }
-            }
-
-            $out[$key] = [
-                'http_code' => $code,
-                'ms'        => $ms,
-                'scheme'    => $scheme,
-                'error'     => $err,
-            ];
-        }
-        curl_multi_close($mh);
-        return $out;
-    }
-
-    private static function setProbeOpts($ch): void
-    {
-        curl_setopt_array($ch, [
-            CURLOPT_NOBODY          => true,        // HEAD
-            CURLOPT_FOLLOWLOCATION  => true,
-            CURLOPT_MAXREDIRS       => 3,
-            CURLOPT_TIMEOUT         => self::TIMEOUT,
-            CURLOPT_CONNECTTIMEOUT  => 2,
-            CURLOPT_RETURNTRANSFER  => true,
-            CURLOPT_SSL_VERIFYPEER  => false,
-            CURLOPT_SSL_VERIFYHOST  => 0,
-            CURLOPT_USERAGENT       => 'DomainManager/1.0',
-        ]);
-        $proxy = config('http.proxy');
-        if (is_string($proxy) && $proxy !== '') {
-            curl_setopt($ch, CURLOPT_PROXY, $proxy);
-        }
+        $urls = [];
+        foreach ($targets as $key => $target) { $urls[$key] = 'https://' . self::toAscii($target['domain']) . '/'; }
+        return PublicHttpProbe::run($urls);
     }
 
     /** IDN 转 punycode（中文域名 → xn-- 形式） */

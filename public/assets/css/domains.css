@@ -47,6 +47,18 @@
     z-index:180;
 }
 
+.dns-review-overlay { z-index: 220; }
+.dns-review-note { margin-bottom: 16px; }
+.dns-review-item { margin-bottom: 18px; }
+.dns-review-item h4 { margin-bottom: 8px; font-size: 13px; }
+.dns-review-item table { min-width: 430px; table-layout: fixed; }
+.dns-review-item th:first-child { width: 90px; }
+.dns-review-item td { white-space: pre-wrap; overflow-wrap: anywhere; vertical-align: top; }
+.dns-field-changed { background: #f0f5eb; }
+.dns-review-item tr.dns-field-changed > th, .dns-review-item tr.dns-field-changed > td { background: #e8f2e2; }
+.dns-review-item tr.dns-field-changed > th { border-left: 3px solid var(--primary); }
+.dns-review-item tr.dns-field-changed > td:last-child { color: #1b5c45; font-weight: 600; }
+
 .domain-detail .modal-body {
     padding-top:6px;
 }

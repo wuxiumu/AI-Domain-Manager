@@ -11,6 +11,7 @@ class DomainInventory
             $snapshot = DnsRecordCache::peek($dir, $domain['provider'], $domain['name']);
             $domain['dns_cached'] = $snapshot !== null;
             $domain['dns_snapshot_at'] = $snapshot['snapshot_at'] ?? null;
+            $domain['dns_revision'] = $snapshot['revision'] ?? null;
             $domain['dns_records'] = [];
             $domain['subdomains'] = [];
             $domain['subdomain_count'] = $snapshot === null ? null : 0;

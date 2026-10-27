@@ -3,8 +3,21 @@
 
 $reqPath = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
 
-// 静态资源放行（php -S --router 模式）
-if ($reqPath !== '/' && is_file(__DIR__ . $reqPath)) {
+// Execute only the front controller, including with the local PHP development router.
+if ($reqPath === '/index.php') { $reqPath = '/'; }
+$staticPath = realpath(__DIR__ . $reqPath);
+$isApiPath = strpos($reqPath, '/api/') === 0;
+$escapedPublicRoot = $staticPath !== false && strpos($staticPath, realpath(__DIR__) . DIRECTORY_SEPARATOR) !== 0 && $staticPath !== realpath(__DIR__);
+$isPhpFile = $staticPath !== false && is_file($staticPath) && strtolower(pathinfo($staticPath, PATHINFO_EXTENSION)) === 'php';
+if ((!$isApiPath && preg_match('/\.php(?:\/|$)/i', $reqPath)) || $isPhpFile || $escapedPublicRoot) {
+    http_response_code(404);
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode(['error' => '页面不存在'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+
+// Static files may only resolve inside public/; symlinks cannot escape the document root.
+if (!$isApiPath && $reqPath !== '/' && $staticPath !== false && is_file($staticPath)) {
     return false;
 }
 
@@ -17,6 +30,7 @@ $router->get('/.well-known/asset-workspace.json', [ApiDescriptionController::cla
 $router->get('/llms.txt', [ApiDescriptionController::class, 'instructions']);
 
 // 鉴权
+$router->get('/api/dns/changes', [RecordController::class, 'changes']);
 $router->get('/api/login/captcha', [AuthController::class, 'captcha']);
 $router->post('/api/login',  [AuthController::class, 'login']);
 $router->post('/api/logout', [AuthController::class, 'logout']);

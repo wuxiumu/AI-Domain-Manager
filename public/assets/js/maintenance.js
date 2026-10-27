@@ -6,7 +6,7 @@ window.WorkspaceMaintenance = (() => {
     let preview = null;
     let snapshot = null;
     let busy = false;
-    const labels = {success: '已完成', failed: '未完成', partial: '部分未完成', skipped: '未执行', pending: '处理中 / 待核实'};
+    const labels = {success: '已完成', failed: '未完成', partial: '部分未完成', skipped: '未执行', pending: '处理中 / 待核实', unconfirmed: '待核实'};
     const routeNames = {
         '/api/domains': '域名资料', '/api/health/ips': '添加 IP', '/api/health/ips/{id}': 'IP 资料',
         '/api/health/domains/{id}/bindings': '域名与 IP 关联', '/api/health/check': '资产检查',
@@ -51,6 +51,8 @@ window.WorkspaceMaintenance = (() => {
             $('#maintenance-check-count').textContent = `${passed} / ${data.checks.length} 通过`;
             $('#maintenance-checks').innerHTML = data.checks.map(check => `<div class="maintenance-check"><span class="badge ${check.status === 'ok' ? 'b-green' : check.status === 'fail' ? 'b-red' : 'b-amber'}">${check.status === 'ok' ? '通过' : check.status === 'fail' ? '需修复' : '待确认'}</span><div><strong>${escapeHtml(check.name)}</strong><p>${escapeHtml(check.detail)}</p></div></div>`).join('');
             $('#maintenance-audit').innerHTML = data.audit.length ? data.audit.map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}</td><td>${escapeHtml(entry.actor)}<small>${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(routeNames[entry.route] || (entry.route.includes('/records') ? 'DNS 操作' : entry.route))}<small>${escapeHtml(entry.method)} ${escapeHtml(entry.targets.join(' · '))}</small></td><td><span class="badge ${entry.outcome === 'success' ? 'b-green' : entry.outcome === 'failed' ? 'b-red' : 'b-amber'}">${labels[entry.outcome] || '待核实'}</span></td></tr>`).join('') : '<tr><td colspan="4" class="muted">暂无操作记录，后续通过权限校验的写入操作会记录在这里。</td></tr>';
+            const dnsLabels = {verified: '云端已核实', unchanged: '无需变更', pending: '处理中 / 待核实', unconfirmed: '待核实'};
+            $('#maintenance-dns-changes').innerHTML = (data.dns_changes || []).map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}<small>${escapeHtml(entry.actor)} · ${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(entry.domain)}<small>${escapeHtml(entry.account)}</small></td><td>${({add:'新增',update:'修改',delete:'删除'})[entry.action] || '变更'}<br><span class="badge ${['verified','unchanged'].includes(entry.outcome) ? 'b-green' : 'b-amber'}">${dnsLabels[entry.outcome] || '待核实'}</span></td><td><details><summary>查看差异</summary><small>变更编号：${escapeHtml(entry.id)}</small><pre class="dns-change-values">${escapeHtml(JSON.stringify({原值:entry.before,拟提交:entry.requested,回读值:entry.after},null,2))}</pre></details></td></tr>`).join('') || '<tr><td colspan="4" class="muted">暂无 DNS 变更记录。</td></tr>';
         } catch (failure) { if (request === generation && visible()) error(failure.message); }
     }
 

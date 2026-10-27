@@ -25,6 +25,7 @@ EXAMPLE_ROOTS = {"example.com", "example.net", "example.org"}
 PUBLIC_HOSTS = {
     "api.alibabacloud.com", "api.github.com", "classic-developer.godaddy.com",
     "github.com", "betterstack.com", "docs.dnscontrol.org", "api.godaddy.com",
+    "help.aliyun.com", "cloud.tencent.com",
 }
 FILE_SUFFIXES = {
     "md", "php", "js", "mjs", "css", "json", "py", "sh", "txt", "lock",
