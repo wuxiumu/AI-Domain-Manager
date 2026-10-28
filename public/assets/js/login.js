@@ -90,13 +90,15 @@ window.WorkspaceLogin = (() => {
                 captcha_id: challenge, captcha: $('#login-captcha').value,
             })});
             if (!active || current !== generation) return;
+            let rememberFailed = false;
             if ($('#login-remember').checked) {
                 try { localStorage.setItem(storageKey, JSON.stringify({user, pass})); }
-                catch (_) { $('#login-remember').checked = false; forget(); }
+                catch (_) { $('#login-remember').checked = false; forget(); rememberFailed = true; }
             } else { forget(); }
             state.csrf = data.csrf_token || '';
             window.WorkspaceCache?.setUser(data.user);
             showApp();
+            if (rememberFailed) toast('登录成功，但浏览器不允许保存账号和密码', 'error');
         } catch (error) {
             if (!active || current !== generation) return;
             showLoginError(error.message);
@@ -111,5 +113,5 @@ window.WorkspaceLogin = (() => {
             if (active && current === generation) { busy = false; update(); }
         }
     });
-    return {load, leave};
+    return {load, leave, forget};
 })();

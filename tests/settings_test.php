@@ -85,6 +85,13 @@ try {
     $settings->updateCredentials(['user' => 'next-admin', 'current_password' => 'test-password-1234', 'password' => 'next-password-1234']);
     verify($tokens->authenticate($token) === null, 'Changing administrator credentials invalidates previous API tokens');
     verify($settings->verifyPassword('next-password-1234') && !$settings->verifyPassword('test-password-1234'), 'Credential changes use a password hash');
+    $beforeReset = $settings->all();
+    $beforeFingerprint = $settings->fingerprint();
+    rejects(fn () => $settings->resetPasswordFromCli('short'), InvalidArgumentException::class);
+    $settings->resetPasswordFromCli('recovery-password-1234');
+    verify($settings->verifyPassword('recovery-password-1234') && !$settings->verifyPassword('next-password-1234'), 'CLI recovery replaces password');
+    verify($settings->all()['auth']['user'] === 'next-admin' && $settings->all()['accounts'] === $beforeReset['accounts'] && $settings->all()['http'] === $beforeReset['http'], 'Recovery preserves administrator name, accounts and network settings');
+    verify($settings->fingerprint() !== $beforeFingerprint, 'Recovery invalidates previous sessions and tokens');
     $expired = $tokens->create(['name' => 'expired']);
     (new PrivateJsonStore($root . '/data/api_tokens.json'))->update(function ($stored) use ($expired) { foreach ($stored['tokens'] as &$record) { if ($record['id'] === $expired['metadata']['id']) $record['expires_at'] = date('c', time() - 1); } return $stored; });
     verify($tokens->authenticate($expired['token']) === null, 'Expired token is rejected');

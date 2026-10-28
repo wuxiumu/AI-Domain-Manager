@@ -73,6 +73,7 @@ window.WorkspaceSettings = (() => {
             const nextUser = $('#settings-user').value.trim();
             await api('/api/auth/credentials', {method: 'PUT', body: JSON.stringify({current_password: $('#settings-current-password').value,
                 user: nextUser, password: $('#settings-new-password').value})});
+            window.WorkspaceLogin.forget();
             form.reset(); hideToken(); showLogin(); $('#login-user').value = nextUser; toast('登录信息已更新，请使用新账号密码登录');
         } catch (error) { errorFor(form, error.message); }
         finally { button.disabled = false; }

@@ -156,6 +156,18 @@ class SettingsService
         });
     }
 
+    /** Recovery for a trusted local CLI operator; never expose as a web endpoint. */
+    public function resetPasswordFromCli(string $password): void
+    {
+        $this->change(static function (array $all) use ($password): array {
+            $auth = $all['auth'];
+            if (empty($auth['user']) || (empty($auth['pass_hash']) && empty($auth['pass']))) {
+                throw new DomainException('尚未配置管理员，请使用首次配置页面');
+            }
+            return ['auth' => self::authData((string) $auth['user'], $password)];
+        });
+    }
+
     public function saveAccount(array $body, ?string $id = null): string
     {
         self::stringFields($body, ['provider', 'name', 'note', 'access_key_id', 'access_key_secret', 'secret_id', 'secret_key', 'api_key', 'api_secret', 'api_base_url']);
