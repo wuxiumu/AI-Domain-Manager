@@ -13,10 +13,11 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-FOLDERS = {"app": {".php"}, "public": {".php", ".js", ".css", ".svg", ".ico", ".woff2"},
+FOLDERS = {"app": {".php"}, "public": {".php", ".js", ".css", ".svg", ".png", ".ico", ".woff2"},
            "docs": {".md"}, "deploy": {".example"}}
 FILES = ["README.md", "CHANGELOG.md", "start.sh", "config/config.example.php",
          "scripts/workspace-api.py", "scripts/cache-dns.php", "scripts/reset-admin-password.php", "scripts/check-public-docs.py", "scripts/package-release.py"]
+REVIEWED_SCREENSHOTS = {"public/assets/screenshots/login.png", "public/assets/screenshots/dashboard.png", "public/assets/screenshots/domains.png"}
 
 
 def release_files(root):
@@ -32,6 +33,8 @@ def release_files(root):
             relative = path.relative_to(root)
             if any(part.startswith(".") for part in relative.parts) or path.suffix not in extensions:
                 raise ValueError("Unexpected file in a public release folder: " + str(relative))
+            if path.suffix == ".png" and relative.as_posix() not in REVIEWED_SCREENSHOTS:
+                raise ValueError("Unreviewed screenshot in a public release folder: " + str(relative))
             selected.add(relative.as_posix())
     for name in sorted(selected):
         path = root / name

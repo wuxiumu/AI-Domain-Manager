@@ -31,6 +31,12 @@ FILE_SUFFIXES = {
     "md", "php", "js", "mjs", "css", "json", "py", "sh", "txt", "lock",
     "png", "jpg", "jpeg", "webp", "svg", "gif", "pdf", "zip", "yaml", "yml",
 }
+# Reviewed screenshots captured from an isolated demo installation with synthetic data.
+REVIEWED_IMAGES = {
+    'public/assets/screenshots/login.png',
+    'public/assets/screenshots/dashboard.png',
+    'public/assets/screenshots/domains.png',
+}
 SECRET_PATTERNS = (
     re.compile(r"\b(?:AKIA|ASIA)[A-Z0-9]{16}\b"),
     re.compile(r"\bLTAI[A-Za-z0-9]{12,}\b"),
@@ -147,7 +153,13 @@ def check(root: Path) -> list[tuple[str, int, str]]:
         except UnicodeError:
             errors.append((relative, 0, "invalid_utf8"))
             continue
-        errors.extend((relative, line, rule) for line, rule in text_findings(content))
+        lines = content.splitlines()
+        for line, rule in text_findings(content):
+            if rule == 'unreviewed_image' and relative == 'README.md':
+                image = re.fullmatch(r'!\[[^\]]*\]\(([^)]+)\)', lines[line - 1].strip())
+                if image and image.group(1) in REVIEWED_IMAGES:
+                    continue
+            errors.append((relative, line, rule))
         if content.count("```") % 2:
             errors.append((relative, 0, "unclosed_code_fence"))
         for match in LINK.finditer(content):

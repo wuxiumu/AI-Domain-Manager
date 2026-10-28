@@ -5,7 +5,7 @@ $assetUrl = static function (string $path): string {
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
 $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'accounts',
-    'asset-links', 'health', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login', 'app'];
+    'asset-links', 'health', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login-promo', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -34,9 +34,28 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
 
 <div id="login-view" class="view hidden">
     <div class="login-cosmos" aria-hidden="true"><div class="login-stars"></div><div class="login-orbit login-orbit-one"></div><div class="login-orbit login-orbit-two"></div><div class="login-beam"></div></div>
+    <main class="login-shell">
+    <section class="login-promo" aria-label="产品介绍">
+        <div class="promo-brand"><img src="/assets/img/asset-workspace-logo.svg" alt=""><span>资产工作台<small>ASSET WORKSPACE</small></span></div>
+        <div class="promo-slides" id="promo-slides">
+            <article class="promo-slide promo-slide-overview" data-promo-slide="0">
+                <div class="promo-copy"><p class="promo-kicker"><span>01 / 03</span> YOUR DIGITAL ASSETS, IN VIEW</p><h2>让每一份资产<br><em>都清晰可见。</em></h2><p>域名、IP、解析与运行状态，在同一个工作空间里，从容掌握。</p><div class="promo-tags"><span>域名管理</span><span>IP 台账</span><span>状态检查</span></div></div>
+                <div class="promo-art promo-art-orbit" aria-hidden="true"><div class="art-halo"></div><div class="art-ring ring-one"></div><div class="art-ring ring-two"></div><div class="art-core"><img src="/assets/img/asset-workspace-logo.svg" alt=""></div><div class="art-node node-one"><b>DOMAIN</b><span>域名资产</span></div><div class="art-node node-two"><b>IP ASSET</b><span>网络资产</span></div><div class="art-node node-three"><b>DNS</b><span>解析记录</span></div><i class="art-dot dot-one"></i><i class="art-dot dot-two"></i></div>
+            </article>
+            <article class="promo-slide promo-slide-relations" data-promo-slide="1" hidden>
+                <div class="promo-copy"><p class="promo-kicker"><span>02 / 03</span> CONNECTIONS THAT MAKE SENSE</p><h2>从资产到关系，<br><em>一眼看懂。</em></h2><p>连接域名、IP 与网站信息，让分散的线索汇成完整的资产视图。</p><div class="promo-tags"><span>关系图谱</span><span>用途备注</span><span>快速检索</span></div></div>
+                <div class="promo-art promo-art-map" aria-hidden="true"><svg viewBox="0 0 500 360" fill="none"><path d="M250 180 95 85M250 180 405 87M250 180 84 281M250 180 411 276M95 85 405 87M84 281 411 276" stroke="#66dfdd" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="5 8"/><circle cx="250" cy="180" r="78" stroke="#76e8db" stroke-opacity=".18"/><circle cx="250" cy="180" r="51" fill="#123a4e" stroke="#7be2d4" stroke-opacity=".7"/><circle cx="250" cy="180" r="8" fill="#9ff6e5"/><circle cx="95" cy="85" r="8" fill="#77dcd3"/><circle cx="405" cy="87" r="8" fill="#849dff"/><circle cx="84" cy="281" r="8" fill="#849dff"/><circle cx="411" cy="276" r="8" fill="#77dcd3"/></svg><div class="map-label map-a">DOMAIN <strong>域名</strong></div><div class="map-label map-b">IP ASSET <strong>IP 资产</strong></div><div class="map-label map-c">WEBSITE <strong>网站</strong></div><div class="map-label map-d">DNS <strong>解析</strong></div></div>
+            </article>
+            <article class="promo-slide promo-slide-health" data-promo-slide="2" hidden>
+                <div class="promo-copy"><p class="promo-kicker"><span>03 / 03</span> CLARITY FOR EVERY CHECK</p><h2>状态有迹可循，<br><em>决策更有底气。</em></h2><p>按需检查域名与 IP，留存结果与时间，让每一次维护更有依据。</p><div class="promo-tags"><span>按需检查</span><span>结果留存</span><span>集中查看</span></div></div>
+                <div class="promo-art promo-art-health" aria-hidden="true"><div class="health-grid"></div><div class="health-card"><div class="health-card-head"><span>ASSET HEALTH</span><span class="health-live">● CHECK</span></div><div class="health-number">清晰<span> / 可追溯</span></div><svg viewBox="0 0 320 100" fill="none"><path d="M0 72H58L78 52 99 70 130 29 154 60 181 45 204 54 238 18 264 35 320 12" stroke="#88f0df" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M0 72H58L78 52 99 70 130 29 154 60 181 45 204 54 238 18 264 35 320 12V100H0Z" fill="#70e6d7" fill-opacity=".09"/></svg><div class="health-card-foot"><span>DOMAIN</span><span>IP</span><span>DNS</span></div></div></div>
+            </article>
+        </div>
+        <div class="promo-bottom"><div class="promo-selector" role="group" aria-label="切换宣传海报"><button type="button" data-promo-select="0" aria-pressed="true"><span>01</span> 资产总览</button><button type="button" data-promo-select="1" aria-pressed="false"><span>02</span> 资产关系</button><button type="button" data-promo-select="2" aria-pressed="false"><span>03</span> 状态检查</button></div><span class="promo-caption">DESIGNED FOR CLARITY <i>✳</i></span></div>
+    </section>
     <div class="login-card">
         <div class="login-card-top"><span>SECURE ACCESS</span><span class="login-status"><i></i> SYSTEM ONLINE</span></div>
-        <div class="login-logo brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg></div>
+        <div class="login-logo"><img src="/assets/img/asset-workspace-logo.svg" alt=""></div>
         <p class="eyebrow">ASSET WORKSPACE</p>
         <h1>资产工作台</h1>
         <p class="login-sub">把域名、IP 与运行状态放在一起。</p>
@@ -58,12 +77,13 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
         </form>
         <p class="login-env"><a href="/env-check" target="_blank" rel="noopener">无法登录？检查运行环境</a></p>
     </div>
+    </main>
 </div>
 
 <div id="app-view" class="view hidden">
     <aside class="sidebar" id="workspace-sidebar">
         <a class="brand" href="/" aria-label="资产工作台首页">
-            <span class="brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg></span>
+            <span class="brand-mark"><img src="/assets/img/asset-workspace-logo.svg" alt=""></span>
             <span>资产工作台<small>ASSET WORKSPACE</small></span>
         </a>
         <p class="nav-caption">工作空间</p>

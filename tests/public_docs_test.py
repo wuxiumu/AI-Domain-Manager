@@ -63,6 +63,19 @@ class PublicDocumentationTest(unittest.TestCase):
             (root / "docs/00-目录.md").write_text("# 目录\n")
             self.assertIn("private_target_link", {rule for _, _, rule in docs.check(root)})
 
+    def test_only_reviewed_readme_images_are_allowed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / 'docs').mkdir()
+            (root / 'docs/00-目录.md').write_text('# 目录\n')
+            image = root / 'public/assets/screenshots/dashboard.png'
+            image.parent.mkdir(parents=True)
+            image.write_bytes(b'synthetic')
+            (root / 'README.md').write_text('![演示](public/assets/screenshots/dashboard.png)\n')
+            self.assertEqual(docs.check(root), [])
+            (root / 'README.md').write_text('![其他](public/assets/screenshots/other.png)\n')
+            self.assertIn('unreviewed_image', {rule for _, _, rule in docs.check(root)})
+
 
 if __name__ == "__main__":
     unittest.main()

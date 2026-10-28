@@ -69,6 +69,11 @@ class ReleaseTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             list(builder.release_files(self.root))
 
+    def test_unreviewed_png_rejected(self):
+        (self.root / 'public/private.png').write_bytes(b'private')
+        with self.assertRaises(ValueError):
+            list(builder.release_files(self.root))
+
     def test_document_check_blocks_unsafe_release(self):
         (self.root / "docs/01-产品介绍/99-private.md").write_text("Unreviewed attachment ![private](image.png)")
         import subprocess
