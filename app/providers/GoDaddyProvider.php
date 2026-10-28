@@ -13,6 +13,7 @@ class GoDaddyProvider extends CloudProvider
     public function __construct(array $cfg)
     {
         $this->cfg = $cfg;
+        $this->base = rtrim((string) (($cfg['api_base_url'] ?? '') ?: $this->base), '/');
     }
 
     public function testConnection(): array

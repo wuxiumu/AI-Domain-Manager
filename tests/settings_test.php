@@ -46,6 +46,18 @@ try {
     }
     $public = json_encode($settings->summary());
     foreach ($rawSecrets as $secret) { verify(strpos($public, $secret) === false, 'Secret not returned from settings'); }
+    $godaddyId = $id;
+    $shown = array_values(array_filter($settings->publicAccounts(), fn ($item) => $item['id'] === $godaddyId))[0];
+    verify($shown['api_base_url'] === 'https://api.godaddy.com', 'Existing GoDaddy account defaults to official endpoint');
+    $settings->saveAccount(['api_base_url' => 'https://relay.example.com/api/'], $godaddyId);
+    $settings->saveAccount(['name' => 'GoDaddy relay'], $godaddyId);
+    $shown = array_values(array_filter($settings->publicAccounts(), fn ($item) => $item['id'] === $godaddyId))[0];
+    verify($shown['api_base_url'] === 'https://relay.example.com/api', 'Custom endpoint persists and is editable');
+    foreach (['http://relay.example.com', 'https://user:pass@relay.example.com', 'https://relay.example.com/?x=1'] as $invalidUrl) {
+        rejects(fn () => $settings->saveAccount(['api_base_url' => $invalidUrl], $godaddyId), InvalidArgumentException::class);
+    }
+    $settings->saveAccount(['api_base_url' => ''], $godaddyId);
+    verify(array_values(array_filter($settings->publicAccounts(), fn ($item) => $item['id'] === $godaddyId))[0]['api_base_url'] === 'https://api.godaddy.com', 'Empty endpoint restores default');
     rejects(fn () => $settings->saveAccount(['name' => 'missing'], 'missing'), OutOfBoundsException::class);
     $settings->updateHttp(['proxy' => 'http://proxyuser:proxypass@127.0.0.1:8088', 'timeout' => 30, 'connect_timeout' => 5]);
     verify($settings->all()['http']['proxy'] === 'http://proxyuser:proxypass@127.0.0.1:8088', 'Proxy stored for provider clients');

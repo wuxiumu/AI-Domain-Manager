@@ -8,6 +8,10 @@ HttpClient::$responses=[['RecordCountInfo'=>['TotalCount'=>301],'RecordList'=>ar
 $t=new TencentProvider(['secret_id'=>'test','secret_key'=>'test']);ok(count($t->listRecords('example.com'))===301,'Tencent full pages');ok(HttpClient::$requests[1]['Offset']===300,'Tencent second page');
 HttpClient::$responses=[[['data'=>'1.1.1.1','ttl'=>600],['data'=>'8.8.8.8','ttl'=>600]]];HttpClient::$requests=[];
 $g=new GoDaddyProvider(['api_key'=>'test','api_secret'=>'test']);$g->updateRecord('example.com','A|www|1.1.1.1',['type'=>'A','name'=>'www','value'=>'9.9.9.9','ttl'=>600]);ok(HttpClient::$requests[1]['body'][0]['data']==='9.9.9.9','GoDaddy updates selected value');ok(HttpClient::$requests[1]['body'][1]['data']==='8.8.8.8','GoDaddy preserves sibling value');
+ok(strpos(HttpClient::$requests[0], 'https://api.godaddy.com/v1/') === 0, 'GoDaddy defaults to official endpoint');
+HttpClient::$responses=[[['data'=>'1.1.1.1','ttl'=>600]]];HttpClient::$requests=[];
+$custom=new GoDaddyProvider(['api_key'=>'test','api_secret'=>'test','api_base_url'=>'https://relay.example.com/api/']);$custom->updateRecord('example.com','A|www|1.1.1.1',['value'=>'9.9.9.9']);
+ok(strpos(HttpClient::$requests[0], 'https://relay.example.com/api/v1/') === 0 && strpos(HttpClient::$requests[1]['url'], 'https://relay.example.com/api/v1/') === 0, 'Custom GoDaddy endpoint used for reads and writes');
 HttpClient::$responses=[[['data'=>'192.0.2.1','ttl'=>600],['data'=>'192.0.2.2','ttl'=>900,'weight'=>20]]];HttpClient::$requests=[];
 $g->deleteRecord('example.com','A|www|192.0.2.1');ok(count(HttpClient::$requests[1]['body'])===1,'GoDaddy single deletion replaces remaining RRset');ok(HttpClient::$requests[1]['body'][0]===['data'=>'192.0.2.2','ttl'=>900,'weight'=>20],'GoDaddy deletion preserves sibling values and metadata');
 HttpClient::$responses=[[['data'=>'192.0.2.1','ttl'=>600]]];HttpClient::$requests=[];

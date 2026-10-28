@@ -77,9 +77,11 @@ class SettingsService
                     $fields[$field['key']] = ['configured' => $value !== '', 'masked' => $value === '' ? '' : '••••••••'];
                 }
             }
-            return ['id' => $account['id'], 'name' => $account['name'], 'provider' => $account['provider'],
+            $public = ['id' => $account['id'], 'name' => $account['name'], 'provider' => $account['provider'],
                 'enabled' => ($account['enabled'] ?? true) !== false, 'note' => $account['note'] ?? '', 'credentials' => $fields,
                 'key_masked' => mask_secret((string) ($account['access_key_id'] ?? $account['secret_id'] ?? $account['api_key'] ?? ''))];
+            if ($account['provider'] === 'godaddy') { $public['api_base_url'] = ($account['api_base_url'] ?? '') ?: 'https://api.godaddy.com'; }
+            return $public;
         }, $this->all()['accounts']));
     }
 
@@ -156,7 +158,7 @@ class SettingsService
 
     public function saveAccount(array $body, ?string $id = null): string
     {
-        self::stringFields($body, ['provider', 'name', 'note', 'access_key_id', 'access_key_secret', 'secret_id', 'secret_key', 'api_key', 'api_secret']);
+        self::stringFields($body, ['provider', 'name', 'note', 'access_key_id', 'access_key_secret', 'secret_id', 'secret_key', 'api_key', 'api_secret', 'api_base_url']);
         $savedId = $id ?? '';
         $this->change(function (array $all) use ($body, $id, &$savedId): array {
             $accounts = $all['accounts'];
@@ -177,6 +179,17 @@ class SettingsService
             $next = array_replace($previous, ['id' => $savedId, 'name' => $name, 'provider' => $providerId, 'note' => $note,
                 'enabled' => $body['enabled'] ?? $previous['enabled'] ?? true]);
             if (!is_bool($next['enabled'])) { throw new InvalidArgumentException('启用状态必须为布尔值'); }
+            if ($providerId === 'godaddy' && array_key_exists('api_base_url', $body)) {
+                $url = trim($body['api_base_url']);
+                if ($url === '') { $url = 'https://api.godaddy.com'; }
+                $parts = parse_url($url);
+                if (strlen($url) > 2048 || preg_match('/[\x00-\x20\x7f]/', $url) || !filter_var($url, FILTER_VALIDATE_URL)
+                    || !$parts || strtolower($parts['scheme'] ?? '') !== 'https' || empty($parts['host'])
+                    || isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
+                    throw new InvalidArgumentException('GoDaddy API 地址需为 HTTPS 地址，不能包含账号、密码、查询参数或片段');
+                }
+                $next['api_base_url'] = rtrim($url, '/');
+            }
             foreach ($schema['fields'] as $field) {
                 $key = $field['key'];
                 $value = trim((string) ($body[$key] ?? ''));

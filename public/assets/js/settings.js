@@ -120,6 +120,7 @@ window.WorkspaceSettings = (() => {
             const form = overlay.querySelector('form');
             const fields = () => {
                 overlay.querySelector('.account-credential-fields').innerHTML = providerFields[provider].map(([key, label]) => `<label>${label}<input name="${key}" type="password" autocomplete="new-password" spellcheck="false" ${account ? '' : 'required'} placeholder="${account?.credentials[key]?.configured ? '已配置，留空保留' : '输入 ' + label}"></label>`).join('');
+                if (provider === 'godaddy') overlay.querySelector('.account-credential-fields').insertAdjacentHTML('beforeend', `<label>API 地址<input name="api_base_url" type="url" maxlength="2048" value="${escapeHtml(account?.api_base_url || 'https://api.godaddy.com')}" placeholder="https://api.godaddy.com"></label><p class="form-help">默认使用 GoDaddy 官方地址；可修改为可信的 HTTPS 转发地址。密钥会发送至该地址。</p>`);
                 overlay.querySelectorAll('[data-account-provider]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.accountProvider === provider)));
             };
             fields();
@@ -132,6 +133,7 @@ window.WorkspaceSettings = (() => {
                 event.preventDefault(); const button = form.querySelector('[type="submit"]'); button.disabled = true; errorFor(form);
                 const body = {provider, name: form.elements.name.value.trim(), enabled: form.elements.enabled.checked, note: form.elements.note.value.trim()};
                 providerFields[provider].forEach(([key]) => { body[key] = form.elements[key].value; });
+                if (provider === 'godaddy') body.api_base_url = form.elements.api_base_url.value.trim();
                 try {
                     await api('/api/accounts' + (account ? '/' + encodeURIComponent(account.id) : ''), {method: account ? 'PUT' : 'POST', body: JSON.stringify(body)});
                     close(); await loadKeys(); toast('云账号配置已保存，可测试连接或同步域名');

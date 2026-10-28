@@ -86,7 +86,8 @@ TEXT;
             'name' => $string, 'note' => $string, 'links' => $links], ['ip']);
         $account = self::object(['provider' => ['type' => 'string', 'enum' => ['aliyun', 'tencent', 'godaddy']],
             'name' => $string, 'note' => $string, 'enabled' => $boolean, 'access_key_id' => $secret, 'access_key_secret' => $secret,
-            'secret_id' => $secret, 'secret_key' => $secret, 'api_key' => $secret, 'api_secret' => $secret], ['name', 'provider']);
+            'secret_id' => $secret, 'secret_key' => $secret, 'api_key' => $secret, 'api_secret' => $secret,
+            'api_base_url' => ['type' => 'string', 'format' => 'uri', 'description' => 'GoDaddy HTTPS API 基础地址，默认 https://api.godaddy.com']], ['name', 'provider']);
         $account['oneOf'] = array_map(static function (array $provider): array {
             return ['properties' => ['provider' => ['const' => $provider['id']]], 'required' => array_column($provider['fields'], 'key')];
         }, SettingsService::providerSchema());

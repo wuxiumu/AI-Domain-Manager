@@ -153,6 +153,8 @@ domain-manager/
 
 如果测试 GoDaddy 时提示"网络请求失败 / Connection timed out"，通常是本地网络屏蔽了 `api.godaddy.com`（可先 `curl https://api.github.com` 验证境外连通性）。解决方式：
 
+在云账号的 GoDaddy 编辑窗口中可以修改“API 地址”，默认为 `https://api.godaddy.com`，清空后恢复默认。填写可信的 HTTPS 转发地址时，GoDaddy 密钥会发送至该地址；该服务需转发 GoDaddy API 请求。
+
 1. 在 `config/config.php` 的 `http.proxy` 中填入本地代理地址，例如 `'http://127.0.0.1:7890'`（Clash / V2Ray 等工具的默认端口）
 2. 或换一个可正常访问 GoDaddy 的网络环境运行
 
