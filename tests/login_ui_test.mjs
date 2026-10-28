@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 
 function fixture() {
-    const fields = new Map(), calls = [], responses = [], timers = new Map();
+    const fields = new Map(), calls = [], responses = [], timers = new Map(), storage = new Map();
     let now = 1000, nextTimer = 0, shown = false, cachedUser;
     const state = {csrf: ''};
     function $(name) {
@@ -19,6 +19,7 @@ function fixture() {
         return fields.get(name);
     }
     const context = vm.createContext({$, state, Date: {now: () => now},
+        localStorage: {getItem: key => storage.get(key) ?? null, setItem: (key, value) => storage.set(key, value), removeItem: key => storage.delete(key)},
         setTimeout(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
         clearTimeout(id) { timers.delete(id); },
         window: {WorkspaceCache: {setUser(user) { cachedUser = user; }}},
@@ -40,7 +41,7 @@ function fixture() {
             const pending = [...timers.values()]; timers.clear(); pending.forEach(callback => callback());
             await Promise.resolve(); await Promise.resolve();
         },
-        result: () => ({shown, cachedUser}), timers,
+        result: () => ({shown, cachedUser}), timers, storage,
     };
 }
 
@@ -55,6 +56,21 @@ test('login loads a fresh challenge without cache and refresh clears the previou
     await ui.$('#login-captcha-refresh').listeners.click();
     assert.equal(ui.state.csrf, 'csrf-2');
     assert.equal(ui.$('#login-captcha').value, '');
+});
+
+test('remembered credentials persist only after success and are removed when unchecked', async () => {
+    const ui = fixture(); await ui.login.load();
+    ui.$('#login-user').value = 'admin'; ui.$('#login-pass').value = 'secret'; ui.$('#login-remember').checked = true;
+    ui.responses.push(Object.assign(new Error('bad credentials'), {status: 401}));
+    await ui.submit(); assert.equal(ui.storage.size, 0);
+    ui.$('#login-pass').value = 'secret'; await ui.submit();
+    assert.equal(ui.storage.size, 1);
+    await ui.login.load();
+    assert.equal(ui.$('#login-user').value, 'admin'); assert.equal(ui.$('#login-pass').value, 'secret');
+    assert.equal(ui.$('#login-remember').checked, true);
+    ui.$('#login-remember').checked = false; ui.$('#login-remember').listeners.change();
+    assert.equal(ui.storage.size, 0);
+    await ui.login.load(); assert.equal(ui.$('#login-pass').value, '');
 });
 
 test('failed login refreshes the consumed challenge and clears password and answer', async () => {

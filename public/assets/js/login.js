@@ -3,6 +3,17 @@
 window.WorkspaceLogin = (() => {
     let active = false, busy = false, loading = false, generation = 0;
     let challenge = '', expiresAt = 0, retryAt = 0, timer;
+    const storageKey = 'asset-workspace-remembered-login';
+    function forget() { try { localStorage.removeItem(storageKey); } catch (_) {} }
+    function restore() {
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            if (saved && typeof saved.user === 'string' && typeof saved.pass === 'string') {
+                $('#login-user').value = saved.user; $('#login-pass').value = saved.pass;
+                $('#login-remember').checked = true;
+            } else { $('#login-remember').checked = false; }
+        } catch (_) { $('#login-remember').checked = false; }
+    }
     const hint = () => $('#login-captcha-hint');
     function update() {
         const seconds = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
@@ -56,26 +67,33 @@ window.WorkspaceLogin = (() => {
     }
     async function load() {
         leave();
+        restore();
         active = true;
         $('#login-error').classList.add('hidden');
         tick();
         await refresh();
     }
     $('#login-captcha-refresh').addEventListener('click', () => refresh());
+    $('#login-remember').addEventListener('change', () => { if (!$('#login-remember').checked) forget(); });
     $('#login-form').addEventListener('submit', async event => {
         event.preventDefault();
         if (busy || loading || retryAt > Date.now()) return;
         if (!challenge || Date.now() >= expiresAt) { await refresh(); return; }
         const current = generation;
         busy = true;
+        const user = $('#login-user').value, pass = $('#login-pass').value;
         $('#login-error').classList.add('hidden');
         update();
         try {
             const data = await api('/api/login', {method: 'POST', body: JSON.stringify({
-                user: $('#login-user').value, pass: $('#login-pass').value,
+                user, pass,
                 captcha_id: challenge, captcha: $('#login-captcha').value,
             })});
             if (!active || current !== generation) return;
+            if ($('#login-remember').checked) {
+                try { localStorage.setItem(storageKey, JSON.stringify({user, pass})); }
+                catch (_) { $('#login-remember').checked = false; forget(); }
+            } else { forget(); }
             state.csrf = data.csrf_token || '';
             window.WorkspaceCache?.setUser(data.user);
             showApp();

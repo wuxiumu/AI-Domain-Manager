@@ -24,7 +24,6 @@ function showLogin() {
     window.WorkspaceCache?.setUser(null);
     $('#setup-view').classList.add('hidden');
     $('#login-view').classList.remove('hidden');
-    $('#login-pass').value = '';
     window.WorkspaceLogin.load();
 }
 

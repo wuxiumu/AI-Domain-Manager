@@ -33,7 +33,9 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
 <?php require __DIR__ . '/setup.php'; ?>
 
 <div id="login-view" class="view hidden">
+    <div class="login-cosmos" aria-hidden="true"><div class="login-stars"></div><div class="login-orbit login-orbit-one"></div><div class="login-orbit login-orbit-two"></div><div class="login-beam"></div></div>
     <div class="login-card">
+        <div class="login-card-top"><span>SECURE ACCESS</span><span class="login-status"><i></i> SYSTEM ONLINE</span></div>
         <div class="login-logo brand-mark"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg></div>
         <p class="eyebrow">ASSET WORKSPACE</p>
         <h1>资产工作台</h1>
@@ -43,6 +45,8 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
             <input type="text" id="login-user" autocomplete="username" required autofocus placeholder="输入管理账号">
             <label for="login-pass">密码</label>
             <input type="password" id="login-pass" autocomplete="current-password" required placeholder="输入密码">
+            <label class="login-remember"><input type="checkbox" id="login-remember"><span>记住密码</span></label>
+            <p class="login-remember-hint">勾选后密码将保存在此浏览器中，请勿在公用设备使用。</p>
             <label for="login-captcha">图形验证码</label>
             <div class="login-captcha-row">
                 <input type="text" id="login-captcha" autocomplete="off" autocapitalize="characters" spellcheck="false" required maxlength="5" pattern="[A-Za-z0-9]{5}" aria-describedby="login-captcha-hint" placeholder="输入 5 位验证码">
