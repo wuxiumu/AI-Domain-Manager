@@ -1,6 +1,6 @@
 'use strict';
 window.Relationships = (() => {
-    let data = null, tab = 'all', view = 'table', page = 0, generation = 0;
+    let data = null, tab = 'all', view = 'table', assetKind = 'domain', page = 0, generation = 0;
     let selectedRoots = null, focusedDomain = null, focusedHost = null, focusedIp = null;
     const h = escapeHtml;
     const domainAssets = () => (data?.assets || []).filter(a => a.kind === 'domain' && (!selectedRoots || selectedRoots.has(a.id)));
@@ -28,6 +28,7 @@ window.Relationships = (() => {
             const query = new URLSearchParams(location.hash.split('?')[1] || '');
             selectedRoots = query.has('domains') ? new Set(query.get('domains').split(',').filter(Boolean)) : null;
             focusedDomain = query.get('focus') || null;
+            assetKind = query.get('kind') === 'ip' ? 'ip' : 'domain';
             if (query.has('q')) $('#rel-query').value = query.get('q');
             if (query.has('ip') && ipAssets().some(a => a.id === query.get('ip'))) $('#rel-ip').value = query.get('ip');
             if (['all','confirmed','dns','unlinked','unhealthy'].includes(query.get('tab'))) tab = query.get('tab');
@@ -47,46 +48,78 @@ window.Relationships = (() => {
             return true;
         });
     }
+    function scopedIps() {
+        const domains = domainAssets();
+        return selectedRoots ? ipAssets().filter(ip => domains.some(domain => linkIds(domain).includes(ip.id))) : ipAssets();
+    }
+    function filteredIps() {
+        const query = $('#rel-query').value.trim().toLowerCase(), selected = $('#rel-ip').value;
+        const domains = domainAssets();
+        return scopedIps().filter(ip => {
+            const related = domains.filter(domain => linkIds(domain).includes(ip.id));
+            const confirmed = related.some(domain => domain.bound_ips.includes(ip.id));
+            if (selected && ip.id !== selected) return false;
+            if (query && ![ip.name, ip.ip, ip.note, ip.server_provider, ip.configuration, ...related.map(domain => domain.name)].join(' ').toLowerCase().includes(query)) return false;
+            if (tab === 'confirmed' && !confirmed) return false;
+            if (tab === 'dns' && (!related.length || confirmed)) return false;
+            if (tab === 'unlinked' && related.length) return false;
+            if (tab === 'unhealthy' && ip.health.status !== 'unhealthy') return false;
+            return true;
+        });
+    }
     function render() {
         const domains = domainAssets(), ips = selectedRoots ? ipAssets().filter(a=>domains.some(d=>linkIds(d).includes(a.id))) : ipAssets();
         $('#rel-scope-note').classList.toggle('hidden',!selectedRoots);
         $('#rel-scope-note').innerHTML=selectedRoots ? `<strong>选定范围：${domains.length} 个域名</strong><span>只展示健康看板中选中的域名及其关联目标</span><button class="btn btn-sm" data-rel-scope-clear>返回全部资产</button>` : '';
-        const confirmed = domains.filter(d => d.bound_ips.length).length;
-        const dns = domains.filter(d => linkIds(d).length && !d.bound_ips.length).length;
-        const unlinked = domains.length - confirmed - dns;
-        $('#rel-summary').innerHTML = [['有效域名',domains.length],['独立 IP',new Set(ips.map(a => a.ip)).size],['已确认绑定',confirmed],['待确认 / 未关联',dns + unlinked]].map(([label,value]) => `<div class="panel"><span class="muted">${label}</span><strong>${value}</strong></div>`).join('');
+        $('#rel-type-domain-count').textContent = domains.length;
+        $('#rel-type-ip-count').textContent = ips.length;
+        document.querySelectorAll('[data-rel-type]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.relType === assetKind)));
+        $('#rel-type-overview').innerHTML = window.AssetViewStats.render(assetKind === 'domain' ? domains : ips, assetKind);
+        const groups = assetKind === 'domain'
+            ? domains.map(domain => ({asset:domain, confirmed:domain.bound_ips.length > 0, linked:linkIds(domain).length > 0, count:linkIds(domain).length}))
+            : ips.map(ip => { const related = domains.filter(domain => linkIds(domain).includes(ip.id)); return {asset:ip, confirmed:related.some(domain => domain.bound_ips.includes(ip.id)), linked:related.length > 0, count:related.length}; });
+        const confirmed = groups.filter(group => group.confirmed).length;
+        const dns = groups.filter(group => group.linked && !group.confirmed).length;
+        const unlinked = groups.length - confirmed - dns;
+        $('#rel-summary').innerHTML = [[assetKind === 'domain' ? '主域名' : 'IP / 服务器',groups.length],['已确认绑定',confirmed],['仅 DNS 关联',dns],['未关联',unlinked]].map(([label,value]) => `<div class="panel"><span class="muted">${label}</span><strong>${value}</strong></div>`).join('');
         let offset = 0;
         const colors = ['#2d6b58','#91b3a5','#dedfd8'];
         const counts = [confirmed,dns,unlinked];
-        $('#rel-coverage').innerHTML = `<svg viewBox="0 0 160 160" role="img" aria-label="${confirmed} 个确认绑定、${dns} 个仅DNS、${unlinked} 个未关联"><circle cx="80" cy="80" r="59" fill="none" stroke="#eef0eb" stroke-width="15"/>${counts.map((n,i) => {const length=domains.length ? n/domains.length*370.708:0;const circle=`<circle cx="80" cy="80" r="59" fill="none" stroke="${colors[i]}" stroke-width="15" stroke-dasharray="${length} 370.708" stroke-dashoffset="${-offset}" transform="rotate(-90 80 80)"/>`;offset+=length;return circle;}).join('')}<text x="80" y="78" text-anchor="middle" class="rel-ring-value">${domains.length ? Math.round((confirmed+dns)/domains.length*100):0}%</text><text x="80" y="100" text-anchor="middle" class="rel-ring-label">有关联线索</text></svg><div class="rel-ring-legend">${['confirmed','dns','unlinked'].map((t,i) => `<button data-rel-tab="${t}"><i style="background:${colors[i]}"></i>${['已确认绑定','仅 DNS 关联','未关联'][i]}<b>${counts[i]}</b></button>`).join('')}</div>`;
-        const ranked = ips.map(a => ({asset:a,count:domains.filter(d => linkIds(d).includes(a.id)).length})).sort((a,b)=>b.count-a.count).slice(0,5);
-        const max = Math.max(1,...ranked.map(a=>a.count));
-        $('#rel-ranking').innerHTML = ranked.length ? ranked.map(({asset:a,count}) => `<button class="rel-rank" data-rel-focus="${h(a.id)}"><span title="${h(a.name)}">${h(endpoint(a))}</span><i><b style="width:${count/max*100}%"></b></i><strong>${count}</strong></button>`).join('') : '<p class="hc-empty">尚无 IP 资产，可从 IP 资产页添加。</p>';
+        $('#rel-coverage').innerHTML = `<svg viewBox="0 0 160 160" role="img" aria-label="${confirmed} 个确认绑定、${dns} 个仅 DNS、${unlinked} 个未关联"><circle cx="80" cy="80" r="59" fill="none" stroke="#eef0eb" stroke-width="15"/>${counts.map((n,i) => {const length=groups.length ? n/groups.length*370.708:0;const circle=`<circle cx="80" cy="80" r="59" fill="none" stroke="${colors[i]}" stroke-width="15" stroke-dasharray="${length} 370.708" stroke-dashoffset="${-offset}" transform="rotate(-90 80 80)"/>`;offset+=length;return circle;}).join('')}<text x="80" y="78" text-anchor="middle" class="rel-ring-value">${groups.length ? Math.round((confirmed+dns)/groups.length*100):0}%</text><text x="80" y="100" text-anchor="middle" class="rel-ring-label">有关联线索</text></svg><div class="rel-ring-legend">${['confirmed','dns','unlinked'].map((t,i) => `<button data-rel-tab="${t}"><i style="background:${colors[i]}"></i>${['已确认绑定','仅 DNS 关联','未关联'][i]}<b>${counts[i]}</b></button>`).join('')}</div>`;
+        const ranked = groups.sort((a,b)=>b.count-a.count).slice(0,5), max = Math.max(1,...ranked.map(item=>item.count));
+        $('#rel-ranking').innerHTML = ranked.length ? ranked.map(({asset:a,count}) => `<button class="rel-rank" ${assetKind === 'domain' ? 'data-rel-detail' : 'data-rel-focus'}="${h(a.id)}"><span title="${h(a.name)}">${h(assetKind === 'domain' ? a.name : a.ip)}</span><i><b style="width:${count/max*100}%"></b></i><strong>${count}</strong></button>`).join('') : '<p class="hc-empty">当前范围暂无资产。</p>';
         renderResults();
     }
     function renderResults() {
         window.ChoiceTabs?.sync();
-        const rows = filtered(), size = $('#rel-show-all').checked ? Math.max(1,rows.length) : Math.max(1,Math.min(10000,Number($('#rel-page-size').value)||12));
+        const rows = assetKind === 'domain' ? filtered() : filteredIps(), size = $('#rel-show-all').checked ? Math.max(1,rows.length) : Math.max(1,Math.min(10000,Number($('#rel-page-size').value)||12));
         page = Math.min(page, Math.max(0,Math.ceil(rows.length / size)-1));
         const slice = rows.slice(page*size,(page+1)*size);
-        $('#rel-count').textContent = `${rows.length} 个域名`;
+        $('#rel-count').textContent = `${rows.length} 个 ${assetKind === 'domain' ? '主域名' : 'IP / 服务器'}`;
         $$('[data-rel-tab]').forEach(b => b.setAttribute('aria-selected',String(b.dataset.relTab === tab)));
         $('#rel-graph').classList.toggle('hidden', view !== 'graph');
         $('#rel-table').classList.remove('hidden');
         $('#rel-prev').disabled = page === 0;
         $('#rel-next').disabled = (page+1)*size >= rows.length;
-        $('#rel-page').textContent = rows.length ? `${page*size+1}–${Math.min((page+1)*size,rows.length)} / ${rows.length} · 每页 ${size} 个域名` : '无匹配域名';
-        if (view === 'graph') renderGraph(slice);
+        $('#rel-page').textContent = rows.length ? `${page*size+1}–${Math.min((page+1)*size,rows.length)} / ${rows.length} · 每页 ${size} 项` : '无匹配资产';
+        if (view === 'graph') {
+            const graphDomains = assetKind === 'domain' ? slice : domainAssets().filter(domain => slice.some(ip => linkIds(domain).includes(ip.id)));
+            renderGraph(graphDomains, assetKind === 'ip' ? slice : null);
+        }
+        if (assetKind === 'ip') {
+            $('#rel-table').innerHTML = `<table><thead><tr><th>IP / 服务器</th><th>关联主域名</th><th>配置与到期</th><th>健康</th><th>操作</th></tr></thead><tbody>${slice.length ? slice.map(ip => { const related = domainAssets().filter(domain => linkIds(domain).includes(ip.id)); const subCount = selectedRoots ? new Set((ip.dns_links || []).filter(link => selectedRoots.has(link.domain_id) && link.fqdn !== link.domain).map(link => link.fqdn)).size : (ip.subdomain_count || 0); return `<tr><td><button class="hc-asset-link" data-rel-detail="${h(ip.id)}">${h(ip.name)}</button><small class="hc-subline">${h(ip.ip)}</small></td><td>${related.length} 个主域名 · ${subCount} 个子域名<small class="hc-subline">${related.slice(0,3).map(domain => h(domain.name)).join('、') || '暂无关联'}</small></td><td>${h(ip.server_provider || '供应商未填写')}<small class="hc-subline">${h(ip.configuration || '配置未填写')} · 到期：${h(ip.expires_at || '未填写')}</small></td><td>${badge(ip)}</td><td><button class="btn btn-sm" data-rel-detail="${h(ip.id)}">详情</button><button class="btn btn-sm" data-rel-edit="${h(ip.id)}">编辑</button><button class="btn btn-sm" data-domain-ip="${h(ip.id)}">查看关联</button></td></tr>`; }).join('') : '<tr><td colspan="5" class="hc-empty">暂无匹配的 IP / 服务器，可调整筛选条件。</td></tr>'}</tbody></table>`;
+            return;
+        }
         $('#rel-table').innerHTML = `<table><thead><tr><th>域名</th><th>DNS 解析 IP</th><th>确认绑定服务器</th><th>健康</th><th>操作</th></tr></thead><tbody>${slice.length ? slice.map(d=>`<tr><td><button class="hc-asset-link" data-rel-detail="${h(d.id)}">${h(d.name)}</button></td><td>${(d.health.resolved_ips||[]).map(h).join('<br>')||'暂无解析证据'}</td><td>${d.bound_ips.map(id=>byId(id)).filter(Boolean).map(a=>`<button class="btn btn-link" data-rel-detail="${h(a.id)}">${h(a.name)} · ${h(a.ip)}</button>`).join('')||'尚未确认'}</td><td>${badge(d)}</td><td><button class="btn btn-sm" data-rel-detail="${h(d.id)}">关系详情</button><button class="btn btn-sm" data-rel-edit="${h(d.id)}">编辑</button><button class="btn btn-sm" data-rel-bind="${h(d.id)}">绑定</button></td></tr>`).join('') : '<tr><td colspan="5" class="hc-empty">暂无匹配关系，可调整筛选条件。</td></tr>'}</tbody></table>`;
     }
-    function renderGraph(domains) {
+    function renderGraph(domains, visibleIps = null) {
         $('#rel-drilldown-note').classList.toggle('hidden',!focusedDomain);
         if (focusedDomain) { renderDomainGraph(focusedDomain); return; }
         const selected = $('#rel-ip').value;
         const ids = new Set(domains.flatMap(linkIds));
         if (selected) ids.add(selected);
         // With no domain matches, still show registered standalone servers.
-        const ips = ipAssets().filter(a => ids.has(a.id) || (!$('#rel-query').value && tab === 'all' && !selected && !domains.length));
+        const ips = visibleIps || ipAssets().filter(a => ids.has(a.id) || (!$('#rel-query').value && tab === 'all' && !selected && !domains.length));
         if (!domains.length && !ips.length) { $('#rel-graph').innerHTML='<div class="hc-empty">没有符合条件的关系，点击“全部”或调整搜索条件。</div>'; return; }
         $('#rel-graph').innerHTML = window.RelationshipGraph.overview({
             domains, ips, ...graphDisplayOptions(),
@@ -125,7 +158,7 @@ window.Relationships = (() => {
         });
     }
     function showDomains(ids) {
-        selectedRoots=new Set(ids);focusedDomain=null;tab='all';page=0;view='graph';
+        selectedRoots=new Set(ids);focusedDomain=null;tab='all';assetKind='domain';page=0;view='graph';
         $('#rel-query').value='';$('#rel-ip').value='';
         history.pushState(null,'','#relations?domains='+ids.join(','));
         switchTab('relations');
@@ -157,6 +190,7 @@ window.Relationships = (() => {
         if (selectedRoots) q.set('domains',[...selectedRoots].join(','));
         if (focusedDomain) q.set('focus',focusedDomain);
         if (tab!=='all') q.set('tab',tab);
+        if (assetKind === 'ip') q.set('kind','ip');
         if ($('#rel-query').value) q.set('q',$('#rel-query').value);
         if ($('#rel-ip').value) q.set('ip',$('#rel-ip').value);
         if (state.tab === 'relations') history.replaceState(null,'','#relations'+(q.size?'?'+q:''));
@@ -176,11 +210,11 @@ window.Relationships = (() => {
             openDomainModal('edit',{domain:a.name,provider:a.provider});
             return;
         }
-        const modal=dialog(`编辑服务器 / IP`, `<form id="rel-edit-form" class="form-grid"><label>名称<input id="rel-name" value="${h(a.name)}" maxlength="120"></label><label>IP 地址<input value="${h(a.ip)}" readonly></label><label>供应商<input id="rel-provider" value="${h(a.server_provider||'')}" maxlength="120"></label><label>到期日期<input type="date" id="rel-expiry" value="${h(a.expires_at||'')}"></label><label class="span-2">用途与备注<textarea id="rel-note" rows="3" maxlength="2000">${h(a.note||'')}</textarea></label><fieldset class="asset-links-field span-2"><legend>网站链接</legend><div id="rel-links-editor"></div></fieldset></form>`, '保存资产');
+        const modal=dialog(`编辑服务器 / IP`, `<form id="rel-edit-form" class="form-grid"><label>名称<input id="rel-name" value="${h(a.name)}" maxlength="120"></label><label>IP 地址<input value="${h(a.ip)}" readonly></label><label>供应商<input id="rel-provider" value="${h(a.server_provider||'')}" maxlength="120"></label><label>到期日期<input type="date" id="rel-expiry" value="${h(a.expires_at||'')}"></label><label class="span-2">服务器配置<textarea id="rel-configuration" rows="3" maxlength="2000" placeholder="例如 CPU、内存、系统或带宽">${h(a.configuration||'')}</textarea></label><label class="span-2">用途与备注<textarea id="rel-note" rows="3" maxlength="2000">${h(a.note||'')}</textarea></label><fieldset class="asset-links-field span-2"><legend>网站链接</legend><div id="rel-links-editor"></div></fieldset></form>`, '保存资产');
         const links = window.AssetLinks.editor(modal.overlay.querySelector('#rel-links-editor'), a.links || []);
         modal.save.addEventListener('click', () => {
             if (!modal.overlay.querySelector('form').reportValidity()) return;
-            save(modal, () => api('/api/health/ips/' + encodeURIComponent(id), {method: 'PUT', body: JSON.stringify({name: $('#rel-name').value, server_provider: $('#rel-provider').value, expires_at: $('#rel-expiry').value, note: $('#rel-note').value, links: links.read()})}));
+            save(modal, () => api('/api/health/ips/' + encodeURIComponent(id), {method: 'PUT', body: JSON.stringify({name: $('#rel-name').value, server_provider: $('#rel-provider').value, configuration: $('#rel-configuration').value, expires_at: $('#rel-expiry').value, note: $('#rel-note').value, links: links.read()})}));
         });
     }
     async function bind(id) {
@@ -218,6 +252,12 @@ window.Relationships = (() => {
         else if(target.dataset.relOpen){openView(target.dataset.relOpen);}
     });
     document.addEventListener('keydown',e=>{if((e.key==='Enter'||e.key===' ')&&e.target.matches('.rel-node')){e.preventDefault();e.target.dispatchEvent(new MouseEvent('click',{bubbles:true}));}});
+    document.querySelectorAll('[data-rel-type]').forEach(button => button.addEventListener('click', () => {
+        assetKind = button.dataset.relType;
+        page = 0; tab = 'all'; focusedDomain = null; focusedHost = null; focusedIp = null;
+        $('#rel-ip').value = '';
+        updateUrl(); render();
+    }));
     ['rel-query','rel-ip'].forEach(id=>$('#'+id).addEventListener(id==='rel-query'?'input':'change',()=>{page=0;updateUrl();renderResults();}));
     try { $('#rel-page-size').value=localStorage.getItem('relation-page-size')||'12';$('#rel-show-all').checked=localStorage.getItem('relation-show-all')==='1';$('#rel-page-size').disabled=$('#rel-show-all').checked; } catch {}
     $('#rel-page-size').oninput=()=>{page=0;try{localStorage.setItem('relation-page-size',$('#rel-page-size').value);}catch{}renderResults();};

@@ -36,7 +36,7 @@ async function api(path, opts = {}) {
         if (method !== 'GET' || (path.includes('/records') && data.cached === false)) cache?.clear();
         return data;
     };
-    const privateResponse = path.startsWith('/api/maintenance') || path.startsWith('/api/login') || path.startsWith('/api/dns/changes') || ['/api/me', '/api/env-check', '/api/setup/status', '/api/settings', '/api/tokens'].some(endpoint => path.split('?')[0] === endpoint);
+    const privateResponse = path.startsWith('/api/calendar') || path.startsWith('/api/maintenance') || path.startsWith('/api/login') || path.startsWith('/api/dns/changes') || ['/api/me', '/api/env-check', '/api/setup/status', '/api/settings', '/api/tokens'].some(endpoint => path.split('?')[0] === endpoint);
     return method === 'GET' && !privateResponse
         ? (cache ? cache.read(path, fetcher, opts.refresh || path.includes('refresh=1')) : fetcher()) : fetcher();
 }

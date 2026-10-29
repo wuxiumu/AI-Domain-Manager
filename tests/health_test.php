@@ -72,6 +72,8 @@ try {
 
     $checked = $service->check([$domain['id']]);
     expect($checked['checked'] === 1 && count($checked['results'][0]['history']) === 1, 'check response includes newest-first history');
+    $events = json_decode(file_get_contents($root . '/health.json'), true)['check_events'];
+    expect(count($events) === 1 && $events[0]['kind'] === 'domain' && $events[0]['name'] === 'example.com' && $events[0]['status'] === 'healthy', 'single check writes an identifiable calendar event');
     expect($checked['results'][0]['health']['resolved_ips'] === ['9.9.9.9'], 'filter private addresses from probe results');
     $dashboard = $service->dashboard();
     $discovered = assetByName($dashboard, '9.9.9.9');
@@ -104,24 +106,24 @@ try {
     fixture($transportDir, [['domain' => 'tls.example', 'provider' => 'manual']]);
     $calls = [];
     $dns = static function ($host) { return [['type' => 'A', 'ip' => '9.9.9.9'], ['type' => 'A', 'ip' => '127.0.0.1']]; };
-    $transport = static function ($host, $ip, $head, $timeout) use (&$calls) {
-        $calls[] = [$host, $ip, $head, $timeout];
+    $transport = static function ($host, $ip, $head, $timeout, $scheme) use (&$calls) {
+        $calls[] = [$host, $ip, $head, $timeout, $scheme];
         return ['code' => $head ? 405 : 200, 'errno' => 0, 'error' => '', 'ms' => 8];
     };
     $networkService = new HealthService($transportDir, null, $clock, $dns, $transport);
     $tlsId = $networkService->dashboard()['assets'][0]['id'];
     $health = $networkService->check([$tlsId])['results'][0]['health'];
-    expect($health['status'] === 'healthy' && count($calls) === 2, 'HEAD unsupported triggers same-origin GET');
+    expect($health['status'] === 'healthy' && count($calls) === 4 && $calls[0][4] === 'http' && $calls[2][4] === 'https', 'Both protocols use bounded GET when HEAD unsupported');
     expect($calls[0][0] === 'tls.example' && $calls[1][0] === 'tls.example' && $calls[0][1] === '9.9.9.9' && $calls[1][1] === '9.9.9.9', 'pin only validated public IP, retain hostname');
     expect($calls[0][2] && !$calls[1][2] && $calls[1][3] <= 4000, 'GET retains bounded request budget');
     $calls = [];
-    $badTls = new HealthService($transportDir, null, $clock, $dns, static function ($host, $ip, $head, $timeout) use (&$calls) {
-        $calls[] = [$host, $ip, $head];
-        return ['code' => 0, 'errno' => 60, 'error' => 'certificate expired', 'ms' => 10];
+    $badTls = new HealthService($transportDir, null, $clock, $dns, static function ($host, $ip, $head, $timeout, $scheme) use (&$calls) {
+        $calls[] = [$host, $ip, $head, $scheme];
+        return $scheme === 'http' ? ['code' => 200, 'errno' => 0, 'error' => '', 'ms' => 10] : ['code' => 0, 'errno' => 60, 'error' => 'certificate expired', 'ms' => 10];
     });
     $health = $badTls->check([$tlsId])['results'][0]['health'];
-    expect($health['status'] === 'unhealthy' && count($calls) === 1, 'TLS failure cannot fall back to HTTP or direct IP');
-    expect($health['checks'][1]['label'] === 'TLS' && $health['checks'][1]['status'] === 'unhealthy', 'classify certificate failure');
+    expect($health['status'] === 'unhealthy' && count($calls) === 2, 'HTTPS certificate failure remains unhealthy despite HTTP success');
+    expect($health['checks'][2]['label'] === 'HTTPS' && $health['checks'][2]['status'] === 'unhealthy', 'record HTTPS certificate failure separately');
     $privateDns = new HealthService($transportDir, null, $clock, static function () { return [['type' => 'A', 'ip' => '169.254.169.254']]; }, static function () { throw new RuntimeException('Must not connect'); });
     $health = $privateDns->check([$tlsId])['results'][0]['health'];
     expect($health['checks'][0]['label'] === 'DNS' && $health['resolved_ips'] === [], 'block private DNS response before transport');
@@ -143,6 +145,9 @@ try {
     });
     $links = [['name' => '管理后台', 'url' => 'https://example.com/admin?x=1&y=2']];
     $ipAsset = $ipService->addIp(['ip' => '8.8.4.4', 'name' => '服务器', 'note' => "生产用途\n运维备注", 'links' => $links])['asset'];
+    $ipService->updateIp($ipAsset['id'], ['configuration' => '4 CPU / 8 GB', 'server_provider' => '示例', 'expires_at' => '2030-01-01']);
+    $savedIp = assetByName($ipService->dashboard(), '服务器');
+    expect($savedIp['configuration'] === '4 CPU / 8 GB' && $savedIp['server_provider'] === '示例' && $savedIp['expires_at'] === '2030-01-01', 'server configuration, provider and expiry persist');
     expect($ipAsset['links'] === $links && $ipAsset['note'] === "生产用途\n运维备注", 'create returns links and multiline notes');
     $httpHealth = $ipService->check([$ipAsset['id']])['results'][0]['health'];
     expect($httpHealth['status'] === 'healthy' && $httpHealth['url'] === 'http://8.8.4.4/' && $httpHealth['check_type'] === 'http', 'IP checks use HTTP default URL rather than the legacy port');

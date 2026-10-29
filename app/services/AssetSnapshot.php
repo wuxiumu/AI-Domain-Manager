@@ -20,7 +20,7 @@ class AssetSnapshot
         $ips = []; $bindings = [];
         foreach ($health['manual_ips'] ?? [] as $id => $entry) {
             if (!is_array($entry)) { throw new RuntimeException('IP 数据损坏，无法备份'); }
-            $ips[$id] = array_intersect_key($entry, array_flip(['id', 'ip', 'port', 'name', 'note', 'links', 'created_at', 'updated_at', 'server_provider', 'expires_at']));
+            $ips[$id] = array_intersect_key($entry, array_flip(['id', 'ip', 'port', 'name', 'note', 'links', 'created_at', 'updated_at', 'server_provider', 'expires_at', 'configuration']));
         }
         foreach ($health['bindings'] ?? [] as $id => $links) {
             if (!is_array($links)) { throw new RuntimeException('关联数据损坏，无法备份'); }
@@ -88,7 +88,7 @@ class AssetSnapshot
             }
             $ips[$id] = ['id' => $id, 'ip' => $ip, 'port' => $port, 'name' => self::text($entry['name'] ?? $ip, 120),
                 'note' => self::text($entry['note'] ?? '', 2000), 'links' => HealthService::links($entry['links'] ?? []),
-                'server_provider' => self::text($entry['server_provider'] ?? '', 120),
+                'server_provider' => self::text($entry['server_provider'] ?? '', 120), 'configuration' => self::text($entry['configuration'] ?? '', 2000),
                 'expires_at' => DomainController::validateDate($entry['expires_at'] ?? '', 'IP 到期日期')];
             foreach (['created_at', 'updated_at'] as $field) { $ips[$id][$field] = self::text($entry[$field] ?? '', 40); }
         }

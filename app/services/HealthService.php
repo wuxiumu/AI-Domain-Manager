@@ -124,6 +124,7 @@ class HealthService
         $note = self::note($input['note'] ?? $asset['note'] ?? '');
         $links = self::links($input['links'] ?? $asset['links'] ?? []);
         $provider = trim((string) ($input['server_provider'] ?? $asset['server_provider'] ?? ''));
+        $configuration = self::note($input['configuration'] ?? $asset['configuration'] ?? '');
         $expires = trim((string) ($input['expires_at'] ?? $asset['expires_at'] ?? ''));
         if (mb_strlen($name) > 120 || mb_strlen($note) > 2000 || mb_strlen($provider) > 120) {
             throw new InvalidArgumentException('名称、供应商或备注超出长度限制');
@@ -132,10 +133,10 @@ class HealthService
         if ($expires !== '' && (!$date || $date->format('Y-m-d') !== $expires)) {
             throw new InvalidArgumentException('请输入有效的到期日期');
         }
-        $this->transaction(function (&$state) use ($id, $asset, $name, $note, $links, $provider, $expires) {
+        $this->transaction(function (&$state) use ($id, $asset, $name, $note, $links, $provider, $expires, $configuration) {
             $state['manual_ips'][$id] = array_replace($state['manual_ips'][$id] ?? [], ['id' => $id, 'ip' => $asset['ip'], 'port' => $asset['port'],
                 'name' => $name ?: $asset['ip'], 'note' => $note, 'links' => $links, 'server_provider' => $provider,
-                'expires_at' => $expires, 'updated_at' => $this->timestamp()]);
+                'expires_at' => $expires, 'configuration' => $configuration, 'updated_at' => $this->timestamp()]);
         });
         return ['ok' => true];
     }
@@ -251,16 +252,23 @@ class HealthService
             $health['resolved_ips'] = array_values(array_unique(array_filter($health['resolved_ips'] ?? [], [self::class, 'isPublicIp'])));
             $health['source'] = 'verified';
             if ($asset['kind'] === 'ip') { $health['check_type'] = 'http'; }
+            else { $health['check_type'] = 'http_https'; }
             $observations[$id] = $health;
         }
         $histories = [];
-        $this->transaction(function (&$state) use ($observations, &$histories, $epoch) {
+        $this->transaction(function (&$state) use ($observations, $assets, &$histories, $epoch) {
             if ($epoch !== WorkspaceData::epoch($this->dir)) { throw new DomainException('检查期间资产已恢复，本批结果已丢弃，请重新检查'); }
             foreach ($observations as $id => $health) {
                 $history = $state['observations'][$id]['history'] ?? [];
                 array_unshift($history, $health);
                 $state['observations'][$id] = ['health' => $health, 'history' => array_slice($history, 0, self::MAX_HISTORY)];
                 $histories[$id] = $state['observations'][$id]['history'];
+                $asset = $assets[$id];
+                $event = ['id' => bin2hex(random_bytes(12)), 'asset_id' => $id, 'kind' => $asset['kind'],
+                    'name' => $asset['kind'] === 'ip' ? $asset['ip'] : $asset['name'], 'provider' => $asset['provider'] ?? '',
+                    'domain' => $asset['domain'] ?? '', 'checked_at' => $health['checked_at'],
+                    'status' => $health['status'], 'message' => $health['message'], 'checks' => $health['checks']];
+                array_unshift($state['check_events'], $event);
             }
         });
         $results = [];
@@ -357,7 +365,7 @@ class HealthService
             'provider' => 'manual', 'provider_name' => $source === 'manual' ? '手工添加' : 'DNS 解析发现',
             'source' => $source, 'linked_domains' => [], 'bound_domains' => [],
             'linked_subdomains' => [], 'dns_links' => [],
-            'server_provider' => $entry['server_provider'] ?? '', 'note' => $entry['note'] ?? '', 'links' => $entry['links'] ?? [],
+            'server_provider' => $entry['server_provider'] ?? '', 'configuration' => $entry['configuration'] ?? '', 'note' => $entry['note'] ?? '', 'links' => $entry['links'] ?? [],
             'expires_at' => $entry['expires_at'] ?? null, 'health' => $this->healthOf($id, $state),
             'history' => $state['observations'][$id]['history'] ?? []];
     }
@@ -373,6 +381,11 @@ class HealthService
         if (strpos($id, 'ip_') === 0 && ($health['check_type'] ?? '') !== 'http') {
             $health['status'] = 'stale';
             $health['message'] = '旧版端口检查记录，请重新执行 HTTP 访问检查';
+            return $health;
+        }
+        if ((strpos($id, 'domain_') === 0 || strpos($id, 'host_') === 0) && ($health['source'] ?? '') === 'verified' && ($health['check_type'] ?? '') !== 'http_https') {
+            $health['status'] = 'stale';
+            $health['message'] = '旧版域名检查未包含 HTTP 和 HTTPS，请重新检查';
             return $health;
         }
         $checked = strtotime($health['checked_at'] ?? '');
@@ -465,42 +478,33 @@ class HealthService
         // Prefer IPv4 for hosts without IPv6 connectivity; record all addresses.
         usort($ips, static function ($a, $b) { return (int) (strpos($a, ':') !== false) <=> (int) (strpos($b, ':') !== false); });
         $checks = [['label' => 'DNS', 'status' => 'healthy', 'message' => implode(', ', $ips) . ($blocked ? '；已过滤非公网地址' : '')]];
-        $httpStarted = microtime(true);
-        $response = $this->request($host, $ips[0], true, 4000);
-        if (in_array($response['code'], [405, 501], true) && $response['errno'] === 0) {
-            $remaining = 4000 - (int) round((microtime(true) - $httpStarted) * 1000);
-            if ($remaining > 100) {
-                $response = $this->request($host, $ips[0], false, $remaining);
+        $results = [];
+        foreach (['http', 'https'] as $scheme) {
+            $started = microtime(true);
+            $response = $this->request($host, $ips[0], true, 4000, $scheme);
+            if (in_array($response['code'], [405, 501], true) && $response['errno'] === 0) {
+                $remaining = 4000 - (int) round((microtime(true) - $started) * 1000);
+                if ($remaining > 100) { $response = $this->request($host, $ips[0], false, $remaining, $scheme); }
             }
+            $ok = $response['errno'] === 0 && $response['code'] >= 200 && $response['code'] < 400;
+            $label = strtoupper($scheme);
+            $message = $response['errno'] !== 0 ? $label . ' 连接或证书验证失败：' . $response['error'] : $label . ' 返回 ' . $response['code'];
+            if ($response['errno'] === 0 && $response['code'] >= 300 && $response['code'] < 400) { $message .= '（未跟随重定向）'; }
+            $checks[] = ['label' => $label, 'status' => $ok ? 'healthy' : 'unhealthy', 'message' => $message];
+            $results[$scheme] = ['status' => $ok ? 'healthy' : 'unhealthy', 'code' => $response['code'], 'latency_ms' => $response['ms']];
         }
-        $sslErrors = [35, 51, 58, 59, 60, 64, 66, 77, 80, 82, 83, 90, 91];
-        if ($response['errno'] !== 0) {
-            $tlsError = in_array($response['errno'], $sslErrors, true);
-            $message = ($tlsError ? 'TLS 验证或握手失败：' : 'HTTPS 连接失败：') . $response['error'];
-            $checks[] = ['label' => $tlsError ? 'TLS' : 'HTTPS 连接', 'status' => 'unhealthy', 'message' => $message];
-            $checks[] = ['label' => 'HTTP', 'status' => 'unchecked', 'message' => '未完成 HTTPS 请求'];
-            return ['status' => 'unhealthy', 'message' => $message, 'checks' => $checks, 'resolved_ips' => $ips, 'probed_ip' => $ips[0], 'latency_ms' => $response['ms']];
-        }
-        $checks[] = ['label' => 'TLS', 'status' => 'healthy', 'message' => '已校验证书链和域名匹配'];
-        $code = $response['code'];
-        $ok = $code >= 200 && $code < 400;
-        $message = 'HTTPS 返回 ' . $code;
-        if ($code >= 300 && $code < 400) {
-            $message .= '（未跟随重定向，目标状态未知）';
-        } elseif ($code === 401 || $code === 403) {
-            $message .= '（服务可连接，但访问受限）';
-        }
-        $checks[] = ['label' => 'HTTP', 'status' => $ok ? 'healthy' : 'unhealthy', 'message' => $message];
-        return ['status' => $ok ? 'healthy' : 'unhealthy', 'message' => $message, 'http_code' => $code,
-            'checks' => $checks, 'resolved_ips' => $ips, 'probed_ip' => $ips[0], 'latency_ms' => $response['ms']];
+        $ok = $results['http']['status'] === 'healthy' && $results['https']['status'] === 'healthy';
+        return ['status' => $ok ? 'healthy' : 'unhealthy', 'message' => $ok ? 'HTTP 和 HTTPS 均正常' : 'HTTP 或 HTTPS 检查异常',
+            'http_code' => $results['https']['code'], 'protocols' => $results, 'checks' => $checks,
+            'resolved_ips' => $ips, 'probed_ip' => $ips[0], 'latency_ms' => $results['http']['latency_ms'] + $results['https']['latency_ms']];
     }
 
     private function dnsFailure(string $message): array
     {
         return ['status' => 'unhealthy', 'message' => $message, 'resolved_ips' => [],
             'checks' => [['label' => 'DNS', 'status' => 'unhealthy', 'message' => $message],
-                ['label' => 'TLS', 'status' => 'unchecked', 'message' => 'DNS 检查未通过'],
-                ['label' => 'HTTP', 'status' => 'unchecked', 'message' => 'DNS 检查未通过']]];
+                ['label' => 'HTTP', 'status' => 'unchecked', 'message' => 'DNS 检查未通过'],
+                ['label' => 'HTTPS', 'status' => 'unchecked', 'message' => 'DNS 检查未通过']]];
     }
 
     private function request(string $host, string $ip, bool $head, int $timeoutMs, string $scheme = 'https'): array
@@ -511,7 +515,7 @@ class HealthService
 
     private function httpRequest(string $host, string $ip, bool $head, int $timeoutMs, string $scheme): array
     {
-        if (!self::isPublicIp($ip) || ($scheme === 'http' ? $host !== $ip : ($scheme !== 'https' || self::normalizeHost($host) !== $host))) {
+        if (!self::isPublicIp($ip) || (!in_array($scheme, ['http', 'https'], true) || ($host !== $ip && self::normalizeHost($host) !== $host) || ($scheme === 'https' && $host === $ip))) {
             throw new RuntimeException('拒绝不安全的探测目标');
         }
         if (!function_exists('curl_init')) {
@@ -523,7 +527,7 @@ class HealthService
         $limited = false;
         $pinned = strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip;
         curl_setopt_array($ch, [
-            CURLOPT_RESOLVE => $scheme === 'https' ? [$host . ':443:' . $pinned] : [], CURLOPT_PROXY => '',
+            CURLOPT_RESOLVE => $host !== $ip ? [$host . ':' . ($scheme === 'https' ? '443' : '80') . ':' . $pinned] : [], CURLOPT_PROXY => '',
             CURLOPT_NOBODY => $head, CURLOPT_FOLLOWLOCATION => false, CURLOPT_MAXREDIRS => 0,
             CURLOPT_CONNECTTIMEOUT_MS => min(2000, $timeoutMs), CURLOPT_TIMEOUT_MS => $timeoutMs,
             CURLOPT_SSL_VERIFYPEER => true, CURLOPT_SSL_VERIFYHOST => 2,
@@ -627,7 +631,8 @@ class HealthService
         if ((isset($state['manual_ips']) && !is_array($state['manual_ips'])) || (isset($state['observations']) && !is_array($state['observations']))) {
             throw new RuntimeException('健康数据文件格式损坏，已停止操作以保护数据');
         }
-        return array_merge(['version' => 1, 'manual_ips' => [], 'observations' => []], $state);
+        if (isset($state['check_events']) && !is_array($state['check_events'])) { throw new RuntimeException('检查日志格式错误'); }
+        return array_merge(['version' => 1, 'manual_ips' => [], 'observations' => [], 'check_events' => []], $state);
     }
 
     private function transaction(callable $mutate): void

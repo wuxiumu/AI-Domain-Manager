@@ -54,6 +54,13 @@ $router->post('/api/maintenance/preview', [MaintenanceController::class, 'previe
 $router->post('/api/maintenance/restore', [MaintenanceController::class, 'restore']);
 
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
+$router->get('/api/calendar', [CalendarController::class, 'index']);
+$router->put('/api/calendar/checkins/{date}', [CalendarController::class, 'saveCheckin']);
+$router->delete('/api/calendar/checkins/{date}', [CalendarController::class, 'deleteCheckin']);
+$router->post('/api/calendar/tasks', [CalendarController::class, 'createTask']);
+$router->put('/api/calendar/tasks/{id}', [CalendarController::class, 'updateTask']);
+$router->delete('/api/calendar/tasks/{id}', [CalendarController::class, 'deleteTask']);
+$router->post('/api/calendar/runs', [CalendarController::class, 'addRun']);
 $router->get('/api/health', [HealthController::class, 'index']);
 $router->post('/api/health/check', [HealthController::class, 'check']);
 $router->post('/api/health/ips', [HealthController::class, 'addIp']);

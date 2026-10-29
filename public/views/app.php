@@ -4,8 +4,8 @@ $assetUrl = static function (string $path): string {
     return $path . '?v=' . filemtime(PUBLIC_DIR . $path);
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
-$scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'accounts',
-    'asset-links', 'health', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login-promo', 'login', 'app'];
+$scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'accounts',
+    'asset-links', 'health', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login-promo', 'calendar', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -101,7 +101,7 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
     <header class="topbar">
         <div class="topbar-inner">
             <div class="topbar-start"><button id="sidebar-toggle" class="btn btn-icon shell-toggle" type="button" aria-label="收起侧栏" aria-expanded="true" aria-controls="workspace-sidebar" title="收起侧栏"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m7-11-3 3 3 3"/></svg></button><div class="breadcrumb">工作空间 <span>/</span> <strong id="page-title">健康看板</strong></div></div>
-            <div class="topbar-right"><div class="display-density" role="group" aria-label="显示密度"><button type="button" data-density="comfortable" aria-pressed="true">舒适</button><button type="button" data-density="compact" aria-pressed="false">紧凑</button></div><span class="user-avatar" aria-hidden="true">A</span><span id="current-user" class="muted">管理账号</span><button id="logout-btn" class="btn btn-ghost btn-sm">退出</button></div>
+            <div class="topbar-right"><button type="button" id="calendar-clock" class="calendar-clock" title="打开检查日历" aria-label="打开检查日历"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg><time id="calendar-clock-time"></time></button><div class="display-density" role="group" aria-label="显示密度"><button type="button" data-density="comfortable" aria-pressed="true">舒适</button><button type="button" data-density="compact" aria-pressed="false">紧凑</button></div><span class="user-avatar" aria-hidden="true">A</span><span id="current-user" class="muted">管理账号</span><button id="logout-btn" class="btn btn-ghost btn-sm">退出</button></div>
         </div>
     </header>
 
@@ -112,15 +112,15 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
                 <div class="head-actions">
                     <button class="btn" data-open-health-stats>统计概况</button><button id="health-refresh" class="btn btn-icon" aria-label="刷新看板" title="刷新看板"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
                     <button id="sync-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg>同步域名</button>
-                    <button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查全部资产</button>
+                    <button id="health-check-domains-all" class="btn">检查所有域名（含子域名）</button><button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查主域名与 IP</button>
                 </div>
             </div>
-            <div id="health-progress-slot"></div><div id="health-progress" class="health-progress hidden" role="status" aria-live="polite"><div><span class="running-dot"></span><strong id="health-progress-text">正在检查资产…</strong></div><div class="health-progress-track"><div id="health-progress-fill"></div></div></div>
+            <div class="asset-type-tabs" role="group" aria-label="健康看板资产类型"><button type="button" data-health-type="domain" aria-pressed="true">主域名 <b id="health-type-domain-count">0</b></button><button type="button" data-health-type="ip" aria-pressed="false">IP / 服务器 <b id="health-type-ip-count">0</b></button></div><div id="health-overview" class="asset-progress" aria-label="所选资产检查统计"></div><div id="health-progress-slot"></div><div id="health-progress" class="health-progress hidden" role="status" aria-live="polite"><div><span class="running-dot"></span><strong id="health-progress-text">正在检查资产…</strong></div><div class="health-progress-track"><div id="health-progress-fill"></div></div></div>
             <div id="health-list-panel" role="region" aria-label="资产列表" data-panel-group="health">
             <section class="asset-panel" aria-labelledby="asset-list-title">
                 <div class="panel-heading"><div><h2 id="asset-list-title">资产健康状态 </h2><p class="muted">从一个入口查看域名与 IP，快速定位需要关注的资产。</p></div></div>
-                <div class="filters health-filters unified-filters">
-                    <button type="button" class="btn" data-open-filter="health-filter-options">筛选</button><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="health-query" aria-label="搜索资产" placeholder="搜索域名、IP 或资产名称"></label><div id="health-filter-options" class="inventory-filter-options hidden"><select id="health-kind" aria-label="筛选资产类型"><option value="">全部资产类型</option><option value="domain">域名</option><option value="ip">IP 资产</option></select>
+                <input type="hidden" id="health-kind" value="domain"><div class="filters health-filters unified-filters">
+                    <button type="button" class="btn" data-open-filter="health-filter-options">筛选</button><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="health-query" aria-label="搜索资产" placeholder="搜索域名、IP 或资产名称"></label><div id="health-filter-options" class="inventory-filter-options hidden">
                     <select id="health-status" aria-label="筛选检查状态"><option value="">全部检查状态</option><option value="healthy">正常</option><option value="unhealthy">异常</option><option value="stale">结果已过期</option><option value="unchecked">未检查</option></select>
                 </div></div>
                 <div class="health-selection-bar hidden"><span id="health-selected-count">未选择域名</span><button class="btn btn-sm btn-primary" id="health-to-relations" disabled>查看选中域名关系图</button><button class="btn btn-sm" id="health-selection-clear">清除选择</button></div><div class="table-wrap"><table id="health-table"><thead><tr><th><input type="checkbox" id="health-select-all" aria-label="选择当前结果中的域名"></th><th>资产</th><th>类型与来源</th><th>检查状态</th><th>检查摘要</th><th>上次检查</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载资产…</td></tr></tbody></table></div>
@@ -129,7 +129,7 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
             </section>
             </div>
             <div id="health-summary-panel" class="hidden" role="region" aria-label="健康统计" data-panel-group="health">
-            <div class="inventory-toolbar"><div id="dns-inventory-summary" class="muted">子域名与 DNS 快照：读取中…</div><button class="btn btn-sm" id="dns-cache-missing">缓存尚未读取的 DNS</button><span id="dns-cache-progress" class="muted" role="status"></span></div>
+            <div id="health-dns-toolbar" class="inventory-toolbar"><div id="dns-inventory-summary" class="muted">子域名与 DNS 快照：读取中…</div><button class="btn btn-sm" id="dns-cache-missing">缓存尚未读取的 DNS</button><span id="dns-cache-progress" class="muted" role="status"></span></div>
             <div id="health-stats" class="health-stats" aria-live="polite">
                 <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
                 <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
@@ -147,19 +147,45 @@ $scripts = ['ui', 'cache', 'core', 'filter-tabs', 'dashboard', 'domains', 'dns-c
             </div>
         </section>
 
+        <section id="view-calendar" class="tab-view hidden" aria-labelledby="calendar-title">
+            <div class="page-head calendar-page-head"><div><p class="eyebrow">A MOMENT FOR YOURSELF</p><h1 id="calendar-title">日历与打卡<span class="heading-dot">.</span></h1><p class="muted">记录今天的心情，也为下一步留一点空间。</p></div></div>
+            <div class="calendar-layout">
+                <section class="panel calendar-panel" aria-label="月历">
+                    <div class="calendar-heading"><button type="button" class="btn" id="calendar-prev" aria-label="上个月">‹</button><h2 id="calendar-month"></h2><button type="button" class="btn" id="calendar-next" aria-label="下个月">›</button><button type="button" class="btn btn-sm" id="calendar-today">今天</button></div>
+                    <div class="calendar-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div class="calendar-grid" id="calendar-grid"></div>
+                    <div class="calendar-legend"><span><i class="calendar-legend-dot"></i> 已打卡</span><span>数字表示待办与检查条数</span></div>
+                </section>
+                <section class="panel calendar-day" aria-labelledby="calendar-day-title">
+                    <div class="calendar-day-header"><div><p class="eyebrow">YOUR DAILY SPACE</p><h2 id="calendar-day-title"></h2><p id="calendar-day-caption" class="muted"></p></div><span class="calendar-day-mark" aria-hidden="true">✳</span></div>
+                    <div class="calendar-tabs" role="tablist" aria-label="日历内容"><button type="button" role="tab" id="calendar-tab-daily" aria-controls="calendar-panel-daily" aria-selected="true" tabindex="0" data-calendar-tab="daily">日常记录</button><button type="button" role="tab" id="calendar-tab-overview" aria-controls="calendar-panel-overview" aria-selected="false" tabindex="-1" data-calendar-tab="overview">资产概况</button><button type="button" role="tab" id="calendar-tab-runs" aria-controls="calendar-panel-runs" aria-selected="false" tabindex="-1" data-calendar-tab="runs">检查汇总</button><button type="button" role="tab" id="calendar-tab-events" aria-controls="calendar-panel-events" aria-selected="false" tabindex="-1" data-calendar-tab="events">检查明细</button></div>
+                    <p class="error-text hidden" id="calendar-error" role="alert"></p>
+                    <div id="calendar-panel-daily" role="tabpanel" aria-labelledby="calendar-tab-daily" data-calendar-panel="daily">
+                        <section class="calendar-checkin"><div class="calendar-section-title"><div><span class="calendar-section-kicker">CHECK IN</span><h3>打卡记录</h3></div><span class="calendar-section-number">01</span></div><div id="calendar-checkin-saved"></div>
+                            <form id="calendar-checkin-form"><p class="calendar-checkin-prompt">今天的心情怎么样？</p><div class="calendar-moods" role="radiogroup" aria-label="选择心情"><label><input type="radio" name="mood" value="great" required><span><b aria-hidden="true">😄</b><small>很开心</small></span></label><label><input type="radio" name="mood" value="good"><span><b aria-hidden="true">🙂</b><small>不错</small></span></label><label><input type="radio" name="mood" value="calm"><span><b aria-hidden="true">😌</b><small>平静</small></span></label><label><input type="radio" name="mood" value="tired"><span><b aria-hidden="true">😮‍💨</b><small>有点累</small></span></label><label><input type="radio" name="mood" value="low"><span><b aria-hidden="true">🥺</b><small>低落</small></span></label></div><label class="calendar-note-label" for="calendar-checkin-text">写下一句话 <span>给今天留个小小的注脚</span></label><textarea id="calendar-checkin-text" name="text" rows="3" maxlength="280" required placeholder="今天想记录什么？"></textarea><div class="calendar-checkin-actions"><span>最多 280 字</span><button type="button" id="calendar-checkin-cancel" class="btn btn-sm hidden">取消</button><button type="submit" id="calendar-checkin-submit" class="btn btn-primary">记录此刻</button></div></form>
+                        </section>
+                        <section class="calendar-todo-section"><div class="calendar-section-title"><div><span class="calendar-section-kicker">TO DO &amp; NOTES</span><h3>待办与记录</h3></div><span class="calendar-section-number">02</span></div><div id="calendar-tasks"></div><form id="calendar-task-form" class="settings-form"><label>标题<input name="title" required maxlength="120" placeholder="例如：检查域名续费"></label><label>描述<textarea name="description" rows="3" maxlength="2000" placeholder="补充说明、记录或处理步骤"></textarea></label><div class="calendar-form-actions"><button type="submit" class="btn btn-primary">保存待办</button><button type="button" class="btn hidden" id="calendar-cancel">取消编辑</button></div></form></section>
+                    </div>
+                    <div id="calendar-panel-overview" role="tabpanel" aria-labelledby="calendar-tab-overview" data-calendar-panel="overview" hidden><h3>当前资产状态</h3><div id="calendar-overview"></div></div>
+                    <div id="calendar-panel-runs" role="tabpanel" aria-labelledby="calendar-tab-runs" data-calendar-panel="runs" hidden><h3>完整检查汇总</h3><div id="calendar-runs"></div></div>
+                    <div id="calendar-panel-events" role="tabpanel" aria-labelledby="calendar-tab-events" data-calendar-panel="events" hidden><h3>当天检查明细</h3><div id="calendar-events"></div></div>
+                </section>
+            </div>
+        </section>
+
         <section id="view-relations" class="inventory-page tab-view hidden" aria-labelledby="relations-title">
             <div class="page-head"><div><p class="eyebrow">ASSET RELATIONSHIPS</p><h1 id="relations-title">域名与服务器<span class="heading-dot">.</span> <span class="count-tag" id="rel-count"></span></h1><p class="muted">从解析线索到确认绑定，一眼看清承载关系与影响范围。</p></div><div class="head-actions"><button class="btn" data-rel-open="graph">资产关联图</button><button class="btn" data-rel-open="summary">关联统计</button><button class="btn" id="rel-refresh">刷新</button></div></div>
+            <div class="asset-type-tabs" role="group" aria-label="关联资产类型"><button type="button" data-rel-type="domain" aria-pressed="true">主域名 <b id="rel-type-domain-count">0</b></button><button type="button" data-rel-type="ip" aria-pressed="false">IP / 服务器 <b id="rel-type-ip-count">0</b></button></div><div id="rel-type-overview" class="asset-progress" aria-label="所选关联资产检查统计"></div>
             <div id="rel-scope-note" class="rel-scope-note hidden"></div>
             <p id="rel-cache-note" class="muted" role="status">正在读取文件缓存…</p>
             <div id="rel-summary-panel" class="hidden" role="region" aria-label="关联统计">
             <div id="rel-summary" class="rel-summary"></div>
-            <div class="two-col rel-charts"><section class="panel"><h2>关联覆盖率</h2><div id="rel-coverage"></div></section><section class="panel"><h2>IP 承载分布 <small class="muted">点击查看关联域名</small></h2><div id="rel-ranking"></div></section></div>
+            <div class="two-col rel-charts"><section class="panel"><h2>当前类型关联覆盖率</h2><div id="rel-coverage"></div></section><section class="panel"><h2>关联数量排行 <small class="muted">点击查看详情</small></h2><div id="rel-ranking"></div></section></div>
             </div>
             <section id="rel-results-panel" class="asset-panel rel-panel"><div class="panel-heading"><div><h2><span id="rel-result-title">关联明细表</span> </h2><p class="muted">实线：人工确认绑定　虚线：DNS 解析关联（可能是 CDN）</p></div></div>
             <div class="filters unified-filters"><button type="button" class="btn" data-open-filter="rel-filter-options">筛选</button><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="rel-query" aria-label="搜索关联资产" placeholder="搜索域名、IP、服务器名称或备注"></label><div id="rel-filter-options" class="inventory-filter-options hidden"><select id="rel-ip" aria-label="按 IP 查询"><option value="">全部 IP / 服务器</option></select>
             <div id="rel-tabs" class="rel-quick-tabs" role="tablist" aria-label="关联快捷查询"><button role="tab" aria-selected="true" data-rel-tab="all">全部</button><button role="tab" aria-selected="false" data-rel-tab="confirmed">已确认绑定</button><button role="tab" aria-selected="false" data-rel-tab="dns">仅 DNS 关联</button><button role="tab" aria-selected="false" data-rel-tab="unlinked">未关联</button><button role="tab" aria-selected="false" data-rel-tab="unhealthy">检查异常</button></div></div></div>
             <div id="rel-graph-panel" class="hidden"><div id="rel-drilldown-note" class="rel-scope-note hidden"></div><div id="rel-graph" class="rel-graph" aria-label="域名和 IP 关系图"></div></div><div id="rel-table" class="table-wrap"></div>
-            <div id="rel-pagination" class="rel-pagination"><label class="muted">每页 <input type="number" id="rel-page-size" value="12" min="1" max="10000" aria-label="每页域名数量"></label><label class="muted"><input type="checkbox" id="rel-show-all"> 展示全部</label><button class="btn btn-sm" id="rel-fullscreen">全屏展示</button><button class="btn btn-sm" id="rel-prev">上一页</button><span id="rel-page" class="muted"></span><button class="btn btn-sm" id="rel-next">下一页</button></div>
+            <div id="rel-pagination" class="rel-pagination"><label class="muted">每页 <input type="number" id="rel-page-size" value="12" min="1" max="10000" aria-label="每页资产数量"></label><label class="muted"><input type="checkbox" id="rel-show-all"> 展示全部</label><button class="btn btn-sm" id="rel-fullscreen">全屏展示</button><button class="btn btn-sm" id="rel-prev">上一页</button><span id="rel-page" class="muted"></span><button class="btn btn-sm" id="rel-next">下一页</button></div>
             <div class="panel-caption">点击节点查看详情；从详情可编辑资产、管理绑定或进入 DNS。绑定操作只更新台账。</div></section>
         </section>
 

@@ -22,7 +22,7 @@ try {
     WorkspaceData::write($root . '/domains.json', [['domain' => 'example.com', 'provider' => 'cloud_fixture', 'provider_name' => 'Fixture cloud', 'valid' => true,
         'note' => '=SUM(1,2)', 'expire_at' => '2030-01-01', 'raw' => ['credential' => 'must-never-export']]]);
     WorkspaceData::write($root . '/health.json', ['version' => 1, 'manual_ips' => [$ipId => ['id' => $ipId, 'ip' => '8.8.8.8', 'port' => 443, 'name' => 'Fixture IP', 'note' => '交接备注',
-        'links' => [['name' => '示例站点', 'url' => 'https://www.example.com/path?a=1&b=2']], 'extra_secret' => 'must-never-export']],
+        'links' => [['name' => '示例站点', 'url' => 'https://www.example.com/path?a=1&b=2']], 'configuration' => '4 CPU / 8 GB', 'extra_secret' => 'must-never-export']],
         'bindings' => [$domainId => [$ipId => ['ip' => '8.8.8.8', 'port' => 443, 'confirmed_at' => '2026-01-01 00:00:00']]],
         'observations' => ['do-not-export' => ['health' => ['status' => 'healthy']]]]);
     WorkspaceData::write($root . '/settings.json', ['secret' => 'must-never-export']);
@@ -34,6 +34,7 @@ try {
     $valid = AssetSnapshot::validate(AssetSnapshot::decode($raw), ['cloud_fixture']);
     verifyMaintenance($valid['counts'] === ['domains' => 1, 'ips' => 1, 'bindings' => 1], 'Counts match fixtures');
     verifyMaintenance(isset($valid['files']['health.json']['bindings'][$domainId][$ipId]), 'Stable association retained');
+    verifyMaintenance($valid['files']['health.json']['manual_ips'][$ipId]['configuration'] === '4 CPU / 8 GB', 'Server configuration survives asset export and restore validation');
     $migrated = AssetSnapshot::validate($snapshot, []);
     $manualId = 'domain_' . substr(hash('sha256', 'manual|example.com'), 0, 24);
     verifyMaintenance($migrated['converted_domains'] === 1 && $migrated['files']['domains.json'][0]['provider'] === 'manual', 'Unknown account becomes a manual asset');

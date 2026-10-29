@@ -124,7 +124,9 @@ window.WorkspaceUI = (() => {
         if (filter) openDialog({title: '筛选资产', compact: true, anchor: filter, panels: [{nodes: [filter.dataset.openFilter]}]});
         const healthStats = event.target.closest('[data-open-health-stats]');
         if (healthStats) {
-            openDialog({title: '资产统计', anchor: healthStats, align: 'end', panels: [{label: '健康统计', nodes: ['health-summary-panel']}, {label: '域名与同步', nodes: ['health-domains-panel']}]}); loadDashboard();
+            const panels = [{label: '健康统计', nodes: ['health-summary-panel']}];
+            if ($('#health-kind').value === 'domain') panels.push({label: '域名与同步', nodes: ['health-domains-panel']});
+            openDialog({title: '资产统计', anchor: healthStats, align: 'end', panels}); loadDashboard();
         }
         const domainStats = event.target.closest('[data-open-domain-stats]');
         if (domainStats) {

@@ -46,19 +46,21 @@ window.HealthWorkbench = (() => {
     function render() {
         if (!snapshot) return;
         const assets = snapshot.assets || [];
-        const summary = { domains: 0, ips: 0, healthy: 0, unhealthy: 0, stale: 0, unchecked: 0 };
-        assets.forEach(a => { summary[a.kind === 'domain' ? 'domains' : 'ips']++; summary[getHealth(a).status]++; });
+        const kind = $('#health-kind').value || 'domain';
+        const selected = assets.filter(a => a.kind === kind);
+        const summary = window.AssetViewStats.calculate(selected, a => getHealth(a).status);
+        $('#health-type-domain-count').textContent = assets.filter(a => a.kind === 'domain').length;
+        $('#health-type-ip-count').textContent = assets.filter(a => a.kind === 'ip').length;
+        document.querySelectorAll('[data-health-type]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.healthType === kind)));
+        $('#health-dns-toolbar').classList.toggle('hidden', kind !== 'domain');
+        $('#health-overview').innerHTML = window.AssetViewStats.render(selected, kind, a => getHealth(a).status);
         const cards = [
-            { label: '域名资产', value: summary.domains, filter: 'domain', category: 'kind', text: '已纳入当前看板' },
-            { label: 'IP 检查目标', value: summary.ips, filter: 'ip', category: 'kind', text: '检查 http://IP/ 访问状态' },
-            { label: '检查正常', value: summary.healthy, filter: 'healthy', category: 'status', text: '24 小时内有效结果' },
-            { label: '检查异常', value: summary.unhealthy, filter: 'unhealthy', category: 'status', text: '查看具体失败环节' },
-            { label: '结果过时', value: summary.stale, filter: 'stale', category: 'status', text: '需要重新确认状态' },
-            { label: '尚未检查', value: summary.unchecked, filter: 'unchecked', category: 'status', text: '执行检查以获取证据' },
+            {label:kind === 'domain' ? '主域名总数' : 'IP 检查目标', value:summary.total, filter:'', category:'status', text:'当前资产类型全部目标'},
+            ...['healthy','unhealthy','stale','unchecked'].map(status => ({label:labels[status], value:summary[status], filter:status, category:'status', text:'最近一次检查结果'})),
         ];
         $('#health-stats').innerHTML = cards.map(c => `<button type="button" class="hc-stat-card" data-filter-category="${c.category}" data-filter="${c.filter}" data-status="${c.filter}"><span class="hc-stat-label">${c.label}<span aria-hidden="true">↗</span></span><strong class="hc-stat-value">${c.value}</strong><span class="hc-stat-note">${c.text}</span></button>`).join('');
         const statuses = ['healthy', 'unhealthy', 'stale', 'unchecked'];
-        $('#health-status-bar').innerHTML = `<div class="hc-bar" aria-label="健康状态分布">${statuses.map(s => `<span data-status="${s}" style="width:${assets.length ? summary[s] / assets.length * 100 : 0}%" title="${labels[s]} ${summary[s]}"></span>`).join('')}</div><div class="hc-legend">${statuses.map(s => `<button type="button" data-filter-category="status" data-filter="${s}">${pill(s)}<b>${summary[s]}</b></button>`).join('')}<span class="muted">${assets.length ? '统计包含域名与 IP 检查目标' : '尚未登记资产'}</span></div>`;
+        $('#health-status-bar').innerHTML = `<div class="hc-bar" aria-label="健康状态分布">${statuses.map(status => `<span data-status="${status}" style="width:${summary.total ? summary[status] / summary.total * 100 : 0}%" title="${labels[status]} ${summary[status]}"></span>`).join('')}</div><div class="hc-legend">${statuses.map(status => `<button type="button" data-filter-category="status" data-filter="${status}">${pill(status)}<b>${summary[status]}</b></button>`).join('')}<span class="muted">仅统计当前选择的资产类型</span></div>`;
         window.DomainDetails?.renderSummary(snapshot);
         const availableIds = new Set(assets.filter(a=>a.kind==='domain').map(a=>a.id));
         for (const id of selectedDomains) if(!availableIds.has(id)) selectedDomains.delete(id);
@@ -81,7 +83,7 @@ window.HealthWorkbench = (() => {
         renderSelection();
         const order = { unhealthy: 0, stale: 1, unchecked: 2, healthy: 3 };
         rows.sort((a, b) => (order[getHealth(a).status] ?? 4) - (order[getHealth(b).status] ?? 4) || a.name.localeCompare(b.name));
-        $('#health-count').textContent = `${rows.length} / ${snapshot?.assets?.length || 0} 项资产`;
+        $('#health-count').textContent = `${rows.length} / ${(snapshot?.assets || []).filter(a => a.kind === $('#health-kind').value).length} 项 ${$('#health-kind').value === 'domain' ? '主域名' : 'IP / 服务器'}`;
         $('#health-empty').classList.add('hidden');
         $('#health-table tbody').innerHTML = rows.length ? rows.map(a => {
             const health = getHealth(a);
@@ -91,7 +93,7 @@ window.HealthWorkbench = (() => {
 
     function renderSelection() {
         const count=selectedDomains.size;
-        $('#health-selected-count').closest('.health-selection-bar').classList.toggle('hidden', count === 0);
+        $('#health-selected-count').closest('.health-selection-bar').classList.toggle('hidden', count === 0 || $('#health-kind').value !== 'domain');
         $('#health-selected-count').textContent=count ? `已选择 ${count} 个域名` : '未选择域名';
         $('#health-to-relations').disabled=count===0;
         const visible=filteredAssets().filter(a=>a.kind==='domain');
@@ -99,6 +101,7 @@ window.HealthWorkbench = (() => {
         $('#health-select-all').checked=visible.length>0 && selected===visible.length;
         $('#health-select-all').indeterminate=selected>0 && selected<visible.length;
         $('#health-select-all').disabled=visible.length===0;
+        $('#health-select-all').classList.toggle('hidden', $('#health-kind').value !== 'domain');
     }
     document.addEventListener('change',event=>{
         const target=event.target.closest('[data-health-select]');
@@ -115,7 +118,7 @@ window.HealthWorkbench = (() => {
         window.ChoiceTabs?.sync();
         $('#ip-count').textContent = `${rows.length} 个检查目标 · ${new Set(all.map(a => a.ip)).size} 个 IP`;
         $('#ip-empty').classList.add('hidden');
-        $('#ip-table tbody').innerHTML = rows.length ? rows.map(a => `<tr><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(a.id)}">${h(a.name)}</button><small class="hc-subline">${h(a.ip)} · ${h(a.ip_version || (a.ip.includes(':') ? 'IPv6' : 'IPv4'))} · ${h(sourceText(a))}</small></td><td><div class="asset-site-links">${window.AssetLinks.render(a.links) || '<span class="muted">—</span>'}</div></td><td class="asset-note">${h(a.note) || '<span class="muted">—</span>'}</td><td><span class="hc-message">${a.domain_count ?? domainNames(a).length} 个主域名 · ${a.subdomain_count ?? 0} 个子域名</span><small class="hc-subline">${domainNames(a).slice(0,3).map(h).join('、') || '暂无解析关联'}</small><button class="btn btn-link btn-sm" data-domain-ip="${h(a.id)}">查看 / 修改解析</button></td><td><button type="button" class="hc-status-button" data-health-action="check" data-id="${h(a.id)}" title="点击检查 HTTP 访问状态" aria-label="${h(labels[getHealth(a).status])}，点击检查 ${h(a.name)} 的 HTTP 访问状态" ${running ? 'disabled' : ''}>${pill(getHealth(a).status)}</button></td><td class="hc-time">${timeText(getHealth(a).checked_at)}</td><td class="row-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>检查</button><button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(a.id)}">详情</button><button class="btn btn-sm btn-link" data-rel-edit="${h(a.id)}">编辑</button>${a.source === 'manual' ? `<button class="btn btn-sm btn-link-danger" data-health-action="delete" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>移除</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7"><div class="hc-empty">暂无 IP 检查目标。可点击“添加 IP 资产”登记公网 IP，或检查域名以发现解析地址。</div></td></tr>';
+        $('#ip-table tbody').innerHTML = rows.length ? rows.map(a => `<tr><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(a.id)}">${h(a.name)}</button><small class="hc-subline">${h(a.ip)} · ${h(a.ip_version || (a.ip.includes(':') ? 'IPv6' : 'IPv4'))} · ${h(sourceText(a))}</small><small class="hc-subline">${h(a.server_provider || '供应商未填写')} · 到期：${h(a.expires_at || '未填写')}</small></td><td><div class="asset-site-links">${window.AssetLinks.render(a.links) || '<span class="muted">—</span>'}</div></td><td class="asset-note">${h(a.note) || '<span class="muted">—</span>'}<small class="hc-subline">配置：${h(a.configuration || '未填写')}</small></td><td><span class="hc-message">${a.domain_count ?? domainNames(a).length} 个主域名 · ${a.subdomain_count ?? 0} 个子域名</span><small class="hc-subline">${domainNames(a).slice(0,3).map(h).join('、') || '暂无解析关联'}</small><button class="btn btn-link btn-sm" data-domain-ip="${h(a.id)}">查看 / 修改解析</button></td><td><button type="button" class="hc-status-button" data-health-action="check" data-id="${h(a.id)}" title="点击检查 HTTP 访问状态" aria-label="${h(labels[getHealth(a).status])}，点击检查 ${h(a.name)} 的 HTTP 访问状态" ${running ? 'disabled' : ''}>${pill(getHealth(a).status)}</button></td><td class="hc-time">${timeText(getHealth(a).checked_at)}</td><td class="row-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>检查</button><button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(a.id)}">详情</button><button class="btn btn-sm btn-link" data-rel-edit="${h(a.id)}">编辑</button>${a.source === 'manual' ? `<button class="btn btn-sm btn-link-danger" data-health-action="delete" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>移除</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7"><div class="hc-empty">暂无 IP 检查目标。可点击“添加 IP 资产”登记公网 IP，或检查域名以发现解析地址。</div></td></tr>';
     }
 
     function closeDetail() {
@@ -150,12 +153,12 @@ window.HealthWorkbench = (() => {
         const health = getHealth(asset);
         const history = asset.history || health.history || [];
         const checks = health.checks || [];
-        overlay.innerHTML = `<section class="hc-detail modal" role="dialog" aria-modal="true" aria-labelledby="hc-detail-title"><div class="modal-head"><div><span class="hc-eyebrow">${asset.kind === 'domain' ? '域名健康详情' : 'IP 访问详情'}</span><h3 id="hc-detail-title">${h(asset.name)}</h3></div><button class="modal-close" data-close-detail aria-label="关闭详情">×</button></div><div class="modal-body"><div class="hc-detail-summary">${pill(health.status)}<span class="muted">${timeText(health.checked_at)}</span></div><p class="hc-detail-message">${h(health.message || '执行一次检查，获取当前状态。')}</p><dl class="hc-facts"><div><dt>来源</dt><dd>${h(sourceText(asset))}</dd></div><div><dt>检查目标</dt><dd>${asset.kind === 'domain' ? 'https://' + h(asset.name) : 'http://' + h(asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/'}</dd></div>${asset.expires_at ? `<div><dt>到期日期</dt><dd>${h(asset.expires_at)}</dd></div>` : ''}<div><dt>解析 IP</dt><dd>${(health.resolved_ips || []).map(h).join('、') || (asset.kind === 'ip' ? h(asset.ip) : '暂无数据')}</dd></div>${asset.kind === 'ip' ? `<div><dt>关联域名</dt><dd>${domainNames(asset).map(h).join('、') || '暂无解析关联'}</dd></div>` : ''}</dl>${asset.kind === 'ip' ? `<h4>用途与备注</h4><p class="asset-note">${h(asset.note) || '暂无备注'}</p><h4>网站链接</h4><div class="asset-site-links">${window.AssetLinks.render(asset.links) || '<span class="muted">暂无网站链接</span>'}</div>` : ''}<h4>检查证据</h4><ul class="hc-check-list">${checks.length ? checks.map(c => `<li data-status="${h(c.status)}"><div><strong>${h(c.label || c.name || c.type || '检查项')}</strong><span>${h(labels[c.status] || ({ok:'正常',fail:'失败',skipped:'未执行',warning:'需关注'})[c.status] || c.status || '')}</span></div><p>${h(c.message || c.error || '—')}</p></li>`).join('') : '<li class="muted">尚无分层检测记录。旧 HTTP 结果仅作为历史参考。</li>'}</ul><h4>最近检查</h4><div class="hc-history">${history.length ? history.slice(0, 10).map(item => `<div><span>${timeText(item.checked_at)}</span>${pill(item.status || item.last_status)}<small>${h(item.message || '')}</small></div>`).join('') : '<p class="muted">执行检查后保存最近 10 次记录。</p>'}</div><p class="hc-footnote">${asset.kind === 'ip' ? 'IP 检查访问 http://IP/，以 HTTP 2xx / 3xx 为正常，不跟随重定向。结果和时间保存在服务器。' : '域名检查使用 HTTPS，并验证 TLS 证书。HTTP 受限或网站未配置可能导致检查异常，不等同于服务器宕机。'} 结果超过 24 小时标记为过时。</p></div><div class="modal-foot"><button class="btn" data-close-detail>关闭</button><button class="btn" data-rel-edit="${h(asset.id)}">编辑${asset.kind === 'domain' ? '域名' : '服务器'}</button>${asset.kind === 'domain' ? `<button class="btn" data-rel-bind="${h(asset.id)}">管理绑定</button>${asset.provider !== 'manual' ? `<button class="btn" data-rel-dns="${h(asset.id)}">管理 DNS</button>` : ''}` : ''}<button class="btn btn-primary" data-health-action="check" data-id="${h(asset.id)}" ${running ? 'disabled' : ''}>重新检查</button></div></section>`;
+        overlay.innerHTML = `<section class="hc-detail modal" role="dialog" aria-modal="true" aria-labelledby="hc-detail-title"><div class="modal-head"><div><span class="hc-eyebrow">${asset.kind === 'domain' ? '域名健康详情' : 'IP 访问详情'}</span><h3 id="hc-detail-title">${h(asset.name)}</h3></div><button class="modal-close" data-close-detail aria-label="关闭详情">×</button></div><div class="modal-body"><div class="hc-detail-summary">${pill(health.status)}<span class="muted">${timeText(health.checked_at)}</span></div><p class="hc-detail-message">${h(health.message || '执行一次检查，获取当前状态。')}</p><dl class="hc-facts"><div><dt>来源</dt><dd>${h(sourceText(asset))}</dd></div><div><dt>检查目标</dt><dd>${asset.kind === 'domain' ? 'http:// 和 https://' + h(asset.name) : 'http://' + h(asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/'}</dd></div>${asset.expires_at ? `<div><dt>到期日期</dt><dd>${h(asset.expires_at)}</dd></div>` : ''}<div><dt>解析 IP</dt><dd>${(health.resolved_ips || []).map(h).join('、') || (asset.kind === 'ip' ? h(asset.ip) : '暂无数据')}</dd></div>${asset.kind === 'ip' ? `<div><dt>关联域名</dt><dd>${asset.domain_count ?? domainNames(asset).length} 个主域名 · ${asset.subdomain_count ?? 0} 个子域名<br>${domainNames(asset).map(h).join('、') || '暂无解析关联'}</dd></div><div><dt>服务器供应商</dt><dd>${h(asset.server_provider || '未填写')}</dd></div><div><dt>服务器配置</dt><dd>${h(asset.configuration || '未填写')}</dd></div>` : ''}</dl>${asset.kind === 'ip' ? `<h4>用途与备注</h4><p class="asset-note">${h(asset.note) || '暂无备注'}</p><h4>网站链接</h4><div class="asset-site-links">${window.AssetLinks.render(asset.links) || '<span class="muted">暂无网站链接</span>'}</div>` : ''}<h4>检查证据</h4><ul class="hc-check-list">${checks.length ? checks.map(c => `<li data-status="${h(c.status)}"><div><strong>${h(c.label || c.name || c.type || '检查项')}</strong><span>${h(labels[c.status] || ({ok:'正常',fail:'失败',skipped:'未执行',warning:'需关注'})[c.status] || c.status || '')}</span></div><p>${h(c.message || c.error || '—')}</p></li>`).join('') : '<li class="muted">尚无分层检测记录。旧 HTTP 结果仅作为历史参考。</li>'}</ul><h4>最近检查</h4><div class="hc-history">${history.length ? history.slice(0, 10).map(item => `<div><span>${timeText(item.checked_at)}</span>${pill(item.status || item.last_status)}<small>${h(item.message || '')}</small></div>`).join('') : '<p class="muted">执行检查后保存最近 10 次记录。</p>'}</div><p class="hc-footnote">${asset.kind === 'ip' ? 'IP 检查访问 http://IP/，以 HTTP 2xx / 3xx 为正常，不跟随重定向。结果和时间保存在服务器。' : '域名同时检查 HTTP 和 HTTPS，并验证 HTTPS 证书；两项均正常才计为正常。HTTP 受限或网站未配置可能导致检查异常，不等同于服务器宕机。'} 结果超过 24 小时标记为过时。</p></div><div class="modal-foot"><button class="btn" data-close-detail>关闭</button><button class="btn" data-rel-edit="${h(asset.id)}">编辑${asset.kind === 'domain' ? '域名' : '服务器'}</button>${asset.kind === 'domain' ? `<button class="btn" data-rel-bind="${h(asset.id)}">管理绑定</button>${asset.provider !== 'manual' ? `<button class="btn" data-rel-dns="${h(asset.id)}">管理 DNS</button>` : ''}` : ''}<button class="btn btn-primary" data-health-action="check" data-id="${h(asset.id)}" ${running ? 'disabled' : ''}>重新检查</button></div></section>`;
         overlay.querySelector('.modal-close')?.focus();
     }
 
     function updateBusy() {
-        ['health-check-all', 'ip-check-all'].forEach(id => { if ($('#' + id)) $('#' + id).disabled = running; });
+        ['health-check-all', 'health-check-domains-all', 'ip-check-all'].forEach(id => { if ($('#' + id)) $('#' + id).disabled = running; });
         $$('[data-health-action="check"], [data-health-action="delete"]').forEach(button => { button.disabled = running; });
         $('#ip-open-create').disabled = running;
         if ($('#ip-add-btn')) $('#ip-add-btn').disabled = running;
@@ -174,6 +177,9 @@ window.HealthWorkbench = (() => {
         progress.classList.remove('hidden');
         let done = 0, abnormal = 0, failed = 0;
         let discovered = false;
+        const kinds = new Map();
+        for (const asset of snapshot?.assets || []) { kinds.set(asset.id, asset.kind); for (const host of asset.subdomains || []) if (host.checkable) kinds.set(host.id, 'subdomain'); }
+        const counts = Object.fromEntries(['domain','ip','subdomain'].map(kind => [kind, {healthy:0, unhealthy:0}]));
         const line = $('#health-progress-text');
         let stop = $('#health-stop');
         if (!stop) {
@@ -190,7 +196,10 @@ window.HealthWorkbench = (() => {
                 const batch = unique.slice(i, i + 2);
                 try {
                     const response = await api('/api/health/check', { method: 'POST', body: JSON.stringify({ asset_ids: batch }) });
-                    abnormal += (response.results || []).filter(r => r.health?.status === 'unhealthy').length;
+                    const results = response.results || [];
+                    if (results.length !== batch.length || results.some(r => !kinds.has(r.id) || !['healthy','unhealthy'].includes(r.health?.status))) throw new Error('检查结果不完整');
+                    abnormal += results.filter(r => r.health.status === 'unhealthy').length;
+                    for (const result of results) counts[kinds.get(result.id)][result.health.status]++;
                 } catch (err) {
                     failed += batch.length;
                     toast('本批检查未完成：' + err.message, 'error', 6000);
@@ -202,8 +211,13 @@ window.HealthWorkbench = (() => {
                 if (discover && !discovered && i + 2 >= unique.length && !stopped) {
                     discovered = true;
                     const additions = (snapshot?.assets || []).filter(a => a.kind === 'ip' && !unique.includes(a.id));
+                    for (const asset of additions) kinds.set(asset.id, asset.kind);
                     unique.push(...additions.map(a => a.id));
                 }
+            }
+            if (discover && !stopped && !failed && done === unique.length) {
+                try { await api('/api/calendar/runs', {method:'POST', body:JSON.stringify({counts})}); }
+                catch (err) { toast('检查已完成，但日历记录保存失败：' + err.message, 'error', 8000); }
             }
             $('#health-progress-fill').style.width = `${done / unique.length * 100}%`;
             line.textContent = `${stopped ? '检查已停止' : '检查完成'} · 已处理 ${done}/${unique.length} 项 · 检查异常 ${abnormal} 项${failed ? ` · 未完成 ${failed} 项` : ''}`;
@@ -223,7 +237,7 @@ window.HealthWorkbench = (() => {
         $('#health-kind').value = kind;
         $('#health-status').value = '';
         $('#health-query').value = '';
-        renderRows();
+        render();
         return check(snapshot.assets.filter(a => !kind || a.kind === kind).map(a => a.id));
     }
 
@@ -232,7 +246,7 @@ window.HealthWorkbench = (() => {
         if (filter) {
             window.WorkspaceUI?.closeDialog();
             $('#health-query').value = '';
-            $('#health-kind').value = filter.dataset.filterCategory === 'kind' ? filter.dataset.filter : '';
+            if (filter.dataset.filterCategory === 'kind') $('#health-kind').value = filter.dataset.filter;
             $('#health-status').value = filter.dataset.filterCategory === 'status' ? filter.dataset.filter : '';
             renderRows();
             $('#health-table').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -245,7 +259,7 @@ window.HealthWorkbench = (() => {
             case 'detail': renderDetail(id); break;
             case 'check': await check([id]); break;
             case 'refresh': await load(); break;
-            case 'clear': ['health-query', 'health-kind', 'health-status'].forEach(key => { $('#' + key).value = ''; }); renderRows(); break;
+            case 'clear': ['health-query', 'health-status'].forEach(key => { $('#' + key).value = ''; }); renderRows(); break;
             case 'delete': {
                 const asset = snapshot.assets.find(a => a.id === id);
                 if (!asset || !await confirmDialog({title:'移除 IP 检查目标',message:`移除 ${asset.ip} 的手工登记？已有 DNS 解析关联和历史证据仍会保留。`,confirmText:'移除',danger:true})) break;
@@ -256,11 +270,29 @@ window.HealthWorkbench = (() => {
         }
     });
 
+    document.querySelectorAll('[data-health-type]').forEach(button => button.addEventListener('click', () => {
+        $('#health-kind').value = button.dataset.healthType;
+        $('#health-status').value = '';
+        render();
+    }));
     ['health-query', 'health-kind', 'health-status'].forEach(id => $('#' + id).addEventListener(id === 'health-query' ? 'input' : 'change', renderRows));
     $('#ip-query').addEventListener('input', renderIPs);
     ['ip-version','ip-status'].forEach(id=>$('#'+id).addEventListener('change',renderIPs));
     $('#health-refresh').addEventListener('click', () => { window.WorkspaceCache?.clear(); load(true); loadDashboard(); });
-    $('#health-check-all').addEventListener('click', async () => { if (await load()) await check(snapshot.assets.map(a => a.id), true); });
+    $('#health-check-all').addEventListener('click', async () => {
+        if (running) return;
+        if (await load(true)) await check(snapshot.assets.map(a => a.id), true);
+    });
+    $('#health-check-domains-all').addEventListener('click', async () => {
+        if (running) return;
+        const button = $('#health-check-domains-all'); button.disabled = true;
+        try {
+            const cached = await window.DomainDetails.cacheMissing();
+            if (cached.failed) { toast(`有 ${cached.failed} 个域名的 DNS 缓存读取失败，请检查云账号后重试`, 'error', 7000); return; }
+            if (await load(true)) await check(snapshot.assets.filter(a => a.kind === 'domain').flatMap(a => [a.id, ...(a.subdomains || []).filter(host => host.checkable).map(host => host.id)]));
+        } catch (err) { toast('准备 DNS 缓存失败：' + err.message, 'error', 7000); }
+        finally { if (!running) button.disabled = false; }
+    });
     $('#ip-check-all').addEventListener('click', () => checkKind('ip'));
     function openIpCreate() {
         if (running || $('#ip-create-overlay')) return;

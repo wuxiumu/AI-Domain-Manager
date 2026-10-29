@@ -136,7 +136,7 @@ TEXT;
         $add('POST', '/api/health/check', 'checkHealth', '检查 1–5 项资产并保存结果', 'checks:run',
             self::object(['asset_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 5, 'items' => $string]], ['asset_ids']));
         $add('POST', '/api/health/ips', 'createIpAsset', '登记公网 IP 检查目标', 'assets:write', $ip);
-        $ipUpdate = self::object(['name' => $string, 'note' => $string, 'links' => $links, 'server_provider' => $string, 'expires_at' => $string]);
+        $ipUpdate = self::object(['name' => $string, 'note' => $string, 'links' => $links, 'server_provider' => $string, 'configuration' => $string, 'expires_at' => $string]);
         $add('PUT', '/api/health/ips/{id}', 'updateIpAsset', '编辑 IP 资产资料', 'assets:write', $ipUpdate);
         $add('DELETE', '/api/health/ips/{id}', 'deleteIpAsset', '移除手工登记的 IP 目标', 'assets:write');
         $add('PUT', '/api/health/domains/{id}/bindings', 'saveDomainBindings', '保存域名与服务器的人工确认绑定', 'assets:write',
