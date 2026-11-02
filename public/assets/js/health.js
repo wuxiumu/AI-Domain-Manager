@@ -3,6 +3,8 @@
 /* 健康看板只读取后端证据；没有检测数据时不推断资产健康。 */
 window.HealthWorkbench = (() => {
     let snapshot = null;
+    let issues = null;
+    let issueFilter = 'all';
     let loading = null;
     let running = false;
     let stopped = false;
@@ -10,6 +12,8 @@ window.HealthWorkbench = (() => {
     let detailReturnFocus = null;
     const selectedDomains = new Set();
     const labels = { healthy: '正常', unhealthy: '检查异常', stale: '结果过时', unchecked: '未检查' };
+    const issueLabels = { unhealthy: '检查异常', https_pending: 'HTTPS 未确认', stale: '结果过时', expiring: '即将到期' };
+    const severityBadges = { P0: 'b-red', P1: 'b-amber', P2: '' };
     const h = value => escapeHtml(value ?? '');
     const getHealth = asset => {
         const health = asset.health || {status:'unchecked'};
@@ -18,6 +22,7 @@ window.HealthWorkbench = (() => {
     };
     const pill = status => `<span class="hc-status" data-status="${h(status)}"><i aria-hidden="true"></i>${h(labels[status] || status || '未检查')}</span>`;
     const timeText = time => time ? h(time) : '尚未检查';
+    const locationText = loc => loc ? [loc.country, loc.region, loc.city].filter(Boolean).join(' · ') || '未提供位置' : '归属地未查询';
     const sourceText = asset => asset.kind === 'domain' ? (asset.provider_name || '域名资产') : asset.source === 'manual' ? '手工登记' : 'DNS 解析发现';
     const domainNames = asset => [...new Set([...(asset.linked_domains || []).map(item => typeof item === 'string' ? item : item.domain || item.name || ''), ...(asset.bound_domains || []).map(id => snapshot?.assets.find(a => a.id === id)?.name || '')])].filter(Boolean);
 
@@ -25,7 +30,12 @@ window.HealthWorkbench = (() => {
         if (loading) return loading;
         loading = (async () => {
             try {
-                snapshot = await api('/api/health', {refresh: force === true});
+                const [snap, issueData] = await Promise.all([
+                    api('/api/health', {refresh: force === true}),
+                    api('/api/issues').catch(() => null),
+                ]);
+                snapshot = snap;
+                if (issueData) issues = issueData;
                 render();
                 return snapshot;
             } catch (err) {
@@ -43,8 +53,47 @@ window.HealthWorkbench = (() => {
         return loading;
     }
 
+    /* 问题中心：与 AI 共用的分级问题清单，一眼看到全部待处理事项。 */
+    function renderIssues() {
+        if (!issues) return;
+        const counts = issues.counts || {};
+        $('#issues-count').textContent = counts.total ? `${counts.total} 项待处理` : '全部正常';
+        $('#issues-sub').textContent = counts.total
+            ? `P0 立即处理 ×${counts.unhealthy} · P1 尽快处理 ×${counts.https_pending + counts.stale} · P2 择期处理 ×${counts.expiring}${issues.truncated ? '（清单已截断）' : ''}`
+            : '没有检查异常、HTTPS 未确认、结果过时或即将到期的资产。';
+        for (const key of ['total', 'unhealthy', 'https_pending', 'stale', 'expiring']) {
+            const el = $('#issues-' + key);
+            if (el) el.textContent = counts[key] || 0;
+        }
+        document.querySelectorAll('[data-issue-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.issueFilter === issueFilter)));
+        const list = (issues.issues || []).filter(i => issueFilter === 'all' || i.type === issueFilter);
+        $('#issues-list').innerHTML = list.length ? `<table><thead><tr><th>级别</th><th>问题</th><th>资产</th><th>时间</th><th>操作</th></tr></thead><tbody>${list.map(issue => {
+            const badge = `<span class="badge ${severityBadges[issue.severity] || ''}">${issue.severity}</span><small class="hc-subline">${issueLabels[issue.type] || issue.type}</small>`;
+            const time = issue.due ? `到期 ${h(issue.due)}` : timeText(issue.since);
+            const actions = (issue.actions || []).map(action => action.type === 'check'
+                ? `<button class="btn btn-sm" data-health-action="check" data-id="${h(issue.asset_id)}" ${running ? 'disabled' : ''}>${h(action.label)}</button>`
+                : `<button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(action.label)}</button>`).join('');
+            const dns = issue.dns_path ? `<small class="hc-subline">${h((issue.ips || []).join(' · '))}</small>` : '';
+            return `<tr><td>${badge}</td><td><span class="hc-message" title="${h(issue.summary)}">${h(issue.summary)}</span>${dns}</td><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(issue.name)}</button><small class="hc-subline">${issue.kind === 'domain' ? '域名' : 'IP / 服务器'}</small></td><td class="hc-time">${time}</td><td class="row-actions">${actions}</td></tr>`;
+        }).join('')}</tbody></table>` : '<div class="hc-empty">没有待处理问题，全部正常。<button class="btn btn-link" data-issue-filter-reset>查看全部类型</button></div>';
+    }
+
+    $('#issue-filters').addEventListener('click', event => {
+        const button = event.target.closest('[data-issue-filter]');
+        if (!button) return;
+        issueFilter = issueFilter === button.dataset.issueFilter ? 'all' : button.dataset.issueFilter;
+        renderIssues();
+    });
+    document.addEventListener('click', event => { if (event.target.closest('[data-issue-filter-reset]')) { issueFilter = 'all'; renderIssues(); } });
+    $('#issues-check-all').addEventListener('click', () => {
+        const ids = [...new Set((issues?.issues || []).filter(i => issueFilter === 'all' || i.type === issueFilter).map(i => i.asset_id))];
+        if (!ids.length) { toast('没有待处理问题', 'info'); return; }
+        check(ids);
+    });
+
     function render() {
         if (!snapshot) return;
+        renderIssues();
         const assets = snapshot.assets || [];
         const kind = $('#health-kind').value || 'domain';
         const selected = assets.filter(a => a.kind === kind);
@@ -115,10 +164,10 @@ window.HealthWorkbench = (() => {
         const query = $('#ip-query').value.trim().toLowerCase();
         const all = (snapshot?.assets || []).filter(a => a.kind === 'ip');
         const rows = all.filter(a => (!$('#ip-version').value || (a.ip_version || (a.ip.includes(':')?'IPv6':'IPv4')) === $('#ip-version').value) && (!$('#ip-status').value || getHealth(a).status === $('#ip-status').value) && (!query || [a.name, a.ip, a.note, ...(a.links || []).flatMap(link => [link.name, link.url]), ...domainNames(a)].join(' ').toLowerCase().includes(query)));
-        window.ChoiceTabs?.sync();
+        document.querySelectorAll('[data-ip-filter]').forEach(button => button.setAttribute('aria-pressed', String($('#' + button.dataset.ipFilter).value === button.dataset.value)));
         $('#ip-count').textContent = `${rows.length} 个检查目标 · ${new Set(all.map(a => a.ip)).size} 个 IP`;
         $('#ip-empty').classList.add('hidden');
-        $('#ip-table tbody').innerHTML = rows.length ? rows.map(a => `<tr><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(a.id)}">${h(a.name)}</button><small class="hc-subline">${h(a.ip)} · ${h(a.ip_version || (a.ip.includes(':') ? 'IPv6' : 'IPv4'))} · ${h(sourceText(a))}</small><small class="hc-subline">${h(a.server_provider || '供应商未填写')} · 到期：${h(a.expires_at || '未填写')}</small></td><td><div class="asset-site-links">${window.AssetLinks.render(a.links) || '<span class="muted">—</span>'}</div></td><td class="asset-note">${h(a.note) || '<span class="muted">—</span>'}<small class="hc-subline">配置：${h(a.configuration || '未填写')}</small></td><td><span class="hc-message">${a.domain_count ?? domainNames(a).length} 个主域名 · ${a.subdomain_count ?? 0} 个子域名</span><small class="hc-subline">${domainNames(a).slice(0,3).map(h).join('、') || '暂无解析关联'}</small><button class="btn btn-link btn-sm" data-domain-ip="${h(a.id)}">查看 / 修改解析</button></td><td><button type="button" class="hc-status-button" data-health-action="check" data-id="${h(a.id)}" title="点击检查 HTTP 访问状态" aria-label="${h(labels[getHealth(a).status])}，点击检查 ${h(a.name)} 的 HTTP 访问状态" ${running ? 'disabled' : ''}>${pill(getHealth(a).status)}</button></td><td class="hc-time">${timeText(getHealth(a).checked_at)}</td><td class="row-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>检查</button><button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(a.id)}">详情</button><button class="btn btn-sm btn-link" data-rel-edit="${h(a.id)}">编辑</button>${a.source === 'manual' ? `<button class="btn btn-sm btn-link-danger" data-health-action="delete" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>移除</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7"><div class="hc-empty">暂无 IP 检查目标。可点击“添加 IP 资产”登记公网 IP，或检查域名以发现解析地址。</div></td></tr>';
+        $('#ip-table tbody').innerHTML = rows.length ? rows.map(a => `<tr><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(a.id)}">${h(a.name)}</button><small class="hc-subline">${h(a.ip)} · ${h(a.ip_version || (a.ip.includes(':') ? 'IPv6' : 'IPv4'))} · ${h(sourceText(a))}</small><small class="hc-subline">${h(a.server_provider || '供应商未填写')} · 到期：${h(a.expires_at || '未填写')}</small><small class="hc-subline">归属地：${h(locationText(a.location))}${a.location?.checked_at ? ' · ' + h(a.location.checked_at) : ''}</small></td><td><div class="asset-site-links">${window.AssetLinks.render(a.links) || '<span class="muted">—</span>'}</div></td><td class="asset-note">${h(a.note) || '<span class="muted">—</span>'}<small class="hc-subline">配置：${h(a.configuration || '未填写')}</small></td><td><span class="hc-message">${a.domain_count ?? domainNames(a).length} 个主域名 · ${a.subdomain_count ?? 0} 个子域名</span><small class="hc-subline">${domainNames(a).slice(0,3).map(h).join('、') || '暂无解析关联'}</small><button class="btn btn-link btn-sm" data-domain-ip="${h(a.id)}">查看 / 修改解析</button></td><td><button type="button" class="hc-status-button" data-health-action="check" data-id="${h(a.id)}" title="点击检查 HTTP 访问状态" aria-label="${h(labels[getHealth(a).status])}，点击检查 ${h(a.name)} 的 HTTP 访问状态" ${running ? 'disabled' : ''}>${pill(getHealth(a).status)}</button><small class="hc-subline">${h(getHealth(a).message || '尚未检查')}</small></td><td class="hc-time">${timeText(getHealth(a).checked_at)}</td><td class="row-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>检查</button><button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(a.id)}">详情</button><button class="btn btn-sm btn-link" data-location-refresh="${h(a.id)}">${a.location ? '刷新归属地' : '查询归属地'}</button><button class="btn btn-sm btn-link" data-rel-edit="${h(a.id)}">编辑</button>${a.source === 'manual' ? `<button class="btn btn-sm btn-link-danger" data-health-action="delete" data-id="${h(a.id)}" ${running ? 'disabled' : ''}>移除</button>` : ''}</td></tr>`).join('') : '<tr><td colspan="7"><div class="hc-empty">暂无 IP 检查目标。可点击“添加 IP 资产”登记公网 IP，或检查域名以发现解析地址。</div></td></tr>';
     }
 
     function closeDetail() {
@@ -175,7 +224,7 @@ window.HealthWorkbench = (() => {
         const slot = state.tab === 'ips' ? $('#ip-progress-slot') : $('#health-progress-slot');
         slot.after(progress);
         progress.classList.remove('hidden');
-        let done = 0, abnormal = 0, failed = 0;
+        let done = 0, abnormal = 0, failed = 0, lastError = '';
         let discovered = false;
         const kinds = new Map();
         for (const asset of snapshot?.assets || []) { kinds.set(asset.id, asset.kind); for (const host of asset.subdomains || []) if (host.checkable) kinds.set(host.id, 'subdomain'); }
@@ -202,6 +251,7 @@ window.HealthWorkbench = (() => {
                     for (const result of results) counts[kinds.get(result.id)][result.health.status]++;
                 } catch (err) {
                     failed += batch.length;
+                    lastError = err.message;
                     toast('本批检查未完成：' + err.message, 'error', 6000);
                     // 网络/认证/存储失败时不继续发送余下任务，也不伪造健康结果。
                     stopped = true;
@@ -220,7 +270,7 @@ window.HealthWorkbench = (() => {
                 catch (err) { toast('检查已完成，但日历记录保存失败：' + err.message, 'error', 8000); }
             }
             $('#health-progress-fill').style.width = `${done / unique.length * 100}%`;
-            line.textContent = `${stopped ? '检查已停止' : '检查完成'} · 已处理 ${done}/${unique.length} 项 · 检查异常 ${abnormal} 项${failed ? ` · 未完成 ${failed} 项` : ''}`;
+            line.textContent = `${stopped ? '检查已停止' : '检查完成'} · 已处理 ${done}/${unique.length} 项 · 检查异常 ${abnormal} 项${failed ? ` · 未完成 ${failed} 项 · ${lastError}` : ''}`;
             stop.classList.add('hidden');
         } finally {
             running = false;
@@ -277,7 +327,11 @@ window.HealthWorkbench = (() => {
     }));
     ['health-query', 'health-kind', 'health-status'].forEach(id => $('#' + id).addEventListener(id === 'health-query' ? 'input' : 'change', renderRows));
     $('#ip-query').addEventListener('input', renderIPs);
-    ['ip-version','ip-status'].forEach(id=>$('#'+id).addEventListener('change',renderIPs));
+    document.querySelectorAll('[data-ip-filter]').forEach(button => button.addEventListener('click', () => {
+        const input = $('#' + button.dataset.ipFilter);
+        input.value = input.value === button.dataset.value ? '' : button.dataset.value;
+        renderIPs();
+    }));
     $('#health-refresh').addEventListener('click', () => { window.WorkspaceCache?.clear(); load(true); loadDashboard(); });
     $('#health-check-all').addEventListener('click', async () => {
         if (running) return;
@@ -293,6 +347,24 @@ window.HealthWorkbench = (() => {
         } catch (err) { toast('准备 DNS 缓存失败：' + err.message, 'error', 7000); }
         finally { if (!running) button.disabled = false; }
     });
+    let locating = false;
+    async function locate(ids) {
+        if (locating || !ids.length) { if (!ids.length) toast('没有未缓存的 IP', 'info'); return; }
+        locating = true;
+        const bulk = $('#ip-location-missing'); bulk.disabled = true;
+        let done = 0;
+        try {
+            for (const id of ids) {
+                bulk.textContent = `查询归属地 ${done + 1}/${ids.length}`;
+                await api('/api/health/ips/' + encodeURIComponent(id) + '/location', {method:'POST'});
+                done++;
+            }
+            toast(`已查询 ${done} 个 IP 的归属地`);
+        } catch (err) { toast(`已查询 ${done} 个 IP，后续查询停止：${err.message}`, 'error', 6000); }
+        finally { locating = false; bulk.disabled = false; bulk.textContent = '查询未缓存归属地'; await load(true); }
+    }
+    $('#ip-table').addEventListener('click', event => { const button = event.target.closest('[data-location-refresh]'); if (button) locate([button.dataset.locationRefresh]); });
+    $('#ip-location-missing').addEventListener('click', () => locate((snapshot?.assets || []).filter(a => a.kind === 'ip' && !a.location).map(a => a.id)));
     $('#ip-check-all').addEventListener('click', () => checkKind('ip'));
     function openIpCreate() {
         if (running || $('#ip-create-overlay')) return;
@@ -338,6 +410,58 @@ window.HealthWorkbench = (() => {
     }
     $('#ip-open-create').addEventListener('click', openIpCreate);
     window.addEventListener('beforeunload', event => { if (running) { event.preventDefault(); event.returnValue = ''; } });
+
+    /* AI 协同：把缓存证据编译成一份可直接粘贴给 AI 助手的 Markdown 报告。 */
+    let aiReportOverlay = null;
+    async function openAiReport() {
+        if (aiReportOverlay) { aiReportOverlay.remove(); aiReportOverlay = null; }
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.innerHTML = `<section class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="ai-report-title"><div class="modal-head"><div><span class="hc-eyebrow">AI 协同</span><h3 id="ai-report-title">AI 分析报告</h3></div><button class="modal-close" data-ai-report-close aria-label="关闭报告">×</button></div><div class="modal-body"><p class="muted" id="ai-report-summary">正在基于缓存证据生成报告…</p><p class="muted">报告包含检查异常域名、HTTPS 未确认域名、异常 IP 与到期提醒，不含任何密钥。「复制提示词 + 报告」会连同一份完整的分析要求一起复制，粘贴给任意 AI 助手即可直接开始分析。</p><label>Markdown 报告，可选择复制或下载<textarea id="ai-report-text" readonly rows="18" style="width:100%;resize:vertical"></textarea></label><p class="muted" id="ai-report-message" role="status"></p></div><div class="modal-foot"><button class="btn" data-ai-report-close>关闭</button><button class="btn" id="ai-report-download">下载 .md</button><button class="btn" id="ai-report-copy">复制报告</button><button class="btn btn-primary" id="ai-report-prompt">复制提示词 + 报告</button></div></section>`;
+        (document.fullscreenElement || document.body).appendChild(overlay);
+        aiReportOverlay = overlay;
+        const close = () => { overlay.remove(); aiReportOverlay = null; };
+        overlay.addEventListener('click', event => { if (event.target === overlay || event.target.closest('[data-ai-report-close]')) close(); });
+        overlay.addEventListener('keydown', event => { if (event.key === 'Escape') close(); });
+        const textarea = overlay.querySelector('#ai-report-text');
+        const message = overlay.querySelector('#ai-report-message');
+        let markdown = '';
+        let fullPrompt = '';
+        try {
+            const report = await api('/api/health/report');
+            markdown = report.markdown || '';
+            fullPrompt = report.prompt || '';
+            textarea.value = markdown;
+            const summary = report.summary || {};
+            overlay.querySelector('#ai-report-summary').textContent = `生成时间 ${report.generated_at || '未知'} · 主域名 ${summary.domains ?? 0} · IP ${summary.ips ?? 0} · 异常 ${summary.unhealthy ?? 0} · 过时 ${summary.stale ?? 0} · 未检查 ${summary.unchecked ?? 0}`;
+        } catch (err) {
+            overlay.querySelector('#ai-report-summary').textContent = '报告生成失败';
+            message.textContent = err.message;
+        }
+        overlay.querySelector('#ai-report-copy').onclick = async () => {
+            if (!markdown) return;
+            try { await navigator.clipboard.writeText(markdown); message.textContent = '报告已复制，可粘贴给 AI 助手'; }
+            catch { textarea.focus(); textarea.select(); message.textContent = '请复制已选中的报告'; }
+        };
+        overlay.querySelector('#ai-report-prompt').onclick = async () => {
+            if (!fullPrompt) return;
+            try { await navigator.clipboard.writeText(fullPrompt); message.textContent = '提示词与报告已一起复制，直接粘贴给 AI 助手即可'; }
+            catch { textarea.value = fullPrompt; textarea.focus(); textarea.select(); message.textContent = '浏览器拒绝了剪贴板权限，已改为选中全文，请手动复制'; }
+        };
+        overlay.querySelector('#ai-report-download').onclick = () => {
+            if (!markdown) return;
+            const blob = new Blob([markdown], {type: 'text/markdown'});
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = `health-report-${(snapshot?.generated_at || new Date().toISOString().slice(0, 19)).replace(/[: ]/g, '-')}.md`;
+            link.click();
+            URL.revokeObjectURL(url);
+            message.textContent = '已开始下载 .md 文件';
+        };
+        overlay.querySelector('.modal-close')?.focus();
+    }
+    $('#health-report').addEventListener('click', openAiReport);
     if (!$('#app-view').classList.contains('hidden')) load();
     return { load, closeDetail, checkIds: check, openDetail: async id => { await load(); renderDetail(id); }, checkDomains: () => checkKind('domain') };
 })();

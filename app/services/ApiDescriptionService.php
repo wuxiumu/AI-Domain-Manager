@@ -11,7 +11,7 @@ class ApiDescriptionService
                 'provisioning' => '管理员登录 → 产品设置 → AI API → 创建密钥',
                 'session_login' => '/api/login', 'session_captcha' => '/api/login/captcha', 'session_write_header' => 'X-CSRF-Token'],
             'scopes' => ApiTokenService::SCOPES,
-            'entrypoints' => ['health' => '/api/health', 'domains' => '/api/domains', 'accounts' => '/api/accounts'],
+            'entrypoints' => ['health' => '/api/health', 'operations' => '/api/operations', 'issues' => '/api/issues', 'report' => '/api/health/report', 'handover' => '/api/handover', 'proposals' => '/api/proposals', 'trends' => '/api/trends', 'metrics' => '/api/metrics', 'domains' => '/api/domains', 'accounts' => '/api/accounts'],
             'cache' => '列表优先读取文件快照；同步、检查与刷新 DNS 需要显式调用；DNS 写入会刷新缓存。',
             'limits' => ['health_check_batch' => 5], 'providers' => array_column(SettingsService::providerSchema(), 'id')];
     }
@@ -37,16 +37,32 @@ Authentication:
 - Tokens expire, can be revoked, and are invalidated when administrator login credentials change.
 
 Workflow:
-1. GET /api/health for cached domains, IPs, health evidence, subdomains and relationship IDs.
-2. GET /api/domains for the domain inventory. provider means a cloud ACCOUNT ID, not a vendor name.
-3. GET /api/domains/{provider}/{domain}/records for cached DNS records and their IDs.
-4. Health checks require checks:run: POST /api/health/check with {"asset_ids":["<asset id>"]}; at most 5 IDs per request.
-5. To edit DNS, first read the record and show the before/after difference, then PUT /api/domains/{provider}/{domain}/records/{recordId}
+1. GET /api/handover is the takeover briefing: current summary counts, your granted scopes, next actions and the full playbook.
+2. GET /api/issues is the triage list: every problem (P0 unhealthy, P1 unconfirmed-HTTPS / stale, P2 expiring) with a stable id, evidence, dns_path and suggested actions — the same list the administrator sees first on the dashboard. Triage it, record your conclusion in the asset note (assets:write) or a proposal rationale referencing the issue id, act via checks:run / proposals:write, then re-read this endpoint to confirm the issue disappeared.
+3. GET /api/health for cached domains, IPs, health evidence, subdomains and relationship IDs.
+   GET /api/operations lists domains without a successful latest HTTPS check and unhealthy domains with observed IPs. Unknown is not proof of no HTTPS; check timestamps and stale status.
+   GET /api/health/report returns the same cached evidence compiled into one bounded Markdown report (failing domains, unconfirmed HTTPS, failing IPs, 30-day expiries, interpretation guide).
+   Its prompt field embeds the report in a ready-to-run analysis prompt; paste it into a chat assistant or follow it yourself when summarizing for a human.
+   Add ?format=markdown to download it as text/markdown. Read-only, never triggers checks or syncs; generated_at marks the snapshot time.
+4. GET /api/domains for the domain inventory. provider means a cloud ACCOUNT ID, not a vendor name.
+5. GET /api/domains/{provider}/{domain}/records for cached DNS records and their IDs.
+6. Health checks require checks:run: POST /api/health/check with {"asset_ids":["<asset id>"]}; at most 5 IDs per request.
+7. Preferred write path — submit a proposal instead of writing DNS directly:
+   POST /api/proposals with {"account":"<provider id>","domain":"example.com","action":"add|update|delete",
+   "record_id":"<required for update/delete>","record":{"type":"A","name":"@","value":"192.0.2.1"},
+   "rationale":"4-500 char reason","evidence":"optional report line or check reference"}. Scope proposals:write.
+   The administrator sees the proposal, the cached before-values and your rationale, then approves or rejects.
+   Approval reads the fresh cloud version, writes once and verifies by readback (same guards as manual edits).
+   GET /api/proposals (proposals:write) tracks status: pending / executed / failed / rejected. Duplicate pending changes are rejected with 409.
+8. Direct DNS editing (dns:write) stays available for trusted automation but the proposal queue is the recommended path:
+   first read the record and show the before/after difference, then PUT /api/domains/{provider}/{domain}/records/{recordId}
    with expected_version from that record's version and only the fields to change. DELETE also requires expected_version in its JSON body.
-   POST requires expected_revision from the list response's revision plus the new record fields. All writes require dns:write.
+   POST requires expected_revision from the list response's revision plus the new record fields.
    A fresh cloud read rejects stale versions with HTTP 409. HTTP 202 / verified:false means unconfirmed; do not retry writes automatically.
    Only verified:true confirms cloud readback, not worldwide DNS propagation. DNS change history is administrator-session-only at GET /api/dns/changes.
-6. POST /api/sync explicitly refreshes the cloud domain inventory. Requires sync:run.
+9. POST /api/sync explicitly refreshes the cloud domain inventory. Requires sync:run.
+10. GET /api/trends returns the 30-day daily check trend for human dashboards (checks, healthy/unhealthy, avg latency, full-run summaries).
+   GET /api/metrics exposes the same state in Prometheus text format (asset_workspace_* series) so external monitoring platforms can scrape it with assets:read.
 
 Interpretation:
 - Reads reuse file caches. Do not sync, refresh DNS, run checks or write DNS just to display a list.
@@ -133,14 +149,80 @@ TEXT;
         $add('POST', '/api/logout', 'logout', '退出管理员会话', null, null, [], 'session');
         $add('GET', '/api/health', 'getHealthSnapshot', '读取缓存健康看板、子域名和 IP 关系', 'assets:read', null, [], 'api',
             self::object(['assets' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Asset']], 'summary' => ['type' => 'object'], 'cache' => ['type' => 'object']]));
+        $operationItem = self::object(['id' => $string, 'domain' => $string, 'provider' => $string,
+            'checked_at' => ['type' => ['string', 'null']], 'health_status' => $string,
+            'https_status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'unknown']],
+            'resolved_ips' => ['type' => 'array', 'items' => $string], 'message' => $string]);
+        $add('GET', '/api/operations', 'getOperations', '读取待运营域名和最近检查异常域名及解析 IP；未知或过时结果需重新检查', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string,
+                'pending_domains' => ['type' => 'array', 'items' => $operationItem],
+                'unhealthy_domains' => ['type' => 'array', 'items' => $operationItem]]));
+        $add('GET', '/api/health/report', 'getHealthReport', '把缓存健康证据编译成可直接交给 AI 分析的 Markdown 报告；只读，不触发检查', 'assets:read', null,
+            ['format' => ['type' => 'string', 'enum' => ['markdown'], 'description' => 'markdown 时直接返回 text/markdown 正文']], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'last_checked_at' => ['type' => ['string', 'null']],
+                'summary' => ['type' => 'object'], 'markdown' => ['type' => 'string', 'description' => '完整 Markdown 报告正文'],
+                'prompt' => ['type' => 'string', 'description' => '已内嵌报告的完整分析提示词，可直接交给聊天助手'],
+                'usage' => $string]));
+        $add('GET', '/api/handover', 'getHandover', 'AI 接管交接简报：当前统计、持有权限、下一步动作与操作序列；只读', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'scopes' => ['type' => 'array', 'items' => $string],
+                'summary' => ['type' => 'object'], 'unhealthy_domains' => $integer, 'proposals' => ['type' => 'object'],
+                'next_actions' => ['type' => 'array', 'items' => ['type' => 'object']], 'playbook' => ['type' => 'array', 'items' => ['type' => 'object']]]));
+        $proposalBody = self::object(['account' => ['type' => 'string', 'description' => '云账号 ID，从域名列表的 provider 字段读取'],
+            'domain' => ['type' => 'string', 'description' => '该账号台账中的主域名'],
+            'action' => ['type' => 'string', 'enum' => ['add', 'update', 'delete']],
+            'record_id' => ['type' => 'string', 'description' => 'update / delete 必填，从 DNS 记录列表读取'],
+            'record' => self::object(['type' => ['type' => 'string', 'enum' => ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA']],
+                'name' => $string, 'value' => $string, 'ttl' => $integer, 'priority' => $integer], ['type', 'name', 'value']),
+            'rationale' => ['type' => 'string', 'minLength' => 4, 'maxLength' => 500, 'description' => '变更理由，供管理员审批'],
+            'evidence' => ['type' => 'string', 'maxLength' => 300, 'description' => '可选：报告行或检查结果引用']], ['account', 'domain', 'action', 'rationale']);
+        $add('POST', '/api/proposals', 'createProposal', '提交待审批的 DNS 变更提案；不直接写云端，管理员批准后才执行', 'proposals:write', $proposalBody, [], 'api',
+            self::object(['ok' => $boolean, 'proposal' => ['type' => 'object']]));
+        $add('GET', '/api/proposals', 'listProposals', '读取提案列表与状态统计', 'proposals:write', null, [], 'api',
+            self::object(['ok' => $boolean, 'counts' => ['type' => 'object'], 'proposals' => ['type' => 'array', 'items' => ['type' => 'object']]]));
+        $dailyItem = self::object(['date' => $string, 'checks' => $integer, 'healthy' => $integer, 'unhealthy' => $integer,
+            'full_runs' => $integer, 'avg_latency_ms' => ['type' => ['integer', 'null']]]);
+        $add('GET', '/api/trends', 'getTrends', '读取最近 30 天检查趋势（每日检查数、健康 / 异常、平均延迟），供图表展示；只读', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'days' => $integer,
+                'daily' => ['type' => 'array', 'items' => $dailyItem],
+                'summary' => ['type' => 'object'], 'current' => ['type' => 'object']]));
+        $add('GET', '/api/metrics', 'getMetrics', '以 Prometheus 文本格式输出 asset_workspace_* 指标，供监控平台抓取；只读', 'assets:read');
+        $issueItem = self::object(['id' => ['type' => 'string', 'description' => '稳定问题标识，可在备注与提案 rationale 中引用'],
+            'severity' => ['type' => 'string', 'enum' => ['P0', 'P1', 'P2']], 'type' => ['type' => 'string', 'enum' => ['unhealthy', 'https_pending', 'stale', 'expiring']],
+            'asset_id' => $string, 'kind' => ['type' => 'string', 'enum' => ['domain', 'ip']], 'name' => $string, 'provider' => $string,
+            'summary' => $string, 'since' => ['type' => ['string', 'null']], 'due' => ['type' => ['string', 'null']],
+            'ips' => ['type' => 'array', 'items' => $string],
+            'dns_path' => ['type' => ['string', 'null'], 'description' => '云托管域名的问题附带 DNS 记录读取路径，manual 为空'],
+            'actions' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['type' => ['type' => 'string'], 'label' => ['type' => 'string']]]]]);
+        $add('GET', '/api/issues', 'getIssues', '读取分级问题清单（P0 异常 / P1 未确认 HTTPS 与过时 / P2 到期），与首页问题中心同源；只读', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'counts' => ['type' => 'object'],
+                'issues' => ['type' => 'array', 'items' => $issueItem], 'truncated' => $boolean,
+                'severity_labels' => ['type' => 'object'], 'usage' => $string]));
+        $add('POST', '/api/proposals/{id}/approve', 'approveProposal', '管理员批准提案：读取云端最新版本后按既有护栏执行 DNS 写入并回读核实', null,
+            self::object(), [], 'session');
+        $add('POST', '/api/proposals/{id}/reject', 'rejectProposal', '管理员拒绝提案，可附原因（最多 300 字）', null,
+            self::object(['reason' => ['type' => 'string', 'maxLength' => 300]]), [], 'session');
         $add('POST', '/api/health/check', 'checkHealth', '检查 1–5 项资产并保存结果', 'checks:run',
             self::object(['asset_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 5, 'items' => $string]], ['asset_ids']));
         $add('POST', '/api/health/ips', 'createIpAsset', '登记公网 IP 检查目标', 'assets:write', $ip);
+        $add('POST', '/api/health/ips/{id}/location', 'refreshIpLocation', '查询并缓存 IP 归属地；会将 IP 发送给 ipwho.is，失败保留旧结果', 'checks:run');
         $ipUpdate = self::object(['name' => $string, 'note' => $string, 'links' => $links, 'server_provider' => $string, 'configuration' => $string, 'expires_at' => $string]);
         $add('PUT', '/api/health/ips/{id}', 'updateIpAsset', '编辑 IP 资产资料', 'assets:write', $ipUpdate);
         $add('DELETE', '/api/health/ips/{id}', 'deleteIpAsset', '移除手工登记的 IP 目标', 'assets:write');
         $add('PUT', '/api/health/domains/{id}/bindings', 'saveDomainBindings', '保存域名与服务器的人工确认绑定', 'assets:write',
             self::object(['ip_ids' => ['type' => 'array', 'items' => $string]], ['ip_ids']));
+        $checkin = self::object(['mood' => ['type' => 'string', 'enum' => ['great', 'good', 'calm', 'tired', 'low']],
+            'text' => ['type' => 'string', 'maxLength' => 280]], ['mood', 'text']);
+        $taskBody = self::object(['date' => ['type' => 'string', 'description' => 'YYYY-MM-DD'], 'title' => ['type' => 'string', 'maxLength' => 120],
+            'description' => ['type' => 'string', 'maxLength' => 2000], 'done' => $boolean], ['date', 'title']);
+        $runBody = self::object(['counts' => self::object(array_combine(['domain', 'ip', 'subdomain'], array_fill(0, 3,
+            self::object(['healthy' => $integer, 'unhealthy' => $integer], ['healthy', 'unhealthy']))), ['counts'])], ['counts']);
+        $add('GET', '/api/calendar', 'getCalendar', '读取检查日历的打卡、待办、检查记录与资产概览；仅管理员会话', null, null, ['month' => ['type' => 'string', 'pattern' => '^\d{4}-(0[0-9]|1[0-2])$', 'default' => '当月']], 'session');
+        $add('PUT', '/api/calendar/checkins/{date}', 'saveCheckin', '保存当日心情与一句话打卡；仅管理员会话', null, $checkin, [], 'session');
+        $add('DELETE', '/api/calendar/checkins/{date}', 'deleteCheckin', '删除指定日期的打卡记录；仅管理员会话', null, null, [], 'session');
+        $add('POST', '/api/calendar/tasks', 'createTask', '新增检查待办；仅管理员会话', null, $taskBody, [], 'session');
+        $add('PUT', '/api/calendar/tasks/{id}', 'updateTask', '更新检查待办；仅管理员会话', null, $taskBody, [], 'session');
+        $add('DELETE', '/api/calendar/tasks/{id}', 'deleteTask', '删除检查待办；仅管理员会话', null, null, [], 'session');
+        $add('POST', '/api/calendar/runs', 'addRun', '记录一次完整全局检查的分类统计；仅管理员会话', null, $runBody, [], 'session');
         $add('GET', '/api/domains', 'listDomains', '查询本地缓存域名台账', 'assets:read', null,
             ['provider' => $string, 'q' => $string, 'valid' => ['type' => 'string', 'enum' => ['0', '1']], 'sort' => ['type' => 'string', 'enum' => ['expire', 'expire_desc', 'domain', 'synced']], 'expiring' => $string, 'access' => $string, 'all' => ['type' => 'string', 'enum' => ['1']]]);
         $add('GET', '/api/domains/stats', 'getDomainStats', '读取域名统计', 'assets:read');

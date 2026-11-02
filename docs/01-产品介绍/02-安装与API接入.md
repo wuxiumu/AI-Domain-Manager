@@ -31,6 +31,7 @@
 - 接口契约：`GET /api/openapi.json`（OpenAPI 3.1）
 - 能力发现：`GET /.well-known/asset-workspace.json`，也可用 `/api/capabilities`
 - AI 操作说明：`GET /llms.txt`
+- 健康分析报告：`GET /api/health/report`（`assets:read`），返回 Markdown 报告与已内嵌报告的分析提示词；加 `?format=markdown` 直接得到报告正文
 
 认证选择 Bearer Token，在产品设置创建并保存密钥。示例中的环境变量由调用方提供：
 
@@ -57,6 +58,7 @@ python3 scripts/workspace-api.py GET /api/health
 | `dns:write` | 云端 DNS 增改删 |
 | `checks:run` | 执行健康与访问检查 |
 | `sync:run` | 同步云端域名及测试账号连接 |
+| `proposals:write` | 提交并跟踪待审批的 DNS 变更提案（不直接写云端，管理员批准后才执行） |
 
 默认勾选 `assets:read` 和 `dns:read`。密钥最长有效期 365 天。配置管理、登录信息修改和 API 密钥管理仅限管理员 Session，Bearer Token 不能创建更高权限的密钥。
 

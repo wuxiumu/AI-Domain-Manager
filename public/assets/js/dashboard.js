@@ -3,6 +3,7 @@
 /* ---------- 仪表盘 ---------- */
 async function loadDashboard() {
     window.HealthWorkbench?.load();
+    window.WorkspaceTrends?.load();
     try {
         const [stats, logs] = await Promise.all([api('/api/domains/stats'), api('/api/sync/logs?limit=8')]);
         renderStats(stats);

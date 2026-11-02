@@ -1369,3 +1369,30 @@ button.hc-stat, button.hc-stat-card {
 .calendar-checkin-entry { padding:16px; border:1px solid #dfece0; border-radius:12px; background:linear-gradient(135deg,#f4faf1,#fdfdf9); }.calendar-entry-mood { display:flex; align-items:center; gap:10px; }.calendar-entry-mood > span { display:grid; place-items:center; width:44px; height:44px; border-radius:50%; background:#e1f0df; font-size:25px; }.calendar-entry-mood strong,.calendar-entry-mood small { display:block; }.calendar-entry-mood strong { color:#365d42; font-size:13px; }.calendar-entry-mood small { margin-top:3px; color:#95a797; font-size:10px; }.calendar-checkin-entry > p { margin:15px 0; white-space:pre-wrap; overflow-wrap:anywhere; color:#3f5845; line-height:1.7; }.calendar-entry-actions { display:flex; gap:7px; }.calendar-todo-section .settings-form { margin-top:16px; }
 @media(max-width: 900px) { .calendar-layout { grid-template-columns:1fr; } }
 @media(max-width: 480px) { .calendar-panel,.calendar-day { padding:18px; }.calendar-grid { gap:4px; }.calendar-date { min-height:65px; padding:6px; }.calendar-date-mood { font-size:16px; }.calendar-date small { font-size:9px; }.calendar-moods { gap:4px; }.calendar-moods b { font-size:22px; }.calendar-note-label span { display:none; } }
+
+/* 近 30 天检查趋势面板 */
+.trend-legend{display:inline-flex;align-items:center;gap:4px;font-size:12px;color:var(--muted,#777);margin-right:10px}
+.trend-dot{display:inline-block;width:9px;height:9px;border-radius:50%}
+.trend-table{margin-top:8px}
+.trend-table summary{cursor:pointer;font-size:13px;color:var(--muted,#777)}
+
+/* 趋势面板标题：看板布局会隐藏通用 panel-heading / panel-caption，趋势面板使用独立类。 */
+.trend-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:21px 22px 0}
+.trend-heading h2{font-size:14px;line-height:1.5;font-weight:600;letter-spacing:-.15px}
+.trend-heading p{margin-top:6px;font-size:11px;color:#929b90}
+.trend-actions{display:flex;align-items:center;gap:10px}
+.trend-note{padding:10px 22px 16px;font-size:11px;color:#929b90}
+
+#trend-axis,
+.trend-axis{display:flex;justify-content:space-between;padding:2px 6px 0;font-size:10px;color:#929b90}
+@media (min-width: 761px) {
+    /* 桌面 shell 为固定高度 flex 列，趋势面板按内容占位，不参与等分挤压。 */
+    #trend-panel{flex:none;overflow:visible}
+    #health-trend-chart svg{height:96px}
+}
+
+/* 桌面 shell：问题面板按内容占位，清单过长时表内滚动，不挤占列表面板。 */
+@media (min-width: 761px) {
+    #issues-panel{flex:none;overflow:visible}
+    #issues-panel .table-wrap{max-height:240px;overflow:auto}
+}

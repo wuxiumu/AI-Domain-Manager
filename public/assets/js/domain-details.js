@@ -46,9 +46,45 @@ window.DomainDetails = (() => {
     }
     async function openIp(id){await refresh();const ip=asset(id);if(!ip)return;
         const modal=document.createElement('div');modal.className='modal-overlay';
-        const links=ip.dns_links||[];
-        modal.innerHTML=`<section class="modal modal-wide" role="dialog" aria-modal="true" aria-label="IP 解析关联"><div class="modal-head"><div><h3>${h(endpoint(ip))} · ${h(ip.ip_version||'IP')}</h3><p class="muted">${ip.domain_count||0} 个主域名 · ${ip.subdomain_count||0} 个子域名（基于已缓存 DNS）</p></div><button class="modal-close" aria-label="关闭IP关联">×</button></div><div class="modal-body"><div class="table-wrap"><table><thead><tr><th>主域名</th><th>主机名</th><th>操作</th></tr></thead><tbody>${links.map(link=>`<tr><td>${h(link.domain)}</td><td>${h(link.fqdn)}</td><td><button class="btn btn-sm" data-ip-domain="${h(link.domain_id)}" data-ip-host="${h(link.fqdn)}">查看与修改解析</button></td></tr>`).join('')||'<tr><td colspan="3" class="hc-empty">尚无 DNS 记录关联缓存。可先从健康看板缓存 DNS，或打开关联域名详情。</td></tr>'}</tbody></table></div>${(ip.linked_domains||[]).map(name=>`<button class="btn btn-sm" data-ip-name="${h(name)}">${h(name)}</button>`).join('')}</div></section>`;
+        const links=ip.dns_links||[], rows=[];
+        for(const link of links){
+            const domain=asset(link.domain_id);
+            const records=(domain?.dns_records||[]).filter(r=>(link.record_ids||[]).map(String).includes(String(r.id)));
+            for(const record of records) rows.push({link,domain,record});
+            if(!records.length) rows.push({link,domain,record:null});
+        }
+        modal.innerHTML=`<section class="modal modal-wide" role="dialog" aria-modal="true" aria-label="IP 解析关联"><div class="modal-head"><div><h3>${h(endpoint(ip))} · ${h(ip.ip_version||'IP')}</h3><p class="muted">${ip.domain_count||0} 个主域名 · ${ip.subdomain_count||0} 个子域名（基于已缓存 DNS）</p></div><button class="modal-close" aria-label="关闭IP关联">×</button></div><div class="modal-body"><div class="domain-detail-actions"><span data-ip-selection>未选择</span><button type="button" class="btn btn-sm" data-ip-batch disabled>批量修改解析值</button></div><div class="table-wrap"><table><thead><tr><th><input type="checkbox" data-ip-select-all aria-label="选择所有可修改记录"></th><th>主域名 / 账号</th><th>主机名</th><th>类型</th><th>解析值</th><th>操作</th></tr></thead><tbody>${rows.map(({link,domain,record},index)=>`<tr><td>${record ? `<input type="checkbox" data-ip-select="${index}" aria-label="选择 ${h(link.fqdn)} ${h(record.type)} 记录">` : '—'}</td><td>${h(link.domain)}<small class="hc-subline">${h(domain?.provider_name||link.provider)}</small></td><td>${h(link.fqdn)}</td><td>${h(record?.type||'观察到的解析')}</td><td>${h(record?.value||'无直接 A / AAAA 记录')}</td><td><button class="btn btn-sm" data-ip-domain="${h(link.domain_id)}" data-ip-host="${h(link.fqdn)}">查看与修改解析</button></td></tr>`).join('')||'<tr><td colspan="6" class="hc-empty">尚无 DNS 记录关联缓存。可先从健康看板缓存 DNS，或打开关联域名详情。</td></tr>'}</tbody></table></div><p class="muted">仅可多选直接指向此 IP 的 A / AAAA 记录；其他解析观察需要进入域名详情核对。提交前会逐条预览并核对版本。</p><p data-ip-batch-result class="muted" role="status"></p>${(ip.linked_domains||[]).map(name=>`<button class="btn btn-sm" data-ip-name="${h(name)}">${h(name)}</button>`).join('')}</div></section>`;
         (document.fullscreenElement||document.body).appendChild(modal);modal.querySelector('.modal-close').onclick=()=>modal.remove();
+        const all=modal.querySelector('[data-ip-select-all]'),batch=modal.querySelector('[data-ip-batch]');
+        const choices=()=>Array.from(modal.querySelectorAll('[data-ip-select]'));
+        const update=()=>{const boxes=choices(), count=boxes.filter(box=>box.checked).length;modal.querySelector('[data-ip-selection]').textContent=count?`已选择 ${count} 条`:'未选择';batch.disabled=!count;all.checked=!!boxes.length&&count===boxes.length;all.indeterminate=count>0&&count<boxes.length;};
+        all.onchange=()=>{choices().forEach(box=>{box.checked=all.checked;});update();};
+        choices().forEach(box=>box.onchange=update);
+        let preparing=false;
+        batch.onclick=async()=>{
+            if(preparing)return;
+            preparing=true;batch.disabled=true;
+            const selected=choices().filter(box=>box.checked).map(box=>rows[Number(box.dataset.ipSelect)]);
+            if(!selected.length){preparing=false;update();return;}
+            let input;
+            try{input=await promptDialog({title:'批量修改解析值',message:`将 ${selected.length} 条记录修改为同一 IP，下一步预览差异：`,value:'',okText:'预览差异'});}
+            finally{preparing=false;if(modal.isConnected)update();}
+            if(input===null||!modal.isConnected)return;
+            const value=input.trim();
+            if(!value){toast('解析值不能为空','error');return;}
+            if(selected.some(({record})=>(record.type==='A'&&value.includes(':'))||(record.type==='AAAA'&&!value.includes(':')))){toast('所选记录类型与新 IP 不一致，请分别修改 A 和 AAAA 记录','error');return;}
+            const options=selected.map(({domain,record})=>({endpoint:`/api/domains/${encodeURIComponent(domain.provider)}/${encodeURIComponent(domain.name)}/records/${encodeURIComponent(record.id)}`,action:'update',record,params:{value},owner:modal,target:`${domain.name} · ${domain.provider_name} (${domain.provider})`}));
+            batch.disabled=true;all.disabled=true;choices().forEach(box=>box.disabled=true);
+            try{
+                const results=await window.WorkspaceDns.batchValues(options,(done,total)=>{if(modal.isConnected)modal.querySelector('[data-ip-batch-result]').textContent=`处理 ${done} / ${total} 条`;});
+                if(!results)return;
+                try{window.WorkspaceCache.clear();await refresh(true);await window.HealthWorkbench.load(true);}
+                catch(error){toast('操作已结束，但列表刷新失败：'+error.message,'error',9000);}
+                if(modal.isConnected)modal.remove();
+                window.WorkspaceDns.showBatchReport(results,'批量修改 IP 关联解析值');
+            }catch(error){toast('操作或刷新未完成：'+error.message,'error',9000);}
+            finally{if(modal.isConnected){all.disabled=false;choices().forEach(box=>box.disabled=false);update();}}
+        };
         modal.querySelectorAll('[data-ip-domain]').forEach(b=>b.onclick=()=>{modal.remove();open(b.dataset.ipDomain,'records',b.dataset.ipHost);});
         modal.querySelectorAll('[data-ip-name]').forEach(b=>b.onclick=()=>{const d=snapshot.assets.find(a=>a.kind==='domain'&&a.name===b.dataset.ipName);if(d){modal.remove();open(d.id);}});
     }

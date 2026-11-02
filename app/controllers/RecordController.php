@@ -101,6 +101,6 @@ class RecordController
                 return $a;
             }
         }
-        json_out(['error' => '账号不存在'], 404);
+        json_out(['error' => '该域名对应的云账号已移除，请选择其他可用账号或重新配置账号'], 404);
     }
 }

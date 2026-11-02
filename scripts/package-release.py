@@ -16,7 +16,9 @@ ROOT = Path(__file__).resolve().parents[1]
 FOLDERS = {"app": {".php"}, "public": {".php", ".js", ".css", ".svg", ".png", ".ico", ".woff2"},
            "docs": {".md"}, "deploy": {".example"}}
 FILES = ["README.md", "CHANGELOG.md", "start.sh", "config/config.example.php",
-         "scripts/workspace-api.py", "scripts/cache-dns.php", "scripts/reset-admin-password.php", "scripts/check-public-docs.py", "scripts/package-release.py"]
+         "scripts/workspace-api.py", "scripts/cache-dns.php", "scripts/reset-admin-password.php",
+         "scripts/check-domain-operations.php", "scripts/generate-health-report.php",
+         "scripts/check-public-docs.py", "scripts/package-release.py"]
 REVIEWED_SCREENSHOTS = {"public/assets/screenshots/login.png", "public/assets/screenshots/dashboard.png", "public/assets/screenshots/domains.png"}
 
 

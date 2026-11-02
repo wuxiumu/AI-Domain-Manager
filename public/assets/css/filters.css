@@ -245,6 +245,61 @@
     flex:none;
 }
 
+/* IP filters stay directly below search; narrow screens can scroll the row. */
+.ip-filters .ip-filter-row {
+    grid-column: 1 / -1;
+    display: flex;
+    align-items: center;
+    gap: 20px;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 3px;
+}
+
+.ip-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+
+.ip-filter-label {
+    color: var(--muted);
+    font-size: 12px;
+    margin-right: 3px;
+}
+
+.domain-filters > .domain-inline-filter-row {
+    grid-column: 1 / -1;
+    display: flex;
+    gap: 20px;
+    min-width: 0;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    padding-bottom: 3px;
+}
+
+.domain-inline-filter-row .domain-filter-group,
+.domain-inline-filter-row .domain-filter-tabs {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    flex-wrap: nowrap;
+    white-space: nowrap;
+}
+
+.domain-inline-filter-row .domain-filter-label {
+    flex: 0 0 auto;
+}
+
+.domain-source-item + .domain-source-item {
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid var(--border);
+}
+
 .choice-control[hidden],select[hidden] {
     display:none!important;
 }

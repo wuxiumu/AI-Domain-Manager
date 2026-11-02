@@ -14,7 +14,7 @@ class MaintenanceController
         $service = $this->service();
         json_out(['ok' => true, 'version' => AssetSnapshot::VERSION, 'backups' => $service->backups(),
             'counts' => AssetSnapshot::counts(AssetSnapshot::capture(DATA_DIR)), 'checks' => DeliveryCheck::run(), 'audit' => AuditLog::recent(),
-            'dns_changes' => DnsChangeService::recent(DATA_DIR)]);
+            'dns_changes' => DnsChangeService::recent(DATA_DIR), 'ai_proposals' => (new AiProposalService(DATA_DIR))->recent()]);
     }
 
     public function backup(): void { json_out(['ok' => true, 'backup' => $this->service()->backup()], 201); }

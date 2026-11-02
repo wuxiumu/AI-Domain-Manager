@@ -54,6 +54,17 @@ try {
     $domain = assetByName($dashboard, 'example.com');
     expect($domain['health']['source'] === 'legacy' && $domain['history'][0]['source'] === 'legacy', 'legacy history labelled');
     expect(!is_file($root . '/health.json'), 'read-only dashboard does not create state');
+    expect(count($service->operations()['pending_domains']) === 2, 'unknown HTTPS is visible in pending list');
+    $httpsProbe = static function ($asset) {
+        return ['status' => 'unhealthy', 'message' => 'HTTP failed', 'checks' => [], 'resolved_ips' => ['8.8.8.8'],
+            'protocols' => ['https' => ['status' => 'healthy']]];
+    };
+    $httpsService = new HealthService($root, $httpsProbe, $clock);
+    $httpsService->check([$domain['id']]);
+    $operations = $httpsService->operations();
+    expect(count($operations['pending_domains']) === 1, 'HTTPS success removes domain even when HTTP failed');
+    expect($operations['unhealthy_domains'][0]['resolved_ips'] === ['8.8.8.8'], 'unhealthy domains expose observed IPs');
+    unlink($root . '/health.json');
 
     foreach (['127.0.0.1', '10.0.0.1', '169.254.169.254', '100.64.0.1', '192.0.2.1', '198.18.0.1', '224.0.0.1', '240.1.2.3', '::1', 'fc00::1', 'fe80::1', '::ffff:127.0.0.1', '2001:db8::1', '2002:a00:1::', '3fff::1', '8.8.8.8/24', '2130706433'] as $ip) {
         expect(!HealthService::isPublicIp($ip), 'reject non-public/ambiguous IP ' . $ip);

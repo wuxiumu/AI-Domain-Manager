@@ -36,35 +36,33 @@ async function loadDomains() {
         const allDomains = await api('/api/domains?all=1');
         if (revision !== domainLoadRevision) return;
         const data = window.WorkspaceData.filterDomains(allDomains, params);
-        domainListData=allDomains.list;visibleDomainRows=data.list;
-        const eligible=new Set(domainListData.filter(d=>d.valid!==false).map(domainRowKey));
+        domainListData=allDomains.list;visibleDomainRows=window.WorkspaceData.groupDomains(data.list);
+        const eligible=new Set(window.WorkspaceData.groupDomains(domainListData.filter(d=>d.valid!==false)).map(domainRowKey));
         for(const key of selectedDomainRows.keys())if(!eligible.has(key))selectedDomainRows.delete(key);
         renderDomainFilterTabs();renderDomainSelection();
-        $('#domains-sub').textContent = `共 ${data.total} 个域名${state.expiring ? '（到期过滤已开启）' : ''}${access ? '（健康状态筛选）' : ''}`;
-        $('#domains-empty').classList.toggle('hidden', data.total !== 0);
+        $('#domains-sub').textContent = `共 ${visibleDomainRows.length} 个域名${state.expiring ? '（到期过滤已开启）' : ''}${access ? '（健康状态筛选）' : ''}`;
+        $('#domains-empty').classList.toggle('hidden', visibleDomainRows.length !== 0);
 
-        if (!data.list.length) {
+        if (!visibleDomainRows.length) {
             tbody.innerHTML = '<tr><td colspan="8" class="muted">无匹配域名</td></tr>';
             return;
         }
         cacheDomainsForModal(data.list);
-        tbody.innerHTML = data.list.map((d) => {
-            const info = providerInfo(d.provider);
-            const invalid = d.valid === false;
-            return `
-            <tr class="${invalid ? 'row-invalid' : ''}">
-                <td><input type="checkbox" data-domain-select="${escapeHtml(domainRowKey(d))}" aria-label="选择域名 ${escapeHtml(d.domain)}" ${selectedDomainRows.has(domainRowKey(d))?'checked':''} ${invalid?'disabled title="失效域名不参与关系图"':''}></td><td class="domain-name">${escapeHtml(d.domain)}${invalid ? ' <span class="badge b-gray">已失效</span>' : ''}</td>
-                <td><span class="badge ${info.cls}">${escapeHtml(info.name)}</span></td>
-                <td><span class="domain-registration-status" title="${escapeHtml(d.status || '—')}">${escapeHtml(d.status || '—')}</span></td>
-                <td>${escapeHtml(d.expire_at || '—')}${d.expire_at ? '<br>' + expireBadge(d.expire_at) : ''}</td>
-                <td>${accessHtml(d.health || d.access)}</td>
-                <td class="note-cell" title="${escapeHtml(d.note || '')}">${d.note ? escapeHtml(d.note) : '<span class="muted">—</span>'}</td>
-                <td class="row-actions">
-                    <button class="btn btn-link btn-sm act-relation" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">关联</button>
-                    <button class="btn btn-link btn-sm act-records" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}" title="管理 DNS 解析记录">解析</button>
-                    <button class="btn btn-link btn-sm act-edit" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">编辑</button>
-                    <button class="btn btn-link-danger btn-sm act-del" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">删除</button>
-                </td>
+        tbody.innerHTML = visibleDomainRows.map((group) => {
+            const accountAvailable = d => d.provider !== 'manual' && (!state.accountsLoaded || state.accounts.some(a => a.id === d.provider && a.enabled !== false));
+            const sources = [...group.sources].sort((a, b) => Number(accountAvailable(b)) - Number(accountAvailable(a)));
+            const invalid = sources.every(d => d.valid === false);
+            const sourceLabel = d => escapeHtml(providerInfo(d.provider).name + (d.provider !== 'manual' && !accountAvailable(d) ? '（账号不可用）' : ''));
+            const perSource = render => sources.map(d => `<div class="domain-source-item">${sources.length > 1 ? `<small class="hc-subline">${sourceLabel(d)}</small>` : ''}${render(d)}</div>`).join('');
+            return `<tr class="${invalid ? 'row-invalid' : ''}">
+                <td><input type="checkbox" data-domain-select="${escapeHtml(domainRowKey(group))}" aria-label="选择域名 ${escapeHtml(group.domain)}" ${selectedDomainRows.has(domainRowKey(group))?'checked':''} ${invalid?'disabled title="失效域名不参与关系图"':''}></td>
+                <td class="domain-name">${escapeHtml(group.domain)}${sources.length > 1 ? `<small class="hc-subline">${sources.length} 个账号</small>` : ''}${invalid ? ' <span class="badge b-gray">已失效</span>' : ''}</td>
+                <td>${sources.map(d => { const info = providerInfo(d.provider); return `<div class="domain-source-item"><span class="badge ${info.cls}">${escapeHtml(info.name)}</span>${d.provider !== 'manual' && !accountAvailable(d) ? '<small class="hc-subline">账号已移除或停用</small>' : ''}</div>`; }).join('')}</td>
+                <td>${perSource(d => `<span class="domain-registration-status" title="${escapeHtml(d.status || '—')}">${escapeHtml(d.status || '—')}${d.valid === false ? '（已失效）' : ''}</span>`)}</td>
+                <td>${perSource(d => `${escapeHtml(d.expire_at || '—')}${d.expire_at ? '<br>' + expireBadge(d.expire_at) : ''}`)}</td>
+                <td>${perSource(d => accessHtml(d.health || d.access))}</td>
+                <td class="note-cell">${perSource(d => `<span title="${escapeHtml(d.note || '')}">${d.note ? escapeHtml(d.note) : '<span class="muted">—</span>'}</span>`)}</td>
+                <td class="row-actions">${perSource(d => `<div><button class="btn btn-link btn-sm act-relation" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">关联</button><button class="btn btn-link btn-sm act-records" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}" ${!accountAvailable(d) ? `disabled title="${d.provider === 'manual' ? '手工域名没有 DNS 托管账号' : '账号已移除或停用，请使用其他可用账号'}"` : ''}>解析</button><button class="btn btn-link btn-sm act-edit" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">编辑</button><button class="btn btn-link-danger btn-sm act-del" data-domain="${escapeHtml(d.domain)}" data-provider="${escapeHtml(d.provider)}">删除</button></div>`)}</td>
             </tr>`;
         }).join('');
     } catch (err) {
@@ -137,7 +135,7 @@ $('#domains-table tbody').addEventListener('click', async (e) => {
         const domain = delBtn.dataset.domain;
         const ok = await confirmDialog({
             title: '删除域名',
-            message: `确定删除域名「${domain}」吗？\n（仅删除本地记录，不影响云商侧域名）`,
+            message: `确定删除「${providerInfo(delBtn.dataset.provider).name}」下的域名「${domain}」吗？\n（仅删除该账号的本地记录，不影响云商侧域名）`,
             confirmText: '删除',
             danger: true,
         });
@@ -273,7 +271,7 @@ function cacheDomainsForModal(list) {
 /* Domain click-tabs and bulk graph navigation; data stays in the shared cache. */
 const selectedDomainRows=new Map();
 let domainListData=[],visibleDomainRows=[];
-function domainRowKey(d){return d.provider+'|'+d.domain;}
+function domainRowKey(d){return String(d.domain || '').trim().replace(/\.$/, '').toLowerCase();}
 function renderDomainFilterTabs(){
     const providerMap=new Map(domainListData.map(d=>[d.provider,{id:d.provider,name:d.provider_name||d.provider}]));
     state.accounts.forEach(a=>providerMap.set(a.id,a));
@@ -293,24 +291,24 @@ function renderDomainSelection(){
     $('#domain-selected-count').closest('.health-selection-bar').classList.toggle('hidden', selectedDomainRows.size === 0);
     $('#domain-selected-count').textContent=selectedDomainRows.size?`已选择 ${selectedDomainRows.size} 个域名（筛选切换时保留）`:'未选择域名';
     $('#domains-to-relations').disabled=selectedDomainRows.size===0;
-    const rows=visibleDomainRows.filter(d=>d.valid!==false),n=rows.filter(d=>selectedDomainRows.has(domainRowKey(d))).length;
+    const rows=visibleDomainRows.filter(d=>d.sources.some(source=>source.valid!==false)),n=rows.filter(d=>selectedDomainRows.has(domainRowKey(d))).length;
     $('#domain-select-all').checked=rows.length>0&&n===rows.length;
     $('#domain-select-all').indeterminate=n>0&&n<rows.length;$('#domain-select-all').disabled=!rows.length;
 }
 document.addEventListener('click',event=>{
     const tab=event.target.closest('[data-domain-filter]');if(!tab)return;
-    const control=$('#'+tab.dataset.domainFilter);control.value=tab.dataset.filterValue;control.dispatchEvent(new Event('change',{bubbles:true}));
+    const control=$('#'+tab.dataset.domainFilter);control.value=control.value===tab.dataset.filterValue && tab.dataset.domainFilter!=='f-sort'?'':tab.dataset.filterValue;control.dispatchEvent(new Event('change',{bubbles:true}));
 });
 document.addEventListener('change',event=>{
     const check=event.target.closest('[data-domain-select]');if(!check)return;
-    const key=check.dataset.domainSelect,row=domainListData.find(d=>domainRowKey(d)===key);
+    const key=check.dataset.domainSelect,row=visibleDomainRows.find(d=>domainRowKey(d)===key);
     if(check.checked&&row)selectedDomainRows.set(key,row);else selectedDomainRows.delete(key);renderDomainSelection();
 });
-$('#domain-select-all').onchange=event=>{visibleDomainRows.filter(d=>d.valid!==false).forEach(d=>event.target.checked?selectedDomainRows.set(domainRowKey(d),d):selectedDomainRows.delete(domainRowKey(d)));loadDomains();};
+$('#domain-select-all').onchange=event=>{visibleDomainRows.filter(d=>d.sources.some(source=>source.valid!==false)).forEach(d=>event.target.checked?selectedDomainRows.set(domainRowKey(d),d):selectedDomainRows.delete(domainRowKey(d)));loadDomains();};
 $('#domain-selection-clear').onclick=()=>{selectedDomainRows.clear();loadDomains();};
 $('#domains-to-relations').onclick=async event=>{
     const button=event.currentTarget;button.disabled=true;
-    try{const snapshot=await api('/api/health');const ids=snapshot.assets.filter(a=>a.kind==='domain'&&[...selectedDomainRows.values()].some(d=>d.provider===a.provider&&d.domain.toLowerCase()===a.name)).map(a=>a.id);
+    try{const snapshot=await api('/api/health');const ids=snapshot.assets.filter(a=>a.kind==='domain'&&[...selectedDomainRows.values()].some(group=>group.sources.some(d=>d.valid!==false&&d.provider===a.provider&&domainRowKey(d)===a.name))).map(a=>a.id);
         if(ids.length)window.Relationships.showDomains(ids);else toast('没有可展示的有效域名，请更新列表','error');
     }catch(error){toast(error.message,'error');}finally{renderDomainSelection();}
 };

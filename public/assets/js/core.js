@@ -5,6 +5,7 @@ const $$ = (sel) => document.querySelectorAll(sel);
 
 const state = {
     accounts: [],          // 账号列表（含脱敏密钥）
+    accountsLoaded: false,
     tab: 'dashboard',
     expiring: '',          // 列表页到期过滤（'' | expired | 7 | 15 | 30）
     csrf: '',

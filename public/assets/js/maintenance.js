@@ -53,8 +53,56 @@ window.WorkspaceMaintenance = (() => {
             $('#maintenance-audit').innerHTML = data.audit.length ? data.audit.map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}</td><td>${escapeHtml(entry.actor)}<small>${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(routeNames[entry.route] || (entry.route.includes('/records') ? 'DNS 操作' : entry.route))}<small>${escapeHtml(entry.method)} ${escapeHtml(entry.targets.join(' · '))}</small></td><td><span class="badge ${entry.outcome === 'success' ? 'b-green' : entry.outcome === 'failed' ? 'b-red' : 'b-amber'}">${labels[entry.outcome] || '待核实'}</span></td></tr>`).join('') : '<tr><td colspan="4" class="muted">暂无操作记录，后续通过权限校验的写入操作会记录在这里。</td></tr>';
             const dnsLabels = {verified: '云端已核实', unchanged: '无需变更', pending: '处理中 / 待核实', unconfirmed: '待核实'};
             $('#maintenance-dns-changes').innerHTML = (data.dns_changes || []).map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}<small>${escapeHtml(entry.actor)} · ${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(entry.domain)}<small>${escapeHtml(entry.account)}</small></td><td>${({add:'新增',update:'修改',delete:'删除'})[entry.action] || '变更'}<br><span class="badge ${['verified','unchanged'].includes(entry.outcome) ? 'b-green' : 'b-amber'}">${dnsLabels[entry.outcome] || '待核实'}</span></td><td><details><summary>查看差异</summary><small>变更编号：${escapeHtml(entry.id)}</small><pre class="dns-change-values">${escapeHtml(JSON.stringify({原值:entry.before,拟提交:entry.requested,回读值:entry.after},null,2))}</pre></details></td></tr>`).join('') || '<tr><td colspan="4" class="muted">暂无 DNS 变更记录。</td></tr>';
+            renderProposals(data.ai_proposals || []);
         } catch (failure) { if (request === generation && visible()) error(failure.message); }
     }
+
+    const proposalLabels = {pending: '待审批', executed: '已执行', failed: '执行失败', rejected: '已拒绝'};
+    const proposalBadges = {pending: 'b-amber', executed: 'b-green', failed: 'b-red', rejected: ''};
+    function renderProposals(proposals) {
+        const actions = proposal => {
+            if (proposal.status !== 'pending') return '';
+            const id = escapeHtml(proposal.id);
+            return `<div class="maintenance-actions"><button class="btn btn-sm btn-primary" data-proposal-approve="${id}">批准执行</button><button class="btn btn-sm" data-proposal-reject="${id}">拒绝</button></div>`;
+        };
+        $('#maintenance-proposals').innerHTML = proposals.length ? proposals.map(proposal => {
+            const record = proposal.record || {};
+            const change = ({add:'新增', update:'改为', delete:'删除'})[proposal.action] || proposal.action;
+            const target = `${escapeHtml(proposal.domain)} <small>${escapeHtml(proposal.account)}</small>`;
+            const detail = proposal.action === 'delete'
+                ? `${escapeHtml(record.type || '')} ${escapeHtml(record.name || '@')}（记录 ${escapeHtml(proposal.record_id || '')}）`
+                : `${escapeHtml(record.type || '')} ${escapeHtml(record.name || '@')} ${change === '改为' ? '→' : ''} ${escapeHtml(record.value || '')}`;
+            const before = proposal.before ? `<small>当前缓存值：${escapeHtml(proposal.before.type || '')} ${escapeHtml(proposal.before.name || '@')} = ${escapeHtml(proposal.before.value || '')}</small>` : '';
+            const outcome = proposal.result ? `<small>${escapeHtml(proposal.result.message || '')}</small>`
+                : proposal.error ? `<small>${escapeHtml(proposal.error)}</small>`
+                : proposal.reason ? `<small>拒绝原因：${escapeHtml(proposal.reason)}</small>` : '';
+            const rationale = `${escapeHtml(proposal.rationale)}${proposal.evidence ? `<small>依据：${escapeHtml(proposal.evidence)}</small>` : ''}`;
+            const who = proposal.status === 'pending' ? escapeHtml(proposal.created_by || '')
+                : escapeHtml(proposal.approved_by || proposal.rejected_by || '');
+            return `<tr><td>${escapeHtml(date(proposal.created_at))}<small>${who}</small></td><td>${target}<small>${detail}</small>${before}</td><td>${rationale}</td><td><span class="badge ${proposalBadges[proposal.status] || ''}">${proposalLabels[proposal.status] || proposal.status}</span>${outcome}</td><td>${actions(proposal)}</td></tr>`;
+        }).join('') : '<tr><td colspan="5" class="muted">暂无 AI 提案。为 AI 密钥授予 proposals:write 后，它可以在发现问题时提交变更建议。</td></tr>';
+    }
+
+    $('#maintenance-proposals').addEventListener('click', event => {
+        const approve = event.target.closest('[data-proposal-approve]');
+        const reject = event.target.closest('[data-proposal-reject]');
+        if (!approve && !reject) return;
+        const button = approve || reject;
+        const id = approve ? button.dataset.proposalApprove : button.dataset.proposalReject;
+        const proposal = (snapshot?.ai_proposals || []).find(item => item.id === id);
+        action(button, async () => {
+            if (reject) {
+                const reason = await promptDialog({title: '拒绝提案', message: `拒绝 ${proposal ? proposal.domain : ''} 的变更提案？可填写原因，AI 会看到它。`, placeholder: '拒绝原因（可选）', okText: '拒绝'});
+                if (reason === null) return;
+                await api('/api/proposals/' + encodeURIComponent(id) + '/reject', {method: 'POST', body: JSON.stringify({reason})});
+                $('#maintenance-message').textContent = '提案已拒绝。AI 可读取状态后重新提交。';
+            } else {
+                await api('/api/proposals/' + encodeURIComponent(id) + '/approve', {method: 'POST', body: '{}'});
+                $('#maintenance-message').textContent = '提案已执行；回读结果见状态列，解析传播仍需等待。';
+            }
+            await load();
+        });
+    });
 
     function download(file, type = 'application/json;charset=utf-8') {
         const url = URL.createObjectURL(new Blob([file.content], {type}));

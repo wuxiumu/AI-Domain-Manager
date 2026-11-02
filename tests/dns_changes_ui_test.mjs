@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 
-function fixture() {
+function fixture(respond = async()=>({ok:true,verified:true,message:'verified'})) {
     const calls = [], notifications = [], overlays = [];
     const document = {activeElement:{focus(){}},fullscreenElement:null,
         body:{appendChild(node){overlays.push(node);}},
@@ -17,7 +17,7 @@ function fixture() {
         },
     };
     const context = vm.createContext({document,window:{},toast:(...args)=>notifications.push(args),
-        api:async(endpoint,options)=>{calls.push({endpoint,options});return {ok:true,verified:true,message:'verified'};},
+        api:async(endpoint,options)=>{calls.push({endpoint,options});return respond(endpoint, options);},
         escapeHtml:value=>String(value ?? '').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;'),
     });
     vm.runInContext(fs.readFileSync(new URL('../public/assets/js/dns-changes.js',import.meta.url),'utf8'),context);
@@ -85,4 +85,45 @@ test('unconfirmed outcomes are never shown as successful and writes are not retr
     const owner={isConnected:false};
     await assert.rejects(f.ui.write(f.ui.prepare({endpoint:'/api/records/r1',action:'delete',record,owner})),/窗口已关闭/);
     assert.equal(f.calls.length,0);
+});
+
+test('batch value updates continue after failure and unconfirmed outcomes without retry',async()=>{
+    const f=fixture(async endpoint=>{
+        if(endpoint.endsWith('/1')) throw Object.assign(new Error('账号不存在'),{status:404});
+        if(endpoint.endsWith('/2')) return {verified:false,message:'请核实',change_id:'change-2'};
+        return {verified:true,message:'已核实'};
+    });
+    const pending=f.ui.batchValues([1,2,3].map(n=>({endpoint:'/api/records/'+n,action:'update',record:{...record,id:String(n)},params:{value:'192.0.2.2'},target:'example.com'})));
+    f.overlays[0].querySelector('.dns-review-confirm').onclick();
+    const result=await pending;
+    assert.deepEqual(Array.from(result, item=>item.status),['失败','待核实','已核实']);
+    assert.equal(result[1].changeId,'change-2');
+    assert.equal(f.calls.length,3);
+    f.ui.showBatchReport(result,'批量修改 DNS 记录值');
+    const report=f.overlays[1].querySelector('.dns-report-text').value;
+    assert.match(report,/失败 1 · 待核实 1/);
+    assert.match(report,/账号不存在（HTTP 404）/);
+    assert.match(report,/变更编号: change-2/);
+    assert.match(report,/192\.0\.2\.1 → 192\.0\.2\.2/);
+});
+
+test('batch additions parse tab-separated records and reject malformed input before preview',()=>{
+    const {ui}=fixture();
+    const items=ui.parseBatchAdds('a\twww\t192.0.2.1\nTXT\t@\ttext with spaces\t300\t10');
+    assert.equal(items.length,2);
+    assert.equal(items[0].type,'A'); assert.equal(items[0].ttl,600);
+    assert.equal(items[1].value,'text with spaces'); assert.equal(items[1].priority,10);
+    assert.throws(()=>ui.parseBatchAdds('A www 192.0.2.1'),/第 1 行/);
+    assert.throws(()=>ui.parseBatchAdds('A\twww\t192.0.2.1\t0'),/TTL/);
+});
+
+test('batch additions use each verified revision and stop on an uncertain result',async()=>{
+    let n=0;
+    const f=fixture(async()=>++n===1 ? {verified:true,revision:'c'.repeat(64)} : {verified:false,message:'未确认'});
+    const plans=[1,2,3].map(i=>f.ui.prepare({endpoint:'/records',action:'add',revision:'b'.repeat(64),params:{type:'A',name:String(i),value:'192.0.2.1'}}));
+    const result=await f.ui.writeBatchAdds(plans);
+    assert.equal(result.completed,1); assert.match(result.message,/待核实/);
+    assert.equal(f.calls.length,2);
+    assert.equal(JSON.parse(f.calls[0].options.body).expected_revision,'b'.repeat(64));
+    assert.equal(JSON.parse(f.calls[1].options.body).expected_revision,'c'.repeat(64));
 });

@@ -48,6 +48,17 @@ window.WorkspaceCache = (() => {
 })();
 
 window.WorkspaceData = {
+    groupDomains(rows) {
+        const groups = new Map();
+        for (const row of rows) {
+            const key = String(row.domain || '').trim().replace(/\.$/, '').toLowerCase();
+            if (!key) continue;
+            if (!groups.has(key)) groups.set(key, {...row, domain: key, sources: []});
+            const sources = groups.get(key).sources;
+            if (!sources.some(source => source.provider === row.provider)) sources.push(row);
+        }
+        return [...groups.values()];
+    },
     filterDomains(data, params) {
         const today = new Date().toLocaleDateString('en-CA', {timeZone:'Asia/Shanghai'});
         const date = new Date(today + 'T00:00:00+08:00').getTime();

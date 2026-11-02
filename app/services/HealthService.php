@@ -32,14 +32,39 @@ class HealthService
         // minute so health-age and calendar classifications remain accurate.
         if (!class_exists('SnapshotCache') || $this->probe || $this->dnsLookup || $this->httpProbe) { return $this->buildDashboard(); }
         return SnapshotCache::remember($this->dir, 'health-dashboard-v6',
-            array_merge([$this->dir . '/domains.json', $this->dir . '/health.json', $this->dir . '/access_check.json'], glob($this->dir . '/cache/dns-*.json') ?: []),
+            array_merge([$this->dir . '/domains.json', $this->dir . '/health.json', $this->dir . '/access_check.json', $this->dir . '/ip_locations.json'], glob($this->dir . '/cache/dns-*.json') ?: []),
             function () { return $this->buildDashboard(); }, time() + 60);
+    }
+
+    public function operations(): array
+    {
+        $dashboard = $this->dashboard();
+        $pending = []; $unreachable = [];
+        foreach ($dashboard['assets'] as $asset) {
+            if ($asset['kind'] !== 'domain') { continue; }
+            $health = $asset['health'];
+            $https = $health['protocols']['https']['status'] ?? null;
+            if (!empty($health['invalidated'])) { $https = null; }
+            $item = ['id' => $asset['id'], 'domain' => $asset['name'], 'provider' => $asset['provider'],
+                'checked_at' => $health['checked_at'] ?? null, 'health_status' => $health['status'],
+                'https_status' => $https ?? 'unknown', 'resolved_ips' => $health['resolved_ips'] ?? [],
+                'message' => $health['message'] ?? ''];
+            if ($https !== 'healthy') { $pending[] = $item; }
+            if (($health['last_status'] ?? null) === 'unhealthy') { $unreachable[] = $item; }
+        }
+        return ['ok' => true, 'generated_at' => $dashboard['generated_at'], 'pending_domains' => $pending,
+            'unhealthy_domains' => $unreachable];
     }
 
     private function buildDashboard(): array
     {
         $state = $this->readState();
         $assets = $this->assets($state);
+        $locations = class_exists('PrivateJsonStore') ? (new PrivateJsonStore($this->dir . '/ip_locations.json'))->read() : [];
+        foreach ($assets as &$asset) {
+            if ($asset['kind'] === 'ip') { $asset['location'] = $locations[$asset['ip']] ?? null; }
+        }
+        unset($asset);
         $summary = ['domains' => 0, 'ips' => 0, 'healthy' => 0, 'unhealthy' => 0, 'stale' => 0, 'unchecked' => 0, 'expiring_30' => 0];
         $last = null;
         foreach ($assets as $asset) {

@@ -36,10 +36,12 @@ async function showApp() {
     $('#app-view').classList.remove('hidden');
     try {
         state.accounts = await api('/api/accounts');
+        state.accountsLoaded = true;
         $('#current-user').textContent = '已登录';
         renderDomainFilterTabs();
     } catch {
         state.accounts = [];
+        state.accountsLoaded = false;
     }
     const initial = location.hash.slice(1).split('?')[0];
     switchTab(['dashboard', 'calendar', 'relations', 'domains', 'ips', 'keys', 'settings'].includes(initial) ? initial : 'dashboard');

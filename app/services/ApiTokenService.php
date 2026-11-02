@@ -10,6 +10,7 @@ class ApiTokenService
         'dns:write' => '修改云端 DNS 解析',
         'checks:run' => '执行健康与访问检查',
         'sync:run' => '同步域名与测试云连接',
+        'proposals:write' => '提交待审批的 DNS 变更提案（不直接写云端）',
     ];
     private PrivateJsonStore $store;
     private SettingsService $settings;

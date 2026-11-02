@@ -2,10 +2,44 @@
 
 class HealthController
 {
+    public function refreshLocation(string $id): void
+    {
+        Auth::requireLogin();
+        if (session_status() === PHP_SESSION_ACTIVE) { session_write_close(); }
+        $this->respond(static function () use ($id) { return (new IpLocationService(DATA_DIR))->refresh($id); });
+    }
+
+    public function operations(): void
+    {
+        Auth::requireLogin();
+        $this->respond(static function () { return (new HealthService())->operations(); });
+    }
+
     public function index(): void
     {
         Auth::requireLogin();
         $this->respond(static function () { return (new HealthService())->dashboard(); });
+    }
+
+    /** AI 协同入口：把缓存证据整理成可直接交给 AI 分析的报告。 */
+    public function report(): void
+    {
+        Auth::requireLogin();
+        try {
+            $report = (new AiReportService())->report();
+        } catch (Throwable $e) {
+            json_out(['ok' => false, 'error' => '生成报告失败：' . $e->getMessage()], 500);
+        }
+        $format = strtolower(trim((string) ($_GET['format'] ?? '')));
+        if ($format === 'markdown' || $format === 'md') {
+            // GET requests are not journalled; plain markdown is safe to emit directly.
+            header('Content-Type: text/markdown; charset=utf-8');
+            header('Content-Disposition: inline; filename="health-report.md"');
+            header('Cache-Control: no-store');
+            echo $report['markdown'];
+            return;
+        }
+        json_out($report);
     }
 
     public function addIp(): void

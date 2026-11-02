@@ -28,6 +28,12 @@ function openRecordsModal(domain, provider) {
                         </div>
                     </div>
                 </div>
+                <div id="rec-batch-form" class="rec-form hidden">
+                    <label for="rec-batch-input">批量添加解析记录</label> <button type="button" class="btn btn-sm" id="rec-batch-example">查看并复制示例</button>
+                    <p class="muted">每行一条，字段用 Tab 分隔：类型、主机记录、记录值、TTL（可选，默认 600）、优先级（可选，默认 0）。可从表格复制粘贴。</p>
+                    <textarea id="rec-batch-input" rows="5" style="width:100%;box-sizing:border-box;resize:vertical" placeholder="A&#9;www&#9;192.0.2.1&#9;600&#10;CNAME&#9;blog&#9;example.com"></textarea>
+                    <div class="rec-form-actions"><button class="btn btn-sm" id="rec-batch-cancel">取消</button><button class="btn btn-sm btn-primary" id="rec-batch-save">预览批量添加</button></div>
+                </div>
                 <div class="table-wrap">
                     <table id="rec-table">
                         <thead><tr>
@@ -46,7 +52,7 @@ function openRecordsModal(domain, provider) {
                     <button class="btn btn-sm" id="rec-batch-value" disabled>批量修改记录值</button>
                     <button class="btn btn-sm btn-link-danger" id="rec-batch-del" disabled>批量删除</button>
                 </div>
-                <button class="btn" id="rec-refresh-btn">刷新云端记录</button><button class="btn" id="rec-add-btn">＋ 添加记录</button>
+                <button class="btn" id="rec-refresh-btn">刷新云端记录</button><button class="btn" id="rec-add-btn">＋ 添加记录</button><button class="btn" id="rec-batch-add-btn">批量添加</button>
                 <button class="btn" id="rec-access-btn" title="探测各记录指向的主机/IP 能否访问">🛰 检测访问</button>
             </div>
         </div>`;
@@ -60,7 +66,7 @@ function openRecordsModal(domain, provider) {
     const endpoint = `/api/domains/${encodeURIComponent(provider)}/${encodeURIComponent(domain)}/records`;
     const recApi = (path, opts) => api(endpoint + path, opts);
     let busy = false, zoneRevision = '', editingRecord = null, loadGeneration = 0;
-    const target = `${domain} · ${providerInfo(provider).name}`;
+    const target = `${domain} · ${providerInfo(provider).name} (${provider})`;
     const plan = (action, record, params) => window.WorkspaceDns.prepare({endpoint: endpoint + (record ? '/' + encodeURIComponent(record.id) : ''), action, record, params, revision: zoneRevision, owner: overlay, target});
     function setBusy(value) {
         busy = value;
@@ -123,6 +129,8 @@ function openRecordsModal(domain, provider) {
         } catch (err) {
             if (request !== loadGeneration || !overlay.isConnected) return;
             $('#rec-loading').classList.add('hidden');
+            $('#rec-empty').classList.add('hidden');
+            $('#rec-count').textContent = '读取失败';
             $('#rec-table tbody').innerHTML = '<tr><td colspan="8" class="fail">' + escapeHtml(err.message) + '</td></tr>';
         }
     }
@@ -191,8 +199,16 @@ function openRecordsModal(domain, provider) {
         const input = await promptDialog({title: '批量修改记录值', message: `修改 ${records.length} 条记录，下一步预览差异：`, value: '', okText: '预览差异'});
         if (input === null) return;
         if (!input.trim()) return toast('记录值不能为空', 'error');
-        try { await runBatch(records.map(record => plan('update', record, {value: input.trim()})), '批量修改记录值'); }
-        catch (error) { toast(error.message, 'error'); }
+        setBusy(true);
+        try {
+            const options = records.map(record => ({endpoint: endpoint + '/' + encodeURIComponent(record.id), action:'update', record,
+                params:{value:input.trim()}, owner:overlay, target}));
+            const results = await window.WorkspaceDns.batchValues(options, (done, total) => { if (overlay.isConnected) $('#rec-count').textContent = `处理 ${done} / ${total} 条`; });
+            if (!results) return;
+            if (overlay.isConnected) await loadRecords();
+            window.WorkspaceDns.showBatchReport(results, '批量修改 DNS 记录值');
+        } catch (error) { toast(error.message, 'error'); }
+        finally { if (overlay.isConnected) setBusy(false); }
     });
     $('#rec-batch-del').addEventListener('click', async () => {
         if (busy) return;
@@ -217,6 +233,7 @@ function openRecordsModal(domain, provider) {
         if (busy) return;
         editingRecord = record ? {...record} : null;
         editingId = record ? record.id : null;
+        $('#rec-batch-form').classList.add('hidden');
         $('#rec-form').classList.remove('hidden');
         $('#rec-add-btn').classList.add('hidden');
         if (record) {
@@ -244,6 +261,53 @@ function openRecordsModal(domain, provider) {
 
     $('#rec-refresh-btn').addEventListener('click', async (event) => { const button = event.currentTarget; button.disabled = true; try { await loadRecords(true); } finally { button.disabled = false; } });
     $('#rec-add-btn').addEventListener('click', () => showForm(null));
+    $('#rec-batch-add-btn').addEventListener('click', () => {
+        if (busy) return;
+        hideForm();
+        $('#rec-batch-form').classList.remove('hidden');
+        $('#rec-batch-input').focus();
+    });
+    $('#rec-batch-example').addEventListener('click', () => {
+        const example = document.createElement('div');
+        example.className = 'modal-overlay';
+        example.innerHTML = `<section class="modal" role="dialog" aria-modal="true" aria-labelledby="rec-example-title"><div class="modal-head"><h3 id="rec-example-title">批量添加格式示例</h3><button class="modal-close" type="button" aria-label="关闭示例">×</button></div><div class="modal-body"><p>每行一条记录，字段之间使用 Tab 分隔。依次填写：类型、主机记录、记录值、TTL、优先级。后两项可省略，分别默认为 600 和 0。</p><p class="muted">以下域名和 IP 仅供参考，提交前请替换成自己的记录。</p><label for="rec-example-text">可复制的示例</label><textarea id="rec-example-text" readonly rows="5" style="display:block;width:100%;box-sizing:border-box;resize:vertical"></textarea><p id="rec-example-status" class="muted" role="status"></p></div><div class="modal-foot"><button class="btn" type="button" id="rec-example-close">关闭</button><button class="btn btn-primary" type="button" id="rec-example-copy">复制示例</button></div></section>`;
+        (document.fullscreenElement || document.body).appendChild(example);
+        const text = example.querySelector('#rec-example-text');
+        text.value = 'A\twww\t192.0.2.1\t600\t0\nCNAME\tblog\texample.com\t600\t0\nMX\t@\tmail.example.com\t600\t10\nTXT\t@\tv=spf1 -all\t600\t0';
+        const close = () => { example.remove(); $('#rec-batch-example').focus(); };
+        example.querySelector('.modal-close').addEventListener('click', close);
+        example.querySelector('#rec-example-close').addEventListener('click', close);
+        example.addEventListener('click', event => { if (event.target === example) close(); });
+        example.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } });
+        example.querySelector('#rec-example-copy').addEventListener('click', async () => {
+            try { await navigator.clipboard.writeText(text.value); example.querySelector('#rec-example-status').textContent = '示例已复制'; }
+            catch { text.focus(); text.select(); example.querySelector('#rec-example-status').textContent = '请复制已选中的示例'; }
+        });
+        example.querySelector('#rec-example-copy').focus();
+    });
+    $('#rec-batch-cancel').addEventListener('click', () => $('#rec-batch-form').classList.add('hidden'));
+    $('#rec-batch-save').addEventListener('click', async () => {
+        if (busy) return;
+        let plans;
+        try {
+            const entries = window.WorkspaceDns.parseBatchAdds($('#rec-batch-input').value);
+            plans = entries.map(params => plan('add', null, params));
+        } catch (error) { toast(error.message, 'error'); return; }
+        setBusy(true);
+        try {
+            if (!await window.WorkspaceDns.confirm(plans)) return;
+            const result = await window.WorkspaceDns.writeBatchAdds(plans, (done, total) => {
+                if (overlay.isConnected) $('#rec-count').textContent = `正在提交 ${done} / ${total}`;
+            });
+            if (!overlay.isConnected) return;
+            if (result.completed === plans.length) {
+                $('#rec-batch-input').value = '';
+                $('#rec-batch-form').classList.add('hidden');
+            }
+            toast(`批量添加：已核实 ${result.completed} 条，${result.message}`, result.completed === plans.length ? 'success' : 'error', 10000);
+            await loadRecords();
+        } finally { if (overlay.isConnected) setBusy(false); }
+    });
     $('#rec-form .btn-cancel').addEventListener('click', hideForm);
 
     $('#rec-access-btn').addEventListener('click', async (e) => {

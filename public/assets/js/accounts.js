@@ -7,6 +7,7 @@ async function loadKeys() {
     try {
         const accounts = await api('/api/accounts');
         state.accounts = accounts;
+        state.accountsLoaded = true;
         renderDomainFilterTabs();
         renderCards(accounts);
     } catch (err) {

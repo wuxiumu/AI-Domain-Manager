@@ -25,10 +25,10 @@ EXAMPLE_ROOTS = {"example.com", "example.net", "example.org"}
 PUBLIC_HOSTS = {
     "api.alibabacloud.com", "api.github.com", "classic-developer.godaddy.com",
     "github.com", "betterstack.com", "docs.dnscontrol.org", "api.godaddy.com",
-    "help.aliyun.com", "cloud.tencent.com",
+    "help.aliyun.com", "cloud.tencent.com", "ipwhois.io",
 }
 FILE_SUFFIXES = {
-    "md", "php", "js", "mjs", "css", "json", "py", "sh", "txt", "lock",
+    "md", "php", "js", "mjs", "css", "json", "py", "sh", "txt", "lock", "log",
     "png", "jpg", "jpeg", "webp", "svg", "gif", "pdf", "zip", "yaml", "yml",
 }
 # Reviewed screenshots captured from an isolated demo installation with synthetic data.
