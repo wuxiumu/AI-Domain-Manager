@@ -6,6 +6,8 @@ class DomainController
     public function index(): void
     {
         Auth::requireLogin();
+        // 台账与筛选条件都未变化时直接 304，跳过健康快照重建与全量列表传输。
+        conditional_get(asset_etag((string) ($_SERVER['QUERY_STRING'] ?? '')));
 
         $domains = JsonStore::read(DATA_DIR . '/domains.json', []);
         if (!is_array($domains)) {

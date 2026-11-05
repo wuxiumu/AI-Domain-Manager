@@ -56,8 +56,8 @@ async function loadDomains() {
             const perSource = render => sources.map(d => `<div class="domain-source-item">${sources.length > 1 ? `<small class="hc-subline">${sourceLabel(d)}</small>` : ''}${render(d)}</div>`).join('');
             return `<tr class="${invalid ? 'row-invalid' : ''}">
                 <td><input type="checkbox" data-domain-select="${escapeHtml(domainRowKey(group))}" aria-label="选择域名 ${escapeHtml(group.domain)}" ${selectedDomainRows.has(domainRowKey(group))?'checked':''} ${invalid?'disabled title="失效域名不参与关系图"':''}></td>
-                <td class="domain-name">${escapeHtml(group.domain)}${sources.length > 1 ? `<small class="hc-subline">${sources.length} 个账号</small>` : ''}${invalid ? ' <span class="badge b-gray">已失效</span>' : ''}</td>
-                <td>${sources.map(d => { const info = providerInfo(d.provider); return `<div class="domain-source-item"><span class="badge ${info.cls}">${escapeHtml(info.name)}</span>${d.provider !== 'manual' && !accountAvailable(d) ? '<small class="hc-subline">账号已移除或停用</small>' : ''}</div>`; }).join('')}</td>
+                <td class="domain-name"><button type="button" class="hc-asset-link act-detail" data-domain="${escapeHtml(group.domain)}" data-provider="${escapeHtml(sources[0]?.provider || '')}" title="打开域名操作中枢：解析、检查、绑定与变更记录">${escapeHtml(group.domain)}</button>${sources.length > 1 ? `<small class="hc-subline">${sources.length} 个账号</small>` : ''}${invalid ? ' <span class="badge b-gray">已失效</span>' : ''}</td>
+                <td>${sources.map(d => { const info = providerInfo(d.provider); return `<div class="domain-source-item"><span class="badge ${info.cls}">${escapeHtml(info.name)}</span>${d.provider !== 'manual' && !accountAvailable(d) ? `<small class="hc-subline">账号已移除或停用 <button type="button" class="btn btn-link btn-sm act-cleanup" data-goto-tab="settings" data-goto-panel="cleanup">清理</button></small>` : ''}</div>`; }).join('')}</td>
                 <td>${perSource(d => `<span class="domain-registration-status" title="${escapeHtml(d.status || '—')}">${escapeHtml(d.status || '—')}${d.valid === false ? '（已失效）' : ''}</span>`)}</td>
                 <td>${perSource(d => `${escapeHtml(d.expire_at || '—')}${d.expire_at ? '<br>' + expireBadge(d.expire_at) : ''}`)}</td>
                 <td>${perSource(d => accessHtml(d.health || d.access))}</td>
@@ -91,10 +91,6 @@ async function loadAccessSummary() {
     const el = $('#access-summary');
     try {
         const data = await api('/api/access-check');
-        if (!data.ok) {
-            el.innerHTML = '尚未执行访问检测，点击"🛰 访问检测"探测全部域名';
-            return;
-        }
         const failLink = data.fail > 0
             ? `<a class="rec-link" id="access-fail-link" href="javascript:void(0)">异常 ${data.fail} 个</a>`
             : '异常 0 个';
@@ -103,18 +99,142 @@ async function loadAccessSummary() {
             $('#f-access').value = 'unhealthy';
             loadDomains();
         });
-    } catch {
-        el.innerHTML = '';
+    } catch (err) {
+        // 首次使用时接口以 ok:false 表示「尚未检测过」（HTTP 200），与访问检测弹窗口径一致。
+        el.innerHTML = err?.status === 200
+            ? '尚未执行访问检测，点击"🛰 访问检测"探测全部域名'
+            : '<span class="muted">访问检测记录加载失败，请稍后重试。</span>';
     }
 }
 
-$('#access-check-btn').addEventListener('click', () => {
-    switchTab('dashboard');
-    window.HealthWorkbench?.checkDomains();
-});
+/* ---------- 访问检测弹窗：一键探测全部域名能否访问，展示并留存状态与时间 ---------- */
+const accessModal = { results: [], filter: 'all', running: false };
+
+function accessRowHtml(r) {
+    const info = providerInfo(r.provider);
+    const ok = r.status === 'ok';
+    const status = ok
+        ? `<span class="badge b-green">ok${r.http_code ? ' ' + escapeHtml(String(r.http_code)) : ''}</span>`
+        : `<span class="badge b-red">✗ ${escapeHtml(String(r.http_code || '失败'))}</span>`;
+    const detail = ok ? `${escapeHtml(String(r.ms))} ms` : `<span class="detail">${escapeHtml(r.error || '无法访问')}</span>`;
+    return `<tr class="${ok ? '' : 'row-invalid'}">
+        <td class="domain-name">${escapeHtml(r.domain)}</td>
+        <td><span class="badge ${info.cls}">${escapeHtml(info.name)}</span></td>
+        <td>${status}<small class="hc-subline">${detail}</small></td>
+        <td class="hc-time">${escapeHtml(r.ms != null ? r.ms + ' ms' : '—')}</td>
+        <td class="hc-time">${escapeHtml(r.checked_at || '—')}</td>
+    </tr>`;
+}
+
+function renderAccessModal() {
+    const rows = accessModal.results.filter(r => accessModal.filter === 'all' || r.status === accessModal.filter);
+    $('#access-modal-table tbody').innerHTML = rows.length
+        ? rows.map(accessRowHtml).join('')
+        : '<tr><td colspan="5" class="muted">没有符合筛选的结果</td></tr>';
+    document.querySelectorAll('[data-access-filter]').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.accessFilter === accessModal.filter)));
+}
+
+async function openAccessCheckModal() {
+    if ($('#access-check-overlay')) return;
+    const overlay = document.createElement('div');
+    overlay.id = 'access-check-overlay';
+    overlay.className = 'modal-overlay';
+    const returnFocus = document.activeElement;
+    overlay.innerHTML = `
+        <section class="modal modal-wide" role="dialog" aria-modal="true" aria-labelledby="access-check-title">
+            <div class="modal-head">
+                <h3 id="access-check-title">域名访问检测 <span id="access-modal-meta" class="muted" role="status" aria-live="polite"></span></h3>
+                <button class="modal-close" aria-label="关闭访问检测">×</button>
+            </div>
+            <div class="modal-body">
+                <p id="access-modal-summary" class="muted">正在读取上次检测结果…</p>
+                <div class="access-filters" role="group" aria-label="访问检测结果筛选">
+                    <button type="button" class="domain-filter-tab" data-access-filter="all" aria-pressed="true">全部</button>
+                    <button type="button" class="domain-filter-tab" data-access-filter="ok" aria-pressed="false">可访问</button>
+                    <button type="button" class="domain-filter-tab" data-access-filter="fail" aria-pressed="false">异常</button>
+                </div>
+                <div class="table-wrap">
+                    <table id="access-modal-table">
+                        <thead><tr><th>域名</th><th>云商</th><th>访问状态</th><th>耗时</th><th>检查时间</th></tr></thead>
+                        <tbody><tr><td colspan="5" class="muted">正在加载…</td></tr></tbody>
+                    </table>
+                </div>
+                <p class="panel-caption"><span class="info-dot">i</span> 检测并发探测全部有效域名的 HTTP 访问（4 秒超时，结果与时间保存在服务器）；HTTPS 证书与健康检查请查看看板「检查主域名与 IP」。</p>
+            </div>
+            <div class="modal-foot">
+                <button type="button" class="btn" data-access-close>关闭</button>
+                <button type="button" class="btn btn-primary" id="access-modal-run">一键检测</button>
+            </div>
+        </section>`;
+    (document.fullscreenElement || document.body).appendChild(overlay);
+    const close = () => { overlay.remove(); returnFocus?.focus(); };
+    overlay.querySelector('.modal-close').onclick = close;
+    overlay.querySelector('[data-access-close]').onclick = close;
+    overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+    overlay.addEventListener('keydown', e => { if (e.key === 'Escape') { e.preventDefault(); close(); } });
+    overlay.querySelector('.modal-close')?.focus();
+
+    const summary = $('#access-modal-summary');
+    const meta = $('#access-modal-meta');
+    const renderSummary = d => {
+        meta.textContent = d.checked_at ? `上次检测 ${d.checked_at}` : '尚未检测过';
+        summary.textContent = d.total != null && d.total > 0
+            ? `共检测 ${d.total} 个域名：可访问 ${d.ok} · 异常 ${d.fail}。结果已保存，本页「健康状态」列与首页问题中心同源使用。`
+            : '尚未执行过访问检测，点击「一键检测」探测全部域名能否访问。';
+    };
+    try {
+        const data = await api('/api/access-check');
+        accessModal.results = data.results || [];
+        renderSummary(data);
+        renderAccessModal();
+    } catch (err) {
+        // 首次使用时接口以 ok:false 表示「尚未检测过」，属正常状态而非错误。
+        accessModal.results = [];
+        if (err.status === 200) {
+            meta.textContent = '尚未检测过';
+            summary.textContent = '尚未执行过访问检测，点击「一键检测」探测全部域名能否访问。';
+        } else {
+            summary.textContent = '读取上次结果失败：' + err.message;
+        }
+        $('#access-modal-table tbody').innerHTML = '<tr><td colspan="5" class="muted">暂无结果</td></tr>';
+    }
+
+    overlay.addEventListener('click', e => {
+        const tab = e.target.closest('[data-access-filter]');
+        if (tab) { accessModal.filter = tab.dataset.accessFilter; renderAccessModal(); }
+    });
+    $('#access-modal-run').addEventListener('click', async () => {
+        if (accessModal.running) return;
+        accessModal.running = true;
+        const btn = $('#access-modal-run');
+        btn.disabled = true;
+        const original = btn.textContent;
+        btn.textContent = '检测中…';
+        summary.textContent = '正在并发探测全部域名（4 秒超时），请稍候…';
+        try {
+            const data = await api('/api/access-check', { method: 'POST' });
+            accessModal.results = data.results || [];
+            renderSummary(data);
+            renderAccessModal();
+            toast(`访问检测完成：共 ${data.total ?? 0} 项，异常 ${data.fail ?? 0} 项，结果与时间已保存`);
+            loadAccessSummary();
+        } catch (err) {
+            summary.textContent = '检测失败：' + err.message;
+            toast('访问检测失败：' + err.message, 'error');
+        } finally {
+            accessModal.running = false;
+            btn.disabled = false;
+            btn.textContent = original;
+        }
+    });
+}
+
+$('#access-check-btn').addEventListener('click', openAccessCheckModal);
 
 /* 操作列事件（事件委托） */
 $('#domains-table tbody').addEventListener('click', async (e) => {
+    const nameBtn = e.target.closest('.act-detail');
+    if (nameBtn) { window.HealthWorkbench?.openDomain(nameBtn.dataset.provider, nameBtn.dataset.domain); return; }
     const relBtn = e.target.closest('.act-relation');
     if (relBtn) { window.Relationships?.openDomain(relBtn.dataset.provider, relBtn.dataset.domain); return; }
     const recBtn = e.target.closest('.act-records');
@@ -203,6 +323,8 @@ function openDomainModal(mode, target) {
             </div>
         </div>`;
     (document.fullscreenElement || document.body).appendChild(overlay);
+    const returnFocus = document.activeElement;
+    const closeModal = () => { returnFocus?.focus?.(); overlay.remove(); };
 
     if (isEdit) {
         $('#dm-domain').value = target.domain;
@@ -218,9 +340,10 @@ function openDomainModal(mode, target) {
         }
     }
 
-    overlay.querySelector('.modal-close').addEventListener('click', () => overlay.remove());
-    overlay.querySelector('.btn-cancel').addEventListener('click', () => overlay.remove());
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) overlay.remove(); });
+    overlay.querySelector('.modal-close').addEventListener('click', closeModal);
+    overlay.querySelector('.btn-cancel').addEventListener('click', closeModal);
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) closeModal(); });
+    overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); closeModal(); } });
 
     $('#dm-save').addEventListener('click', async () => {
         const payload = {
@@ -246,7 +369,8 @@ function openDomainModal(mode, target) {
                 method: isEdit ? 'PUT' : 'POST',
                 body: JSON.stringify(payload),
             });
-            overlay.remove();
+            toast(isEdit ? `已保存域名「${payload.domain}」` : `已添加域名「${payload.domain}」`);
+            closeModal();
             loadDomains();
         } catch (err) {
             showModalError(err.message);
@@ -291,6 +415,7 @@ function renderDomainSelection(){
     $('#domain-selected-count').closest('.health-selection-bar').classList.toggle('hidden', selectedDomainRows.size === 0);
     $('#domain-selected-count').textContent=selectedDomainRows.size?`已选择 ${selectedDomainRows.size} 个域名（筛选切换时保留）`:'未选择域名';
     $('#domains-to-relations').disabled=selectedDomainRows.size===0;
+    $('#domains-batch-ip').disabled=selectedDomainRows.size===0;
     const rows=visibleDomainRows.filter(d=>d.sources.some(source=>source.valid!==false)),n=rows.filter(d=>selectedDomainRows.has(domainRowKey(d))).length;
     $('#domain-select-all').checked=rows.length>0&&n===rows.length;
     $('#domain-select-all').indeterminate=n>0&&n<rows.length;$('#domain-select-all').disabled=!rows.length;
@@ -304,8 +429,65 @@ document.addEventListener('change',event=>{
     const key=check.dataset.domainSelect,row=visibleDomainRows.find(d=>domainRowKey(d)===key);
     if(check.checked&&row)selectedDomainRows.set(key,row);else selectedDomainRows.delete(key);renderDomainSelection();
 });
-$('#domain-select-all').onchange=event=>{visibleDomainRows.filter(d=>d.sources.some(source=>source.valid!==false)).forEach(d=>event.target.checked?selectedDomainRows.set(domainRowKey(d),d):selectedDomainRows.delete(domainRowKey(d)));loadDomains();};
-$('#domain-selection-clear').onclick=()=>{selectedDomainRows.clear();loadDomains();};
+/* 全选/清空只改本地勾选态与已渲染的复选框，不重新请求列表。 */
+$('#domain-select-all').onchange=event=>{
+    const eligible=visibleDomainRows.filter(d=>d.sources.some(source=>source.valid!==false));
+    const keys=new Set(eligible.map(domainRowKey));
+    eligible.forEach(d=>event.target.checked?selectedDomainRows.set(domainRowKey(d),d):selectedDomainRows.delete(domainRowKey(d)));
+    document.querySelectorAll('input[data-domain-select]').forEach(cb=>{if(keys.has(cb.dataset.domainSelect))cb.checked=event.target.checked;});
+    renderDomainSelection();
+};
+$('#domain-selection-clear').onclick=()=>{selectedDomainRows.clear();document.querySelectorAll('input[data-domain-select]').forEach(cb=>{cb.checked=false;});renderDomainSelection();};
+$('#domains-batch-ip').onclick=async event=>{
+    const button=event.currentTarget;button.disabled=true;
+    try{
+        const groups=[...selectedDomainRows.values()];
+        const dnsManaged=d=>d.provider!=='manual'&&(!state.accountsLoaded||state.accounts.some(a=>a.id===d.provider&&a.enabled!==false));
+        // 同一域名多账号时取一个可用托管账号；手工或账号不可用的域名进入跳过清单。
+        const candidates=[],skipped=[];
+        for(const group of groups){
+            const best=(group.sources||[]).find(d=>d.valid!==false&&dnsManaged(d));
+            if(best)candidates.push(best);
+            else skipped.push({target:group.domain,reason:'手工域名或 DNS 托管账号不可用，无法批量修改'});
+        }
+        if(!candidates.length){toast('所选域名均没有可用的 DNS 托管账号','error');return;}
+        const ip=(await promptDialog({title:'批量修改解析 IP',
+            message:`已选择 ${candidates.length} 个域名的可用 DNS 托管账号。将把每个域名根记录（@）的 A 记录改为新 IP；没有 A 记录的域名会跳过并在报告中说明。`,
+            value:'',okText:'下一步'}));
+        if(ip===null)return;
+        const value=ip.trim();
+        const isIpv4=/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.test(value)&&value.split('.').every(n=>Number(n)>=0&&Number(n)<=255);
+        const isIpv6=/^[0-9A-Fa-f:]{2,45}$/.test(value)&&value.includes(':');
+        if(!isIpv4&&!isIpv6){toast('请输入有效的 IPv4 或 IPv6 地址','error');return;}
+        // 逐域名读取缓存解析（含版本号），构造跨域名独立提交计划。
+        const progress=document.createElement('div');progress.className='modal-overlay';progress.id='batch-ip-progress';
+        progress.innerHTML='<section class="modal" role="status" aria-live="polite"><div class="modal-body"><p class="muted" id="batch-ip-progress-text">正在读取解析记录…</p></div></section>';
+        (document.fullscreenElement||document.body).appendChild(progress);
+        const progressText=$('#batch-ip-progress-text');
+        const options=[];
+        for(const d of candidates){
+            const target=`${d.domain}（${escapeHtml(providerInfo(d.provider).name)}）`;
+            try{
+                const data=await api(`/api/domains/${encodeURIComponent(d.provider)}/${encodeURIComponent(d.domain)}/records`);
+                const aRecords=(data.records||[]).filter(r=>(r.type||'').toUpperCase()==='A'&&['@','',d.domain.toLowerCase()].includes((r.name||'').toLowerCase()));
+                if(!aRecords.length){skipped.push({target,reason:'根记录没有 A 记录，请先在解析页新增或走 AI 提案'});continue;}
+                for(const record of aRecords){
+                    options.push({endpoint:`/api/domains/${encodeURIComponent(d.provider)}/${encodeURIComponent(d.domain)}/records/${encodeURIComponent(record.id)}`,
+                        action:'update',record,params:{value},target,owner:progress});
+                }
+            }catch(err){skipped.push({target,reason:'读取解析失败：'+err.message});}
+        }
+        if(!options.length){progress.remove();toast('所选域名中没有任何可修改的 @ A 记录','error');return;}
+        progressText.textContent=`共 ${options.length} 条 A 记录待提交，请在确认弹窗中核对差异。`;
+        const items=await window.WorkspaceDns.batchValues(options,(done,total)=>{progressText.textContent=`正在提交 ${done} / ${total} 条（逐条写入并回读核实，不自动重试）…`;});
+        progress.remove();
+        if(!items)return;
+        if(skipped.length)items.push(...skipped.map(s=>({status:'未提交',option:{target:s.target},message:s.reason})));
+        window.WorkspaceDns.showBatchReport(items,`批量修改解析 IP → ${value}`);
+        loadDomains();
+    }catch(error){toast(error.message,'error');}
+    finally{renderDomainSelection();}
+};
 $('#domains-to-relations').onclick=async event=>{
     const button=event.currentTarget;button.disabled=true;
     try{const snapshot=await api('/api/health');const ids=snapshot.assets.filter(a=>a.kind==='domain'&&[...selectedDomainRows.values()].some(group=>group.sources.some(d=>d.valid!==false&&d.provider===a.provider&&domainRowKey(d)===a.name))).map(a=>a.id);

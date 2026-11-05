@@ -128,8 +128,8 @@ window.WorkspaceDns = (() => {
         const close = () => modal.remove();
         modal.querySelector('.modal-close').onclick = close; modal.querySelector('.dns-report-close').onclick = close;
         modal.querySelector('.dns-report-copy').onclick = async () => {
-            try { await navigator.clipboard.writeText(textarea.value); modal.querySelector('.dns-report-message').textContent = '报告已复制'; }
-            catch { textarea.focus(); textarea.select(); modal.querySelector('.dns-report-message').textContent = '请复制已选中的报告'; }
+            if (await copyText(textarea.value, '报告已复制')) return;
+            textarea.focus(); textarea.select(); modal.querySelector('.dns-report-message').textContent = '请复制已选中的报告';
         };
         textarea.focus();
     }

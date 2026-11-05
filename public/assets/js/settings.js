@@ -19,6 +19,8 @@ window.WorkspaceSettings = (() => {
     async function load() {
         const revision = ++generation;
         if (document.querySelector('[data-settings-tab="maintenance"]')?.getAttribute('aria-selected') === 'true') window.WorkspaceMaintenance?.load();
+        if (document.querySelector('[data-settings-tab="cleanup"]')?.getAttribute('aria-selected') === 'true') window.WorkspaceCleanup?.load();
+        if (document.querySelector('[data-settings-tab="accounts"]')?.getAttribute('aria-selected') === 'true') loadKeys();
         $('#settings-error').classList.add('hidden');
         try {
             const [result, authorization] = await Promise.all([api('/api/settings'), api('/api/tokens')]);
@@ -48,6 +50,9 @@ window.WorkspaceSettings = (() => {
     document.querySelectorAll('[data-settings-tab]').forEach(button => button.addEventListener('click', () => {
         document.querySelectorAll('[data-settings-tab]').forEach(tab => tab.setAttribute('aria-selected', String(tab === button)));
         document.querySelectorAll('[data-settings-panel]').forEach(panel => panel.classList.toggle('hidden', panel.dataset.settingsPanel !== button.dataset.settingsTab));
+        if (button.dataset.settingsTab === 'accounts') loadKeys();
+        if (button.dataset.settingsTab === 'cleanup') window.WorkspaceCleanup?.load();
+        if (button.dataset.settingsTab === 'maintenance') window.WorkspaceMaintenance?.load();
     }));
 
     $('#settings-http-form').addEventListener('submit', async event => {
@@ -96,9 +101,8 @@ window.WorkspaceSettings = (() => {
         finally { button.disabled = false; $('#api-token-password').value = ''; }
     });
 
-    $('#api-token-copy').addEventListener('click', async () => {
-        try { await navigator.clipboard.writeText($('#api-token-value').textContent); toast('密钥已复制'); }
-        catch { toast('请选中密钥文本并复制', 'info'); }
+    $('#api-token-copy').addEventListener('click', () => {
+        if ($('#api-token-value').textContent) copyText($('#api-token-value').textContent, '密钥已复制');
     });
     $('#api-token-dismiss').addEventListener('click', hideToken);
     $('#api-token-list').addEventListener('click', async event => {
@@ -150,6 +154,7 @@ window.WorkspaceSettings = (() => {
     function leave() {
         generation++;
         window.WorkspaceMaintenance?.leave();
+        window.WorkspaceCleanup?.leave();
         hideToken();
         $('#settings-auth-form').reset();
         $('#settings-proxy').value = '';

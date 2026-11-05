@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../core/WorkspaceData.php';
+require_once __DIR__ . '/SettingsService.php';
 
 /**
  * Public-asset health inventory. Existing domain files are read-only inputs;
@@ -232,6 +233,113 @@ class HealthService
         });
     }
 
+    /**
+     * 数据清理：收集某账号一批域名的观测 id（主域名 + 子域名）。
+     * 资产表优先；孤儿账号（不在展示资产表时）退回直查 id 哈希，子域名清单来自尚未删除的 DNS 缓存。
+     * @return string[]
+     */
+    private function cleanupTargetIds(string $provider, array $domains): array
+    {
+        $ids = [];
+        foreach ($this->assets($this->readState()) as $asset) {
+            if ($asset['kind'] !== 'domain' || $asset['provider'] !== $provider) { continue; }
+            if (!in_array($asset['name'], $domains, true)) { continue; }
+            $ids[] = $asset['id'];
+            foreach ($asset['subdomains'] ?? [] as $host) { $ids[] = $host['id']; }
+        }
+        // 资产表可能不含孤儿账号的行（同名域名优先展示在用账号），或缺少子域名清单；
+        // 直查 id 哈希并从待删的 DNS 缓存提取子域名，保证两类来源合并成完整超集。
+        foreach ($domains as $name) {
+            $ids[] = 'domain_' . substr(hash('sha256', $provider . '|' . $name), 0, 24);
+            $cached = class_exists('DnsRecordCache') ? DnsRecordCache::peek($this->dir, $provider, $name) : null;
+            foreach ($cached['records'] ?? [] as $record) {
+                $fqdn = strtolower(rtrim(trim((string) ($record['fqdn'] ?? '')), '.'));
+                if ($fqdn === '' || $fqdn === $name) { continue; }
+                $ids[] = 'host_' . substr(hash('sha256', $provider . '|' . $fqdn), 0, 24);
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    /** 数据清理：删除某账号一批域名（含子域名）的观测、绑定与检查事件。返回清理数量。 */
+    public function forgetDomainArtifacts(string $provider, array $domains): array
+    {
+        $domains = array_values(array_unique(array_filter(array_map(
+            static fn ($d): string => strtolower(rtrim(trim((string) $d), '.')),
+            $domains
+        ), static fn ($d): bool => $d !== '')));
+        if (!$domains) { return ['observations_removed' => 0, 'events_removed' => 0, 'bindings_removed' => 0]; }
+        $ids = $this->cleanupTargetIds($provider, $domains);
+        $idSet = array_fill_keys($ids, true);
+        $domainSet = array_fill_keys($domains, true);
+        $removed = ['observations_removed' => 0, 'events_removed' => 0, 'bindings_removed' => 0];
+        $this->transaction(function (&$state) use ($idSet, $domainSet, $provider, &$removed) {
+            foreach (array_keys($idSet) as $id) {
+                if (isset($state['observations'][$id])) { unset($state['observations'][$id]); $removed['observations_removed']++; }
+                if (isset($state['bindings'][$id])) { unset($state['bindings'][$id]); $removed['bindings_removed']++; }
+            }
+            $kept = [];
+            foreach ($state['check_events'] ?? [] as $event) {
+                $sameDomain = (($event['provider'] ?? '') === $provider) && isset($domainSet[strtolower((string) ($event['domain'] ?? ''))]);
+                if (isset($idSet[(string) ($event['asset_id'] ?? '')]) || $sameDomain) { $removed['events_removed']++; continue; }
+                $kept[] = $event;
+            }
+            $state['check_events'] = $kept;
+        });
+        return $removed;
+    }
+
+    /** 数据清理：按资产（账号+域名）/时间/全部修剪检查历史，保留各资产最近一次健康状态。 */
+    public function trimCheckHistory(array $filter): array
+    {
+        $all = (bool) ($filter['all'] ?? false);
+        $before = null;
+        if (!$all && isset($filter['before'])) {
+            $before = strtotime((string) $filter['before']);
+            if ($before === false) { throw new InvalidArgumentException('时间格式不正确'); }
+        }
+        $provider = isset($filter['provider']) && (string) $filter['provider'] !== '' ? (string) $filter['provider'] : null;
+        $domains = array_values(array_unique(array_filter(array_map(
+            static fn ($d): string => strtolower(rtrim(trim((string) $d), '.')),
+            (array) ($filter['domains'] ?? [])
+        ), static fn ($d): bool => $d !== '')));
+        $idSet = array_fill_keys($provider !== null ? $this->cleanupTargetIds($provider, $domains) : [], true);
+        if ($provider === null && $domains) {
+            foreach ($this->assets($this->readState()) as $asset) {
+                if ($asset['kind'] !== 'domain' || !in_array($asset['name'], $domains, true)) { continue; }
+                $idSet[$asset['id']] = true;
+                foreach ($asset['subdomains'] ?? [] as $host) { $idSet[$host['id']] = true; }
+            }
+        }
+        $domainSet = array_fill_keys($domains, true);
+        $removed = ['events_removed' => 0, 'history_removed' => 0];
+        $this->transaction(function (&$state) use ($all, $before, $idSet, $domainSet, $provider, &$removed) {
+            $kept = [];
+            foreach ($state['check_events'] ?? [] as $event) {
+                $time = strtotime((string) ($event['checked_at'] ?? ''));
+                if (is_int($before) && $time !== false && $time >= $before) { $kept[] = $event; continue; }
+                if (!$all && $before === null) {
+                    $sameDomain = ($provider === null || ($event['provider'] ?? '') === $provider) && isset($domainSet[strtolower((string) ($event['domain'] ?? ''))]);
+                    if (!isset($idSet[(string) ($event['asset_id'] ?? '')]) && !$sameDomain) { $kept[] = $event; continue; }
+                }
+                $removed['events_removed']++;
+            }
+            $state['check_events'] = $kept;
+            foreach (($state['observations'] ?? []) as $id => $observation) {
+                $targeted = $all || isset($idSet[(string) $id]);
+                if (!$all && $before === null && !$targeted) { continue; }
+                $keptHistory = [];
+                foreach ($observation['history'] ?? [] as $entry) {
+                    $time = strtotime((string) ($entry['checked_at'] ?? ''));
+                    if (is_int($before) && $time !== false && $time >= $before) { $keptHistory[] = $entry; continue; }
+                    $removed['history_removed']++;
+                }
+                $state['observations'][$id]['history'] = $keptHistory;
+            }
+        });
+        return $removed;
+    }
+
     public function check(array $ids): array
     {
         $epoch = WorkspaceData::locked($this->dir, function () { return WorkspaceData::epoch($this->dir); });
@@ -303,11 +411,60 @@ class HealthService
         return ['ok' => true, 'checked' => count($results), 'results' => $results];
     }
 
+    /** 在用账号集合（已配置且未停用）；配置不可读时返回 null，保持不去重的旧行为。 */
+    private function activeProviders(): ?array
+    {
+        try {
+            $settings = new SettingsService(defined('CONFIG_DIR') ? CONFIG_DIR : $this->dir, $this->dir);
+            $active = [];
+            foreach ($settings->all()['accounts'] ?? [] as $account) {
+                if (is_array($account) && isset($account['id']) && ($account['enabled'] ?? true) !== false) {
+                    $active[(string) $account['id']] = true;
+                }
+            }
+            return $active;
+        } catch (Throwable) {
+            return null;
+        }
+    }
+
+    /** 同一域名多账号时优先在用账号的台账行，避免已移除账号的重复与历史残留进入展示。 */
+    private function preferredDomains(array $domains, ?array $active): array
+    {
+        if ($active === null) {
+            return $domains;
+        }
+        $groups = [];
+        foreach ($domains as $domain) {
+            if (!is_array($domain) || empty($domain['domain'])) {
+                continue;
+            }
+            $groups[strtolower(rtrim(trim((string) $domain['domain']), '.'))][] = $domain;
+        }
+        $preferred = [];
+        foreach ($groups as $rows) {
+            $pick = $rows[0];
+            foreach ($rows as $row) {
+                $inUse = isset($active[(string) ($row['provider'] ?? '')]);
+                $valid = ($row['valid'] ?? true) !== false;
+                if ($inUse && $valid) { $pick = $row; break; }
+            }
+            if (!isset($active[(string) ($pick['provider'] ?? '')])) {
+                foreach ($rows as $row) {
+                    if (isset($active[(string) ($row['provider'] ?? '')])) { $pick = $row; break; }
+                }
+            }
+            $preferred[] = $pick;
+        }
+        return $preferred;
+    }
+
     private function assets(array $state): array
     {
         $assets = [];
         $legacy = $this->readJson($this->dir . '/access_check.json', [])['results'] ?? [];
-        foreach ($this->readJson($this->dir . '/domains.json', []) as $domain) {
+        $preferredDomains = $this->preferredDomains($this->readJson($this->dir . '/domains.json', []), $this->activeProviders());
+        foreach ($preferredDomains as $domain) {
             if (!is_array($domain) || ($domain['valid'] ?? true) === false || empty($domain['domain'])) {
                 continue;
             }
@@ -518,10 +675,46 @@ class HealthService
             $checks[] = ['label' => $label, 'status' => $ok ? 'healthy' : 'unhealthy', 'message' => $message];
             $results[$scheme] = ['status' => $ok ? 'healthy' : 'unhealthy', 'code' => $response['code'], 'latency_ms' => $response['ms']];
         }
-        $ok = $results['http']['status'] === 'healthy' && $results['https']['status'] === 'healthy';
-        return ['status' => $ok ? 'healthy' : 'unhealthy', 'message' => $ok ? 'HTTP 和 HTTPS 均正常' : 'HTTP 或 HTTPS 检查异常',
-            'http_code' => $results['https']['code'], 'protocols' => $results, 'checks' => $checks,
+        // 可达性以 HTTP 为准：HTTPS 证书或连接问题单独记录，不改变可达性判定（在 HTTPS 跟进清单中处理）。
+        $httpOk = $results['http']['status'] === 'healthy';
+        $httpsOk = $results['https']['status'] === 'healthy';
+        $message = $httpOk
+            ? ($httpsOk ? 'HTTP 和 HTTPS 均正常' : 'HTTP 可访问；HTTPS 待跟进（' . ($checks[2]['message'] ?? '未通过') . '）')
+            : 'HTTP 检查异常';
+        return ['status' => $httpOk ? 'healthy' : 'unhealthy', 'message' => $message,
+            'http_code' => $results['http']['code'], 'protocols' => $results, 'checks' => $checks,
+            'url' => 'http://' . strtolower($host) . '/', 'https_url' => 'https://' . strtolower($host) . '/',
             'resolved_ips' => $ips, 'probed_ip' => $ips[0], 'latency_ms' => $results['http']['latency_ms'] + $results['https']['latency_ms']];
+    }
+
+    /** 记录浏览器侧探测结果：可达计入健康状态并标注来源 browser；不可达不改变既有证据。 */
+    public function recordBrowserProbe(string $id, bool $reachable, int $ms): array
+    {
+        if (!$reachable) {
+            return ['ok' => true, 'recorded' => false, 'message' => '浏览器侧也未可达，不改变既有记录'];
+        }
+        $epoch = WorkspaceData::epoch($this->dir);
+        $this->transaction(function (&$state) use ($id, $ms, $epoch) {
+            if ($epoch !== WorkspaceData::epoch($this->dir)) { throw new DomainException('记录期间资产已恢复，本条结果已丢弃，请重新检测'); }
+            $assets = $this->assets($state);
+            if (!isset($assets[$id])) { throw new OutOfBoundsException('资产不存在，请刷新后再检测'); }
+            if ($assets[$id]['kind'] !== 'ip') { throw new InvalidArgumentException('浏览器探测仅支持 IP 资产'); }
+            $ip = $assets[$id]['ip'];
+            $url = 'http://' . (strpos($ip, ':') !== false ? '[' . $ip . ']' : $ip) . '/';
+            $health = ['status' => 'healthy',
+                'message' => '浏览器探测可达：HTTP 有响应（经管理员浏览器网络，可能经系统代理）',
+                'checked_at' => $this->timestamp(), 'latency_ms' => $ms, 'http_code' => null, 'url' => $url,
+                'checks' => [['label' => 'HTTP（浏览器）', 'status' => 'healthy', 'message' => $url . ' · 浏览器探测可达 · ' . $ms . ' ms']],
+                'resolved_ips' => [], 'source' => 'browser', 'check_type' => 'http'];
+            $history = $state['observations'][$id]['history'] ?? [];
+            array_unshift($history, $health);
+            $state['observations'][$id] = ['health' => $health, 'history' => array_slice($history, 0, self::MAX_HISTORY)];
+            $event = ['id' => bin2hex(random_bytes(12)), 'asset_id' => $id, 'kind' => 'ip', 'name' => $ip,
+                'provider' => $assets[$id]['provider'] ?? '', 'domain' => '', 'checked_at' => $health['checked_at'],
+                'status' => 'healthy', 'message' => $health['message'], 'checks' => $health['checks']];
+            array_unshift($state['check_events'], $event);
+        });
+        return ['ok' => true, 'recorded' => true];
     }
 
     private function dnsFailure(string $message): array

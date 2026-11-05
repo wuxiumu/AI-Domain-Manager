@@ -61,8 +61,8 @@ class JsonStore
         }
     }
 
-    /** 追加一条记录（数组文件） */
-    public static function append(string $file, array $entry): bool
+    /** 追加一条记录（数组文件）；$cap > 0 时仅保留最近 $cap 条，防止日志文件无限增长 */
+    public static function append(string $file, array $entry, int $cap = 0): bool
     {
         $dir = dirname($file);
         if (!is_dir($dir) && !@mkdir($dir, 0775, true) && !is_dir($dir)) {
@@ -83,6 +83,9 @@ class JsonStore
                 $data = [];
             }
             $data[] = $entry;
+            if ($cap > 0 && count($data) > $cap) {
+                $data = array_slice($data, -$cap);
+            }
             return self::write($file, $data);
         } finally {
             flock($lock, LOCK_UN);

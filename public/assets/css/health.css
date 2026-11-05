@@ -1376,23 +1376,65 @@ button.hc-stat, button.hc-stat-card {
 .trend-table{margin-top:8px}
 .trend-table summary{cursor:pointer;font-size:13px;color:var(--muted,#777)}
 
-/* 趋势面板标题：看板布局会隐藏通用 panel-heading / panel-caption，趋势面板使用独立类。 */
+/* 趋势面板标题：独立页与看板入口共用标题行样式。 */
 .trend-heading{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:21px 22px 0}
 .trend-heading h2{font-size:14px;line-height:1.5;font-weight:600;letter-spacing:-.15px}
 .trend-heading p{margin-top:6px;font-size:11px;color:#929b90}
-.trend-actions{display:flex;align-items:center;gap:10px}
+.trend-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 .trend-note{padding:10px 22px 16px;font-size:11px;color:#929b90}
+.trend-body{padding:6px 22px 0}
 
-#trend-axis,
-.trend-axis{display:flex;justify-content:space-between;padding:2px 6px 0;font-size:10px;color:#929b90}
+/* 坐标轴刻度由 JS 按柱体位置绝对定位。 */
+.trend-axis{position:relative;height:18px;padding:2px 6px 0;font-size:10px;color:#929b90}
+.trend-axis span{position:absolute;top:2px;white-space:nowrap;color:#929b90}
+
+/* 看板入口卡片：问题中心与检查趋势独立成页后的紧凑入口。 */
+.dashboard-links{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:14px;margin:0 0 16px}
+.dash-link-card{display:flex;flex-direction:column;align-items:flex-start;gap:4px;padding:16px 18px;border:1px solid var(--border);border-radius:10px;background:var(--card);text-align:left;transition:border-color .15s,box-shadow .15s}
+.dashboard-links .dash-link-card:hover{border-color:#3c8064;box-shadow:0 4px 16px #16705d14}
+.dash-link-head{display:inline-flex;align-items:center;gap:7px;width:100%;font-size:12px;font-weight:600;letter-spacing:.3px;color:#42514a}
+.dash-link-head .icon{width:15px;height:15px;color:#3c8064}
+.dash-link-arrow{margin-left:auto;font-style:normal;color:var(--muted)}
+.dash-link-card strong{font-size:20px;line-height:1.35;color:var(--text)}
+.dashboard-links .muted{font-size:12px}
+
+/* 看板问题条：机器主动播报待处理问题，行内直达操作，日志可复制给 AI。 */
+.dash-problem-strip{display:flex;flex-direction:column;gap:2px;padding:14px 16px;margin:0 0 16px;border:1px solid #e7c8bf;border-left:3px solid #c45748;border-radius:10px;background:#fdf7f4}
+.dash-problem-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding-bottom:8px}
+.dash-problem-title{display:inline-flex;align-items:center;gap:8px;font-size:14px;color:#a04030}
+.dash-problem-title .icon{width:16px;height:16px}
+.dash-problem-head > .btn{margin-left:auto}
+.dash-problem-head .muted{font-size:12px}
+.dash-problem-item{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:8px 2px;border-top:1px dashed #ecd5cc;font-size:12px}
+.dash-problem-item .hc-message{flex:1 1 220px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#5b5449}
+.dash-problem-actions{display:inline-flex;align-items:center;gap:6px;margin-left:auto;flex-wrap:wrap}
+.dash-problem-more{font-size:11px;padding:6px 2px 0;border-top:1px dashed #ecd5cc}
+
+/* 问题中心与检查趋势已独立成页：面板跟随桌面 shell 的 flex 列自然伸展。 */
 @media (min-width: 761px) {
-    /* 桌面 shell 为固定高度 flex 列，趋势面板按内容占位，不参与等分挤压。 */
-    #trend-panel{flex:none;overflow:visible}
-    #health-trend-chart svg{height:96px}
+    #issues-panel .trend-heading, #trend-panel .trend-heading, #https-panel .trend-heading,
+    #issues-panel .trend-note, #trend-panel .trend-note, #https-panel .trend-note,
+    #trend-panel .trend-table { flex: none; }
+    #trend-panel .trend-body { flex: 1; min-height: 240px; display: flex; flex-direction: column; }
+    #health-trend-chart { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 200px; }
+    #health-trend-chart svg { flex: 1 1 auto; min-height: 180px; height: auto; }
+    #health-trend-chart .trend-axis { flex: none; }
+    /* 每日明细在面板内滚动，不撑破固定高度的桌面 shell。 */
+    #trend-panel .trend-table .table-wrap { max-height: 300px; overflow: auto; }
+}
+@media (max-width: 760px) {
+    .trend-heading{flex-wrap:wrap}
 }
 
-/* 桌面 shell：问题面板按内容占位，清单过长时表内滚动，不挤占列表面板。 */
-@media (min-width: 761px) {
-    #issues-panel{flex:none;overflow:visible}
-    #issues-panel .table-wrap{max-height:240px;overflow:auto}
-}
+/* 详情弹窗状态行：状态 + 时间靠左，检测按钮靠右。 */
+.hc-detail-status{display:inline-flex;align-items:center;gap:10px;min-width:0}
+
+/* 问题清单 / 跟进清单里的目标 URL：可直接点击打开核对。 */
+.hc-url{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;font-size:11px;color:#3c8064}
+.hc-url:hover{color:#236a52}
+
+/* 详情弹窗：浏览器侧探测结果（与检查机直连视角互补，仅会话内参考）。 */
+.hc-detail-actions{display:inline-flex;align-items:center;gap:8px}
+.hc-browser-probe{margin:-6px 0 12px;font-size:11px;color:#7b896f}
+.hc-browser-probe[data-reachable="1"]{color:#258366}
+.hc-browser-probe[data-reachable="0"]{color:#c45748}

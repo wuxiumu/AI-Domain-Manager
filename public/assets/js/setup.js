@@ -25,7 +25,7 @@ window.WorkspaceSetup = (() => {
             window.WorkspaceCache?.setUser(result.user);
             $('#setup-form').reset();
             $('#setup-view').classList.add('hidden');
-            history.replaceState(null, '', '#keys');
+            history.replaceState(null, '', '#dashboard');
             toast('工作台已创建，接下来可以添加云账号或登记 IP');
             await showApp();
         } catch (err) { error.textContent = err.message; error.classList.remove('hidden'); }

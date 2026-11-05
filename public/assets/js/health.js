@@ -10,10 +10,58 @@ window.HealthWorkbench = (() => {
     let stopped = false;
     let detailId = null;
     let detailReturnFocus = null;
+    let detailFocused = false;
+    /* 浏览器侧探测：走管理员本机网络（含系统代理），与检查机直连视角互补。不写入平台证据链。 */
+    const browserProbeResults = new Map();
+    const browserProbing = new Set();
+    async function browserProbeFetch(url, timeoutMs = 8000) {
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), timeoutMs);
+        const started = performance.now();
+        try {
+            await fetch(url + (url.includes('?') ? '&' : '?') + '_aw_probe=' + Date.now(), {mode: 'no-cors', cache: 'no-store', signal: controller.signal});
+            return {reachable: true, ms: Math.round(performance.now() - started)};
+        } catch {
+            return {reachable: false, ms: Math.round(performance.now() - started)};
+        } finally {
+            clearTimeout(timer);
+        }
+    }
+    async function runBrowserProbe(asset) {
+        const url = 'http://' + (asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/';
+        browserProbing.add(asset.id);
+        if (detailId === asset.id) renderDetail(asset.id);
+        const result = await browserProbeFetch(url);
+        browserProbing.delete(asset.id);
+        const entry = {...result, at: new Date().toLocaleString('sv-SE').replace('T', ' ')};
+        if (result.reachable) {
+            // 前端可达也计入平台记录：服务端标注来源 browser，状态翻为正常并落盘。
+            try {
+                await api('/api/health/ips/' + encodeURIComponent(asset.id) + '/browser-probe', {method: 'POST', body: JSON.stringify({reachable: true, ms: result.ms})});
+                entry.persisted = true;
+                await load();
+            } catch (err) {
+                entry.persistError = err.message;
+                toast('浏览器探测结果保存失败：' + err.message, 'error', 8000);
+            }
+        }
+        browserProbeResults.set(asset.id, entry);
+        if (detailId === asset.id) renderDetail(asset.id);
+    }
+    function browserProbeHtml(asset) {
+        if (browserProbing.has(asset.id)) return '<p class="hc-browser-probe">浏览器检测中…（最长 8 秒）</p>';
+        const r = browserProbeResults.get(asset.id);
+        if (!r) return '';
+        const state = r.reachable ? (r.persisted ? '浏览器网络可达，已计入平台记录' : '浏览器网络可达，有响应') : '浏览器网络也超时（检查机与浏览器均不可达）';
+        const tail = r.persisted ? '来源已标注 browser，检查机直连证据保留为历史' : '走你本机网络/系统代理，与检查机直连视角可能不同';
+        const warn = r.persistError ? ` · 保存失败：${h(r.persistError)}` : '';
+        return `<p class="hc-browser-probe" data-reachable="${r.reachable ? '1' : '0'}"><span class="info-dot" aria-hidden="true">i</span> ${h(state)} · ${r.ms} ms · ${h(r.at)} · ${h(tail)}${warn}</p>`;
+    }
     const selectedDomains = new Set();
-    const labels = { healthy: '正常', unhealthy: '检查异常', stale: '结果过时', unchecked: '未检查' };
-    const issueLabels = { unhealthy: '检查异常', https_pending: 'HTTPS 未确认', stale: '结果过时', expiring: '即将到期' };
+    const labels = { healthy: '正常', unhealthy: 'HTTP 异常', stale: '结果过时', unchecked: '未检查' };
+    const issueLabels = { unhealthy: 'HTTP 异常', stale: '结果过时', expiring: '即将到期' };
     const severityBadges = { P0: 'b-red', P1: 'b-amber', P2: '' };
+    const httpsStateLabels = { fail: 'HTTPS 异常', unknown: 'HTTPS 未确认', stale: '证据过时', pending: 'DNS 已更新待复检' };
     const h = value => escapeHtml(value ?? '');
     const getHealth = asset => {
         const health = asset.health || {status:'unchecked'};
@@ -25,17 +73,47 @@ window.HealthWorkbench = (() => {
     const locationText = loc => loc ? [loc.country, loc.region, loc.city].filter(Boolean).join(' · ') || '未提供位置' : '归属地未查询';
     const sourceText = asset => asset.kind === 'domain' ? (asset.provider_name || '域名资产') : asset.source === 'manual' ? '手工登记' : 'DNS 解析发现';
     const domainNames = asset => [...new Set([...(asset.linked_domains || []).map(item => typeof item === 'string' ? item : item.domain || item.name || ''), ...(asset.bound_domains || []).map(id => snapshot?.assets.find(a => a.id === id)?.name || '')])].filter(Boolean);
+    const evidenceLabel = c => labels[c.status] || ({ok: '正常', fail: '失败', skipped: '未执行', warning: '需关注'})[c.status] || c.status || '未知';
+
+    /* 把资产的问题与检查证据编译成纯文本日志，粘贴给 AI 即可继续排查。 */
+    function assetLogText(asset, issue = null) {
+        const health = getHealth(asset);
+        const lines = ['# 资产检查日志'];
+        lines.push(`- 资产：${asset.name}${asset.kind === 'ip' ? `（${asset.ip}）` : ''}`);
+        lines.push(`- 类型与来源：${asset.kind === 'domain' ? '域名' : 'IP / 服务器'} · ${sourceText(asset)}`);
+        lines.push(`- 当前状态：${labels[health.status] || health.status || '未检查'} · 检查时间：${health.checked_at || '尚未检查'}`);
+        if (issue) lines.push(`- 问题级别：${issue.severity}（${issueLabels[issue.type] || issue.type}）`, `- 问题摘要：${issue.summary}`);
+        lines.push(`- 检查目标：${asset.kind === 'domain' ? 'http:// 与 https://' + asset.name : 'http://' + (asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/'}`);
+        if (asset.expires_at) lines.push(`- 到期日期：${asset.expires_at}`);
+        if (health.latency_ms != null) lines.push(`- 延迟：${health.latency_ms} ms`);
+        if (health.http_code != null) lines.push(`- HTTP 状态码：${health.http_code}`);
+        if ((health.resolved_ips || []).length) lines.push(`- 解析 IP：${health.resolved_ips.join('、')}（可能是 CDN）`);
+        if (health.message) lines.push(`- 检查消息：${health.message}`);
+        if ((health.checks || []).length) {
+            lines.push('', '## 检查证据');
+            for (const c of health.checks) lines.push(`- [${evidenceLabel(c)}] ${c.label || c.name || c.type || '检查项'}：${c.message || c.error || '—'}`);
+        }
+        const history = asset.history || health.history || [];
+        if (history.length) {
+            lines.push('', '## 最近检查记录');
+            for (const item of history.slice(0, 10)) lines.push(`- ${item.checked_at || '时间未知'} · ${labels[item.status || item.last_status] || '未检查'} · ${item.message || ''}${item.latency_ms != null ? `（${item.latency_ms} ms${item.http_code != null ? ' · HTTP ' + item.http_code : ''}）` : ''}`);
+        }
+        lines.push('', `未检查与结果超过 24 小时的资产不计为正常。生成时间：${new Date().toLocaleString('sv-SE').replace('T', ' ')}`);
+        return lines.join('\n');
+    }
 
     async function load(force = false) {
         if (loading) return loading;
         loading = (async () => {
             try {
-                const [snap, issueData] = await Promise.all([
+                const [snap, issueData, httpsData] = await Promise.all([
                     api('/api/health', {refresh: force === true}),
                     api('/api/issues').catch(() => null),
+                    api('/api/https-review').catch(() => null),
                 ]);
                 snapshot = snap;
                 if (issueData) issues = issueData;
+                if (httpsData) { httpsReview = httpsData; renderHttpsReview(); }
                 render();
                 return snapshot;
             } catch (err) {
@@ -54,17 +132,50 @@ window.HealthWorkbench = (() => {
     }
 
     /* 问题中心：与 AI 共用的分级问题清单，一眼看到全部待处理事项。 */
+    /* 每个问题按类型给出直达操作：异常域名直达解析，到期域名直达台账，日志可复制给 AI 协助排查。 */
+    function issueJumpActions(issue) {
+        if (issue.kind !== 'domain') return '';
+        const dns = issue.type === 'unhealthy' && issue.provider && issue.provider !== 'manual'
+            ? `<button class="btn btn-sm btn-link" data-issue-dns data-domain="${h(issue.name)}" data-provider="${h(issue.provider)}" title="打开该域名的解析记录管理">管理解析</button>` : '';
+        const gotoDomain = issue.type === 'expiring'
+            ? `<button class="btn btn-sm btn-link" data-issue-goto-domain data-domain="${h(issue.name)}" title="在域名管理中筛选该域名">去域名管理</button>` : '';
+        return dns + gotoDomain;
+    }
+    function renderProblemStrip() {
+        const strip = $('#dash-problem-strip');
+        if (!strip) return;
+        const counts = issues?.counts || {};
+        const list = issues?.issues || [];
+        if (!counts.total || !list.length) {
+            strip.classList.add('hidden');
+            strip.innerHTML = '';
+            return;
+        }
+        strip.classList.remove('hidden');
+        const top = list.slice(0, 5);
+        strip.innerHTML = `<div class="dash-problem-head"><span class="dash-problem-title"><svg class="icon" aria-hidden="true"><use href="#icon-alert"/></svg><strong>${counts.total} 项待处理</strong></span><span class="muted">P0 异常 ×${counts.unhealthy || 0} · P1 过时 ×${counts.stale || 0} · P2 到期 ×${counts.expiring || 0} · 看板每分钟自动刷新</span><button type="button" class="btn btn-sm" data-goto-tab="issues">进入问题中心 →</button></div>`
+            + top.map(issue => `<div class="dash-problem-item"><span class="badge ${severityBadges[issue.severity] || ''}">${issue.severity}</span><small class="hc-subline">${issueLabels[issue.type] || issue.type}</small><button class="hc-asset-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(issue.name)}</button><span class="hc-message" title="${h(issue.summary)}">${h(issue.summary)}</span><span class="dash-problem-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(issue.asset_id)}" ${running ? 'disabled' : ''}>检查</button>${issueJumpActions(issue)}<button class="btn btn-sm btn-link" data-issue-copy data-id="${h(issue.asset_id)}" title="复制问题与检查日志，粘贴给 AI 协助排查">复制日志</button></span></div>`).join('')
+            + (list.length > top.length ? `<div class="dash-problem-more muted">还有 ${list.length - top.length} 项，请在问题中心查看 →</div>` : '');
+    }
     function renderIssues() {
         if (!issues) return;
         const counts = issues.counts || {};
+        document.title = counts.total ? `(${counts.total}) 资产工作台` : '资产工作台 · Asset Workspace';
         $('#issues-count').textContent = counts.total ? `${counts.total} 项待处理` : '全部正常';
         $('#issues-sub').textContent = counts.total
-            ? `P0 立即处理 ×${counts.unhealthy} · P1 尽快处理 ×${counts.https_pending + counts.stale} · P2 择期处理 ×${counts.expiring}${issues.truncated ? '（清单已截断）' : ''}`
-            : '没有检查异常、HTTPS 未确认、结果过时或即将到期的资产。';
-        for (const key of ['total', 'unhealthy', 'https_pending', 'stale', 'expiring']) {
+            ? `P0 立即处理 ×${counts.unhealthy} · P1 尽快处理 ×${counts.stale} · P2 择期处理 ×${counts.expiring}${issues.truncated ? '（清单已截断）' : ''}`
+            : '没有 HTTP 异常、结果过时或即将到期的资产。HTTPS 证书跟进见「HTTPS 跟进」页。';
+        for (const key of ['total', 'unhealthy', 'stale', 'expiring']) {
             const el = $('#issues-' + key);
             if (el) el.textContent = counts[key] || 0;
         }
+        const dashCount = $('#dash-issues-count');
+        if (dashCount) dashCount.textContent = counts.total ? `${counts.total} 项待处理` : '全部正常';
+        const dashSub = $('#dash-issues-sub');
+        if (dashSub) dashSub.textContent = counts.total
+            ? `P0 HTTP 异常 ×${counts.unhealthy} · P1 过时 ×${counts.stale} · P2 到期 ×${counts.expiring}`
+            : '没有待处理问题，继续保持。';
+        renderProblemStrip();
         document.querySelectorAll('[data-issue-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.issueFilter === issueFilter)));
         const list = (issues.issues || []).filter(i => issueFilter === 'all' || i.type === issueFilter);
         $('#issues-list').innerHTML = list.length ? `<table><thead><tr><th>级别</th><th>问题</th><th>资产</th><th>时间</th><th>操作</th></tr></thead><tbody>${list.map(issue => {
@@ -72,11 +183,32 @@ window.HealthWorkbench = (() => {
             const time = issue.due ? `到期 ${h(issue.due)}` : timeText(issue.since);
             const actions = (issue.actions || []).map(action => action.type === 'check'
                 ? `<button class="btn btn-sm" data-health-action="check" data-id="${h(issue.asset_id)}" ${running ? 'disabled' : ''}>${h(action.label)}</button>`
-                : `<button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(action.label)}</button>`).join('');
+                : `<button class="btn btn-sm btn-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(action.label)}</button>`).join('') + issueJumpActions(issue)
+                + `<button class="btn btn-sm btn-link" data-issue-copy data-id="${h(issue.asset_id)}" title="复制问题与检查日志，粘贴给 AI 协助排查">复制日志</button>`;
             const dns = issue.dns_path ? `<small class="hc-subline">${h((issue.ips || []).join(' · '))}</small>` : '';
-            return `<tr><td>${badge}</td><td><span class="hc-message" title="${h(issue.summary)}">${h(issue.summary)}</span>${dns}</td><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(issue.name)}</button><small class="hc-subline">${issue.kind === 'domain' ? '域名' : 'IP / 服务器'}</small></td><td class="hc-time">${time}</td><td class="row-actions">${actions}</td></tr>`;
+            const url = issue.url ? `<a class="hc-url" href="${h(issue.url)}" target="_blank" rel="noopener noreferrer" title="打开问题页面核对">${h(issue.url)}</a>` : '';
+            return `<tr><td>${badge}</td><td><span class="hc-message" title="${h(issue.summary)}">${h(issue.summary)}</span>${url}${dns}</td><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(issue.asset_id)}">${h(issue.name)}</button><small class="hc-subline">${issue.kind === 'domain' ? '域名' : 'IP / 服务器'}</small></td><td class="hc-time">${time}</td><td class="row-actions">${actions}</td></tr>`;
         }).join('')}</tbody></table>` : '<div class="hc-empty">没有待处理问题，全部正常。<button class="btn btn-link" data-issue-filter-reset>查看全部类型</button></div>';
     }
+    /* 问题行内的跳转与复制：域名异常 → 解析管理，到期 → 域名台账，日志 → 剪贴板。 */
+    document.addEventListener('click', event => {
+        const dns = event.target.closest('[data-issue-dns]');
+        if (dns) { window.WorkspaceUI?.closeDialog(); openRecordsModal(dns.dataset.domain, dns.dataset.provider); return; }
+        const gotoDomain = event.target.closest('[data-issue-goto-domain]');
+        if (gotoDomain) { navigateToDomains({q: gotoDomain.dataset.domain}); return; }
+        const copyIssue = event.target.closest('[data-issue-copy]');
+        if (copyIssue) {
+            const issue = (issues?.issues || []).find(i => i.asset_id === copyIssue.dataset.id);
+            const asset = (snapshot?.assets || []).find(a => a.id === copyIssue.dataset.id);
+            if (asset) copyText(assetLogText(asset, issue), '问题日志已复制，可直接粘贴给 AI 助手');
+            return;
+        }
+        const copyHistory = event.target.closest('[data-copy-history]');
+        if (copyHistory) {
+            const asset = (snapshot?.assets || []).find(a => a.id === copyHistory.dataset.copyHistory);
+            if (asset) copyText(assetLogText(asset), '检查日志已复制，可直接粘贴给 AI 助手');
+        }
+    });
 
     $('#issue-filters').addEventListener('click', event => {
         const button = event.target.closest('[data-issue-filter]');
@@ -89,6 +221,56 @@ window.HealthWorkbench = (() => {
         const ids = [...new Set((issues?.issues || []).filter(i => issueFilter === 'all' || i.type === issueFilter).map(i => i.asset_id))];
         if (!ids.length) { toast('没有待处理问题', 'info'); return; }
         check(ids);
+    });
+    $('#issues-refresh').addEventListener('click', () => load(true));
+
+    /* HTTPS 跟进：证书与 HTTPS 可达性专项清单，不影响可达性判定。 */
+    let httpsReview = null;
+    let httpsFilter = 'all';
+    async function loadHttpsReview() {
+        try {
+            httpsReview = await api('/api/https-review');
+        } catch (err) {
+            httpsReview = { ok: false, error: err.message, counts: {}, items: [] };
+        }
+        renderHttpsReview();
+        return httpsReview;
+    }
+    function renderHttpsReview() {
+        const counts = httpsReview?.counts || {};
+        $('#https-count').textContent = counts.total ? `${counts.total} 项待跟进` : '无需跟进';
+        const dashHttps = $('#dash-https-count');
+        if (dashHttps) dashHttps.textContent = counts.total ? `${counts.total} 项待跟进` : '无需跟进';
+        const dashHttpsSub = $('#dash-https-sub');
+        if (dashHttpsSub) dashHttpsSub.textContent = counts.total
+            ? `HTTPS 异常 ×${counts.fail || 0} · 未确认 ×${counts.unknown || 0} · 待复检 ×${counts.pending || 0}`
+            : '证书与 HTTPS 可达性均正常';
+        for (const key of ['total', 'fail', 'unknown', 'stale', 'pending']) {
+            const el = $('#https-' + key);
+            if (el) el.textContent = counts[key] || 0;
+        }
+        document.querySelectorAll('[data-https-filter]').forEach(button => button.setAttribute('aria-pressed', String(button.dataset.httpsFilter === httpsFilter)));
+        const list = (httpsReview?.items || []).filter(i => httpsFilter === 'all' || i.state === httpsFilter);
+        $('#https-list').innerHTML = list.length ? `<table><thead><tr><th>域名</th><th>跟进状态</th><th>证据</th><th>HTTP</th><th>检查时间</th><th>操作</th></tr></thead><tbody>${list.map(item => {
+            const stateBadge = `<span class="badge ${item.state === 'fail' ? 'b-red' : item.state === 'stale' ? 'b-amber' : ''}">${httpsStateLabels[item.state] || item.state}</span>`;
+            const http = item.http_status === 'healthy' ? '<span class="badge b-green">HTTP 正常</span>' : item.http_status === 'unhealthy' ? '<span class="badge b-red">HTTP 异常</span>' : '<span class="muted">—</span>';
+            const url = item.url ? `<a class="hc-url" href="${h(item.url)}" target="_blank" rel="noopener noreferrer" title="打开页面核对 HTTPS">${h(item.url)}</a>` : '';
+            return `<tr><td><button class="hc-asset-link" data-health-action="detail" data-id="${h(item.asset_id)}">${h(item.name)}</button><small class="hc-subline">${h(item.provider || '')}</small></td><td>${stateBadge}</td><td><span class="hc-message" title="${h(item.https_message || '')}">${h(item.https_message || '尚无 HTTPS 证据')}</span>${url}</td><td>${http}</td><td class="hc-time">${timeText(item.checked_at)}</td><td class="row-actions"><button class="btn btn-sm" data-https-check="${h(item.asset_id)}" ${running ? 'disabled' : ''}>重新检查</button></td></tr>`;
+        }).join('')}</tbody></table>` : `<div class="hc-empty">没有需要跟进的 HTTPS 事项，全部确认正常。<button class="btn btn-link" data-https-filter-reset>查看全部状态</button></div>`;
+    }
+    $('#https-filters').addEventListener('click', event => {
+        const button = event.target.closest('[data-https-filter]');
+        if (!button) return;
+        httpsFilter = httpsFilter === button.dataset.httpsFilter ? 'all' : button.dataset.httpsFilter;
+        renderHttpsReview();
+    });
+    document.addEventListener('click', event => { if (event.target.closest('[data-https-filter-reset]')) { httpsFilter = 'all'; renderHttpsReview(); } });
+    $('#https-refresh').addEventListener('click', () => loadHttpsReview());
+    document.addEventListener('click', async event => {
+        const button = event.target.closest('[data-https-check]');
+        if (!button || running) return;
+        button.disabled = true;
+        try { await check([button.dataset.httpsCheck]); } finally { await loadHttpsReview(); }
     });
 
     function render() {
@@ -173,6 +355,7 @@ window.HealthWorkbench = (() => {
     function closeDetail() {
         $('#health-detail-overlay')?.remove();
         detailId = null;
+        detailFocused = false;
         detailReturnFocus?.focus();
     }
 
@@ -202,8 +385,15 @@ window.HealthWorkbench = (() => {
         const health = getHealth(asset);
         const history = asset.history || health.history || [];
         const checks = health.checks || [];
-        overlay.innerHTML = `<section class="hc-detail modal" role="dialog" aria-modal="true" aria-labelledby="hc-detail-title"><div class="modal-head"><div><span class="hc-eyebrow">${asset.kind === 'domain' ? '域名健康详情' : 'IP 访问详情'}</span><h3 id="hc-detail-title">${h(asset.name)}</h3></div><button class="modal-close" data-close-detail aria-label="关闭详情">×</button></div><div class="modal-body"><div class="hc-detail-summary">${pill(health.status)}<span class="muted">${timeText(health.checked_at)}</span></div><p class="hc-detail-message">${h(health.message || '执行一次检查，获取当前状态。')}</p><dl class="hc-facts"><div><dt>来源</dt><dd>${h(sourceText(asset))}</dd></div><div><dt>检查目标</dt><dd>${asset.kind === 'domain' ? 'http:// 和 https://' + h(asset.name) : 'http://' + h(asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/'}</dd></div>${asset.expires_at ? `<div><dt>到期日期</dt><dd>${h(asset.expires_at)}</dd></div>` : ''}<div><dt>解析 IP</dt><dd>${(health.resolved_ips || []).map(h).join('、') || (asset.kind === 'ip' ? h(asset.ip) : '暂无数据')}</dd></div>${asset.kind === 'ip' ? `<div><dt>关联域名</dt><dd>${asset.domain_count ?? domainNames(asset).length} 个主域名 · ${asset.subdomain_count ?? 0} 个子域名<br>${domainNames(asset).map(h).join('、') || '暂无解析关联'}</dd></div><div><dt>服务器供应商</dt><dd>${h(asset.server_provider || '未填写')}</dd></div><div><dt>服务器配置</dt><dd>${h(asset.configuration || '未填写')}</dd></div>` : ''}</dl>${asset.kind === 'ip' ? `<h4>用途与备注</h4><p class="asset-note">${h(asset.note) || '暂无备注'}</p><h4>网站链接</h4><div class="asset-site-links">${window.AssetLinks.render(asset.links) || '<span class="muted">暂无网站链接</span>'}</div>` : ''}<h4>检查证据</h4><ul class="hc-check-list">${checks.length ? checks.map(c => `<li data-status="${h(c.status)}"><div><strong>${h(c.label || c.name || c.type || '检查项')}</strong><span>${h(labels[c.status] || ({ok:'正常',fail:'失败',skipped:'未执行',warning:'需关注'})[c.status] || c.status || '')}</span></div><p>${h(c.message || c.error || '—')}</p></li>`).join('') : '<li class="muted">尚无分层检测记录。旧 HTTP 结果仅作为历史参考。</li>'}</ul><h4>最近检查</h4><div class="hc-history">${history.length ? history.slice(0, 10).map(item => `<div><span>${timeText(item.checked_at)}</span>${pill(item.status || item.last_status)}<small>${h(item.message || '')}</small></div>`).join('') : '<p class="muted">执行检查后保存最近 10 次记录。</p>'}</div><p class="hc-footnote">${asset.kind === 'ip' ? 'IP 检查访问 http://IP/，以 HTTP 2xx / 3xx 为正常，不跟随重定向。结果和时间保存在服务器。' : '域名同时检查 HTTP 和 HTTPS，并验证 HTTPS 证书；两项均正常才计为正常。HTTP 受限或网站未配置可能导致检查异常，不等同于服务器宕机。'} 结果超过 24 小时标记为过时。</p></div><div class="modal-foot"><button class="btn" data-close-detail>关闭</button><button class="btn" data-rel-edit="${h(asset.id)}">编辑${asset.kind === 'domain' ? '域名' : '服务器'}</button>${asset.kind === 'domain' ? `<button class="btn" data-rel-bind="${h(asset.id)}">管理绑定</button>${asset.provider !== 'manual' ? `<button class="btn" data-rel-dns="${h(asset.id)}">管理 DNS</button>` : ''}` : ''}<button class="btn btn-primary" data-health-action="check" data-id="${h(asset.id)}" ${running ? 'disabled' : ''}>重新检查</button></div></section>`;
-        overlay.querySelector('.modal-close')?.focus();
+        const ipTargetUrl = 'http://' + (asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/';
+        const targetFact = asset.kind === 'domain'
+            ? 'http:// 和 https://' + h(asset.name)
+            : `<a class="hc-url" href="${h(ipTargetUrl)}" target="_blank" rel="noopener noreferrer" title="打开页面核对">${h(ipTargetUrl)}</a>`;
+        overlay.innerHTML = `<section class="hc-detail modal" role="dialog" aria-modal="true" aria-labelledby="hc-detail-title"><div class="modal-head"><div><span class="hc-eyebrow">${asset.kind === 'domain' ? '域名健康详情' : 'IP 访问详情'}</span><h3 id="hc-detail-title">${h(asset.name)}</h3></div><button class="modal-close" data-close-detail aria-label="关闭详情">×</button></div><div class="modal-body"><div class="hc-detail-summary"><span class="hc-detail-status">${pill(health.status)}<span class="muted">${timeText(health.checked_at)}</span></span>${asset.kind === 'ip' ? `<span class="hc-detail-actions"><button class="btn btn-sm" data-health-action="check" data-id="${h(asset.id)}" ${running ? 'disabled' : ''}>${running ? '检测中…' : '检测 HTTP 访问'}</button><button class="btn btn-sm" data-browser-probe="${h(asset.id)}" ${browserProbing.has(asset.id) ? 'disabled' : ''} title="从你当前浏览器（含系统代理）发起探测，与检查机直连视角互补">${browserProbing.has(asset.id) ? '检测中…' : '浏览器检测'}</button></span>` : ''}</div>${asset.kind === 'ip' && browserProbeHtml(asset) ? browserProbeHtml(asset) : ''}<p class="hc-detail-message">${h(health.message || '执行一次检查，获取当前状态。')}</p><dl class="hc-facts"><div><dt>来源</dt><dd>${h(sourceText(asset))}</dd></div><div><dt>检查目标</dt><dd>${targetFact}</dd></div>${asset.expires_at ? `<div><dt>到期日期</dt><dd>${h(asset.expires_at)}</dd></div>` : ''}<div><dt>解析 IP</dt><dd>${(health.resolved_ips || []).map(h).join('、') || (asset.kind === 'ip' ? h(asset.ip) : '暂无数据')}</dd></div>${asset.kind === 'ip' ? `<div><dt>关联域名</dt><dd>${asset.domain_count ?? domainNames(asset).length} 个主域名 · ${asset.subdomain_count ?? 0} 个子域名<br>${domainNames(asset).map(h).join('、') || '暂无解析关联'}</dd></div><div><dt>服务器供应商</dt><dd>${h(asset.server_provider || '未填写')}</dd></div><div><dt>服务器配置</dt><dd>${h(asset.configuration || '未填写')}</dd></div>` : ''}</dl>${asset.kind === 'ip' ? `<h4>用途与备注</h4><p class="asset-note">${h(asset.note) || '暂无备注'}</p><h4>网站链接</h4><div class="asset-site-links">${window.AssetLinks.render(asset.links) || '<span class="muted">暂无网站链接</span>'}</div>` : ''}<h4>检查证据</h4><ul class="hc-check-list">${checks.length ? checks.map(c => `<li data-status="${h(c.status)}"><div><strong>${h(c.label || c.name || c.type || '检查项')}</strong><span>${h(labels[c.status] || ({ok:'正常',fail:'失败',skipped:'未执行',warning:'需关注'})[c.status] || c.status || '')}</span></div><p>${h(c.message || c.error || '—')}</p></li>`).join('') : '<li class="muted">尚无分层检测记录。旧 HTTP 结果仅作为历史参考。</li>'}</ul><h4>最近检查</h4><div class="hc-history">${history.length ? history.slice(0, 10).map(item => `<div><span>${timeText(item.checked_at)}</span>${pill(item.status || item.last_status)}<small>${h(item.message || '')}</small></div>`).join('') : '<p class="muted">执行检查后保存最近 10 次记录。</p>'}</div><p class="hc-footnote">${asset.kind === 'ip' ? 'IP 检查访问 http://IP/，以 HTTP 2xx / 3xx 为正常，不跟随重定向。结果和时间保存在服务器。' : '可达性以 HTTP 为准：HTTP 2xx / 3xx 即计为正常。HTTPS 证书验证与 HTTPS 连接单独记录，异常时在「HTTPS 跟进」页处理，不改变可达性判定。结果超过 24 小时标记为过时。'}</p></div><div class="modal-foot"><button class="btn" data-close-detail>关闭</button><button class="btn" data-copy-history="${h(asset.id)}" title="把检查证据与最近记录复制为文本，粘贴给 AI 协助排查">复制检查历史</button><button class="btn" data-rel-edit="${h(asset.id)}">编辑${asset.kind === 'domain' ? '域名' : '服务器'}</button>${asset.kind === 'domain' ? `<button class="btn" data-rel-bind="${h(asset.id)}">管理绑定</button>${asset.provider !== 'manual' ? `<button class="btn" data-rel-dns="${h(asset.id)}">管理 DNS</button>` : ''}` : ''}<button class="btn btn-primary" data-health-action="check" data-id="${h(asset.id)}" ${running ? 'disabled' : ''}>${asset.kind === 'ip' ? (running ? '检测中…' : '检测 HTTP 访问') : (running ? '检查中…' : '重新检查')}</button></div></section>`;
+        if (!detailFocused) {
+            overlay.querySelector('.modal-close')?.focus();
+            detailFocused = true;
+        }
     }
 
     function updateBusy() {
@@ -221,7 +411,9 @@ window.HealthWorkbench = (() => {
         stopped = false;
         updateBusy();
         const progress = $('#health-progress');
-        const slot = state.tab === 'ips' ? $('#ip-progress-slot') : $('#health-progress-slot');
+        const slot = state.tab === 'ips' ? $('#ip-progress-slot')
+            : state.tab === 'issues' ? $('#issues-progress-slot')
+            : $('#health-progress-slot');
         slot.after(progress);
         progress.classList.remove('hidden');
         let done = 0, abnormal = 0, failed = 0, lastError = '';
@@ -278,6 +470,8 @@ window.HealthWorkbench = (() => {
             stop.classList.remove('hidden');
             stop.disabled = true;
             stop.textContent = '本次检查结束';
+            // 检查中的最后一次渲染发生在复位前，弹窗按钮会停留在「检测中…」，这里补一次终态渲染。
+            if (detailId) renderDetail(detailId);
         }
     }
 
@@ -290,6 +484,14 @@ window.HealthWorkbench = (() => {
         render();
         return check(snapshot.assets.filter(a => !kind || a.kind === kind).map(a => a.id));
     }
+
+    document.addEventListener('click', event => {
+        const probeButton = event.target.closest('[data-browser-probe]');
+        if (probeButton && !browserProbing.has(probeButton.dataset.browserProbe)) {
+            const asset = (snapshot?.assets || []).find(a => a.id === probeButton.dataset.browserProbe);
+            if (asset?.kind === 'ip') runBrowserProbe(asset);
+        }
+    });
 
     document.addEventListener('click', async event => {
         const filter = event.target.closest('[data-filter-category]');
@@ -440,13 +642,13 @@ window.HealthWorkbench = (() => {
         }
         overlay.querySelector('#ai-report-copy').onclick = async () => {
             if (!markdown) return;
-            try { await navigator.clipboard.writeText(markdown); message.textContent = '报告已复制，可粘贴给 AI 助手'; }
-            catch { textarea.focus(); textarea.select(); message.textContent = '请复制已选中的报告'; }
+            if (await copyText(markdown, '报告已复制，可粘贴给 AI 助手')) return;
+            textarea.focus(); textarea.select(); message.textContent = '请复制已选中的报告';
         };
         overlay.querySelector('#ai-report-prompt').onclick = async () => {
             if (!fullPrompt) return;
-            try { await navigator.clipboard.writeText(fullPrompt); message.textContent = '提示词与报告已一起复制，直接粘贴给 AI 助手即可'; }
-            catch { textarea.value = fullPrompt; textarea.focus(); textarea.select(); message.textContent = '浏览器拒绝了剪贴板权限，已改为选中全文，请手动复制'; }
+            if (await copyText(fullPrompt, '提示词与报告已一起复制，直接粘贴给 AI 助手即可')) return;
+            textarea.value = fullPrompt; textarea.focus(); textarea.select(); message.textContent = '请复制已选中的全文';
         };
         overlay.querySelector('#ai-report-download').onclick = () => {
             if (!markdown) return;
@@ -462,6 +664,26 @@ window.HealthWorkbench = (() => {
         overlay.querySelector('.modal-close')?.focus();
     }
     $('#health-report').addEventListener('click', openAiReport);
+
+    /* 从域名台账等外部列表直达域名操作中枢（DNS、检查、绑定都在详情弹窗内）。 */
+    async function openDomain(provider, name) {
+        await load();
+        const assets = snapshot?.assets || [];
+        const asset = assets.find(a => a.kind === 'domain' && a.name === name && a.provider === provider)
+            || assets.find(a => a.kind === 'domain' && a.name === name);
+        if (!asset) { toast('健康台账中未找到该域名，可能已被同步移除', 'info'); return false; }
+        if (window.DomainDetails) window.DomainDetails.open(asset.id);
+        return true;
+    }
+
+    /* 人机协同：看板 / 问题中心 / IP 页每分钟自动刷新快照与问题清单，只读缓存证据，不发起新的探测。 */
+    setInterval(() => {
+        if (document.hidden || running || loading) return;
+        if (!['dashboard', 'issues', 'ips'].includes(state.tab)) return;
+        load(true);
+    }, 60000);
     if (!$('#app-view').classList.contains('hidden')) load();
-    return { load, closeDetail, checkIds: check, openDetail: async id => { await load(); renderDetail(id); }, checkDomains: () => checkKind('domain') };
+    /* 供解析记录等外部模块按 IP 值查找台账资产（需先 await load()）。 */
+    const findIp = ip => (snapshot?.assets || []).find(a => a.kind === 'ip' && a.ip === ip) || null;
+    return { load, loadHttpsReview, closeDetail, checkIds: check, openDetail: async id => { await load(); renderDetail(id); }, checkDomains: () => checkKind('domain'), openDomain, findIp };
 })();

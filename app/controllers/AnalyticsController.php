@@ -26,6 +26,16 @@ class AnalyticsController
         }
     }
 
+    public function httpsReview(): void
+    {
+        Auth::requireLogin();
+        try {
+            json_out((new IssueService())->httpsReview());
+        } catch (Throwable $e) {
+            json_out(['ok' => false, 'error' => 'HTTPS 跟进清单读取失败：' . $e->getMessage()], 500);
+        }
+    }
+
     public function metrics(): void
     {
         Auth::requireLogin();

@@ -493,8 +493,43 @@ tbody td:first-child {
 }
 
 .rec-value {
-    word-break: break-all;
     max-width: 340px;
+}
+
+/* 记录值超出省略，悬停或点弹窗看全文；IP 值点击打开 IP 服务器详情。 */
+.rec-value-text {
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: bottom;
+}
+
+.rec-value-text > a,
+.rec-value-text > button {
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.rec-ip {
+    border: 0;
+    background: none;
+    padding: 0;
+    cursor: pointer;
+    font: inherit;
+    text-align: left;
+    border-bottom: 1px dashed currentColor;
+}
+
+.rec-ip-modal {
+    width: 560px;
+}
+
+.rec-ip-modal .hc-facts {
+    margin-top: 10px;
 }
 
 .col-check {

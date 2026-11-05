@@ -97,6 +97,19 @@ function openRecordsModal(domain, provider) {
         ? `<a class="rec-link" href="${escapeHtml(href)}" target="_blank" rel="noopener" title="打开 ${escapeHtml(href)}">${escapeHtml(text)}</a>`
         : escapeHtml(text);
 
+    /* IP 记录值（A / AAAA）→ 点击查看 IP 服务器详情弹窗；其余值保持站点链接。所有值超出省略，悬停看全文。 */
+    const isIpValue = (value) => {
+        const v = String(value || '').trim();
+        return /^(\d{1,3}\.){3}\d{1,3}$/.test(v) || (/^[0-9a-fA-F:.]+$/.test(v) && v.includes(':') && v.length >= 2);
+    };
+    const valueCell = (value) => {
+        const v = String(value || '').trim();
+        const inner = isIpValue(v)
+            ? `<button type="button" class="rec-link rec-ip" data-rec-ip="${escapeHtml(v)}" title="查看 IP ${escapeHtml(v)} 的服务器详情与台账关联">${escapeHtml(v)}</button>`
+            : linkHtml(v, valueLink(v));
+        return `<span class="rec-value-text" title="${escapeHtml(v)}">${inner}</span>`;
+    };
+
     async function loadRecords(refresh = false) {
         const request = ++loadGeneration;
         const tbody = $('#rec-table tbody');
@@ -116,7 +129,7 @@ function openRecordsModal(domain, provider) {
                     <td class="col-check"><input type="checkbox" class="rec-check" value="${escapeHtml(r.id)}"></td>
                     <td><span class="badge ${badgeClass('tencent')}">${escapeHtml(r.type)}</span></td>
                     <td>${linkHtml(r.name || '@', nameLink(r.name))}</td>
-                    <td class="rec-value">${linkHtml(r.value, valueLink(r.value))}</td>
+                    <td class="rec-value">${valueCell(r.value)}</td>
                     <td>${escapeHtml(String(r.ttl))}</td>
                     <td>${escapeHtml(String(r.priority || 0))}</td>
                     <td>${recAccessHtml(r)}</td>
@@ -280,8 +293,8 @@ function openRecordsModal(domain, provider) {
         example.addEventListener('click', event => { if (event.target === example) close(); });
         example.addEventListener('keydown', event => { if (event.key === 'Escape') { event.stopPropagation(); close(); } });
         example.querySelector('#rec-example-copy').addEventListener('click', async () => {
-            try { await navigator.clipboard.writeText(text.value); example.querySelector('#rec-example-status').textContent = '示例已复制'; }
-            catch { text.focus(); text.select(); example.querySelector('#rec-example-status').textContent = '请复制已选中的示例'; }
+            if (await copyText(text.value, '示例已复制')) return;
+            text.focus(); text.select(); example.querySelector('#rec-example-status').textContent = '请复制已选中的示例';
         });
         example.querySelector('#rec-example-copy').focus();
     });
@@ -345,6 +358,8 @@ function openRecordsModal(domain, provider) {
     });
 
     $('#rec-table tbody').addEventListener('click', async (e) => {
+        const ipButton = e.target.closest('.rec-ip');
+        if (ipButton) { openIpRecordDetails(ipButton.dataset.recIp); return; }
         if (busy) return;
         const editBtn = e.target.closest('.rec-edit');
         if (editBtn) { const record = recordsById[editBtn.dataset.id]; if (record) showForm(record); return; }
@@ -359,6 +374,63 @@ function openRecordsModal(domain, provider) {
         } catch (error) { toast('删除未完成：' + error.message, 'error', 7000); }
         finally { setBusy(false); }
     });
+
+    /* ---------- IP 记录值 → IP 服务器详情弹窗（数据来自健康台账，可跳转 IP 资产页） ---------- */
+    const healthLabels = { healthy: '正常', unhealthy: 'HTTP 异常', stale: '结果过时', unchecked: '未检查' };
+    const statusPill = (status) => `<span class="hc-status" data-status="${escapeHtml(status || 'unchecked')}"><i aria-hidden="true"></i>${escapeHtml(healthLabels[status] || status || '未检查')}</span>`;
+    const locationText = (loc) => loc ? ([loc.country, loc.region, loc.city].filter(Boolean).join(' · ') || '未提供位置') : '归属地未查询';
+
+    function ipFactsHtml(ip, asset) {
+        const health = asset?.health || { status: 'unchecked', message: '' };
+        const checked = asset ? (asset.health?.checked_at ? `<span class="muted">${escapeHtml(asset.health.checked_at)}</span>` : '<span class="muted">尚未检查</span>') : '';
+        const latency = health.latency_ms != null ? `<div><dt>延迟</dt><dd>${escapeHtml(String(health.latency_ms))} ms${health.http_code != null ? ' · HTTP ' + escapeHtml(String(health.http_code)) : ''}</dd></div>` : '';
+        const domains = asset ? (asset.linked_domains || asset.bound_domains || []) : [];
+        const facts = `<dl class="hc-facts">
+            <div><dt>健康状态</dt><dd>${asset ? statusPill(health.status) + ' ' + checked : '<span class="muted">未在 IP 资产登记，尚未纳入检查</span>'}</dd></div>
+            ${latency}
+            ${health.message ? `<div><dt>检查消息</dt><dd>${escapeHtml(health.message)}</dd></div>` : ''}
+            ${asset?.location ? `<div><dt>归属地</dt><dd>${escapeHtml(locationText(asset.location))}<br><small class="muted">近似位置，缓存于服务器；可手动重新查询</small></dd></div>` : ''}
+            <div><dt>IP 版本</dt><dd>${escapeHtml(asset?.ip_version || (ip.includes(':') ? 'IPv6' : 'IPv4'))}</dd></div>
+            ${asset ? `<div><dt>来源</dt><dd>${escapeHtml(asset.source === 'manual' ? '手工登记' : 'DNS 解析发现')} · ${escapeHtml(asset.server_provider || '供应商未填写')}</dd></div>` : ''}
+            ${asset?.note ? `<div><dt>备注</dt><dd>${escapeHtml(asset.note)}</dd></div>` : ''}
+            ${asset ? `<div><dt>关联域名</dt><dd>${escapeHtml(String(asset.domain_count ?? domains.length))} 个主域名${domains.length ? '<br>' + escapeHtml(domains.slice(0, 6).join('、')) + (domains.length > 6 ? ' 等' : '') : ''}</dd></div>` : ''}
+        </dl>`;
+        return `${asset ? '' : '<p class="hc-browser-probe" data-reachable="0"><span class="info-dot" aria-hidden="true">i</span> 该 IP 还没有登记到 IP 资产台账，未纳入健康检查；可在 IP 资产页手工登记，或检查域名以自动发现。</p>'}${facts}`;
+    }
+
+    async function openIpRecordDetails(ip) {
+        const ipOverlay = document.createElement('div');
+        ipOverlay.className = 'modal-overlay rec-ip-overlay';
+        ipOverlay.innerHTML = `<section class="modal rec-ip-modal" role="dialog" aria-modal="true" aria-label="IP 服务器详情">
+            <div class="modal-head"><div><span class="hc-eyebrow">IP SERVER</span><h3>${escapeHtml(ip)}</h3></div><button class="modal-close" aria-label="关闭详情">×</button></div>
+            <div class="modal-body"><p class="muted" data-rec-ip-loading>正在读取 IP 台账…</p><div data-rec-ip-body class="hidden"></div></div>
+            <div class="modal-foot"><button class="btn" data-rec-ip-close>关闭</button><a class="btn" href="http://${escapeHtml(ip.includes(':') ? '[' + ip + ']' : ip)}/" target="_blank" rel="noopener" title="直接访问该 IP">打开站点</a><button class="btn btn-primary" data-rec-ip-goto>${'前往 IP 资产'}</button></div>
+        </section>`;
+        (document.fullscreenElement || document.body).appendChild(ipOverlay);
+        const closeIpOverlay = () => ipOverlay.remove();
+        ipOverlay.addEventListener('click', (e) => { if (e.target === ipOverlay || e.target.closest('[data-rec-ip-close],.modal-close')) closeIpOverlay(); });
+        ipOverlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeIpOverlay(); });
+        const body = ipOverlay.querySelector('[data-rec-ip-body]');
+        try {
+            await window.HealthWorkbench?.load();
+            const asset = window.HealthWorkbench?.findIp ? window.HealthWorkbench.findIp(ip) : null;
+            ipOverlay.querySelector('[data-rec-ip-loading]')?.remove();
+            body.classList.remove('hidden');
+            body.innerHTML = ipFactsHtml(ip, asset);
+            ipOverlay.querySelector('[data-rec-ip-goto]').textContent = asset ? '在 IP 资产中查看' : '前往 IP 资产登记';
+        } catch (err) {
+            const loading = ipOverlay.querySelector('[data-rec-ip-loading]');
+            if (loading) loading.textContent = '健康台账读取失败：' + err.message;
+        }
+        ipOverlay.querySelector('[data-rec-ip-goto]').addEventListener('click', () => {
+            closeIpOverlay();
+            overlay.remove();
+            ['ip-version', 'ip-status'].forEach((id) => { const el = document.querySelector('#' + id); if (el) el.value = ''; });
+            const query = document.querySelector('#ip-query');
+            if (query) { query.value = ip; query.dispatchEvent(new Event('input', { bubbles: true })); }
+            switchTab('ips');
+        });
+    }
 
     loadRecords();
 }

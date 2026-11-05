@@ -29,6 +29,8 @@ function showLogin() {
 }
 
 /* ---------- 视图 / Tab ---------- */
+const TABS = ['dashboard', 'issues', 'trends', 'https', 'calendar', 'relations', 'domains', 'ips', 'settings'];
+
 async function showApp() {
     window.WorkspaceLogin.leave();
     $('#setup-view').classList.add('hidden');
@@ -39,12 +41,15 @@ async function showApp() {
         state.accountsLoaded = true;
         $('#current-user').textContent = '已登录';
         renderDomainFilterTabs();
-    } catch {
+        const accountsCard = $('#dash-accounts-count');
+        if (accountsCard) accountsCard.textContent = `${state.accounts.filter(a => a.enabled !== false).length} 个账号`;
+    } catch (error) {
         state.accounts = [];
         state.accountsLoaded = false;
+        toast('云账号列表加载失败：' + (error?.message || '请稍后重试') + '，域名操作可能受限，可刷新重试', 'error', 5000);
     }
     const initial = location.hash.slice(1).split('?')[0];
-    switchTab(['dashboard', 'calendar', 'relations', 'domains', 'ips', 'keys', 'settings'].includes(initial) ? initial : 'dashboard');
+    switchTab(TABS.includes(initial) ? initial : 'dashboard');
 }
 
 $$('.tab-btn').forEach((btn) => {
@@ -64,28 +69,41 @@ setInterval(updateCalendarClock, 1000);
 $('#calendar-clock').addEventListener('click', () => switchTab('calendar'));
 
 function switchTab(tab) {
-    if (!['dashboard', 'calendar', 'relations', 'domains', 'ips', 'keys', 'settings'].includes(tab)) tab = 'dashboard';
+    if (!TABS.includes(tab)) tab = 'dashboard';
     if (state.tab === 'settings' && tab !== 'settings') window.WorkspaceSettings?.leave();
     const changed = state.tab !== tab;
     state.tab = tab;
     if (changed) window.scrollTo(0, 0);
-    if ($('#page-title')) $('#page-title').textContent = ({dashboard:'健康看板',calendar:'检查日历',relations:'资产关系',domains:'域名管理',ips:'IP 资产',keys:'云账号',settings:'产品设置'})[tab];
+    if ($('#page-title')) $('#page-title').textContent = ({dashboard:'健康看板',issues:'问题中心',trends:'检查趋势',https:'HTTPS 跟进',calendar:'检查日历',relations:'资产关系',domains:'域名管理',ips:'IP 资产',settings:'产品设置'})[tab];
     if (location.hash.split('?')[0] !== '#' + tab) history.replaceState(null, '', '#' + tab);
     $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     $('#calendar-clock').classList.toggle('active', tab === 'calendar');
     $$('.tab-view').forEach((v) => v.classList.toggle('hidden', v.id !== 'view-' + tab));
     if (tab === 'dashboard') loadDashboard();
+    if (tab === 'issues') window.HealthWorkbench?.load();
+    if (tab === 'trends') window.WorkspaceTrends?.load();
+    if (tab === 'https') window.HealthWorkbench?.loadHttpsReview();
     if (tab === 'calendar') window.WorkspaceCalendar?.open();
     if (tab === 'domains') {
         loadDomains();
         loadAccessSummary();
     }
-    if (tab === 'keys') loadKeys();
     if (tab === 'relations') window.Relationships?.load();
     if (tab === 'ips') window.HealthWorkbench?.load();
     if (tab === 'settings') window.WorkspaceSettings?.load();
 }
 window.addEventListener('hashchange', () => switchTab(location.hash.slice(1).split('?')[0]));
+
+/* 看板入口卡片等元素通过 data-goto-tab 跳转到对应页面；data-goto-panel 联动目标页内的子面板（如设置页的云账号）。 */
+document.addEventListener('click', event => {
+    const target = event.target.closest('[data-goto-tab]');
+    if (!target) return;
+    switchTab(target.dataset.gotoTab);
+    if (target.dataset.gotoPanel) {
+        const panel = document.querySelector('[data-settings-tab="' + target.dataset.gotoPanel + '"]');
+        if (panel && panel.getAttribute('aria-selected') !== 'true') panel.click();
+    }
+});
 
 /* ---------- 初始化 ---------- */
 (async function init() {

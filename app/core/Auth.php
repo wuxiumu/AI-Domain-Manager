@@ -88,7 +88,7 @@ class Auth
         elseif ($route === '/api/proposals/{id}/approve' || $route === '/api/proposals/{id}/reject') { $scope = null; } // 仅管理员会话：批准会执行 DNS 写入
         elseif ($route === '/api/proposals') { $scope = 'proposals:write'; }
         elseif ($route === '/api/handover' && $method === 'GET') { $scope = 'assets:read'; }
-        elseif (in_array($route, ['/api/trends', '/api/metrics', '/api/issues'], true) && $method === 'GET') { $scope = 'assets:read'; }
+        elseif (in_array($route, ['/api/trends', '/api/metrics', '/api/issues', '/api/https-review'], true) && $method === 'GET') { $scope = 'assets:read'; }
         elseif (strpos($route, '/records') !== false) { $scope = $method === 'GET' ? 'dns:read' : 'dns:write'; }
         elseif (in_array($route, ['/api/health', '/api/health/report', '/api/operations', '/api/accounts', '/api/domains', '/api/domains/stats', '/api/sync/logs', '/api/access-check'], true) && $method === 'GET') { $scope = 'assets:read'; }
         elseif (in_array($route, ['/api/domains', '/api/health/ips', '/api/health/ips/{id}', '/api/health/domains/{id}/bindings'], true) && $method !== 'GET') { $scope = 'assets:write'; }

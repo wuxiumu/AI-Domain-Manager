@@ -9,6 +9,24 @@ class HealthController
         $this->respond(static function () use ($id) { return (new IpLocationService(DATA_DIR))->refresh($id); });
     }
 
+    /** 记录浏览器侧探测结果；仅管理员会话（探测走管理员浏览器网络，密钥视角无法产生该证据）。 */
+    public function browserProbe(string $id): void
+    {
+        Auth::requireSession();
+        $body = body_json();
+        $reachable = $body['reachable'] ?? null;
+        $ms = $body['ms'] ?? null;
+        if (!is_bool($reachable)) {
+            json_out(['ok' => false, 'error' => 'reachable 必须为布尔值'], 422);
+        }
+        if (!is_int($ms) || $ms < 0 || $ms > 60000) {
+            json_out(['ok' => false, 'error' => 'ms 必须为 0–60000 的整数'], 422);
+        }
+        $this->respond(static function () use ($id, $reachable, $ms) {
+            return (new HealthService())->recordBrowserProbe($id, $reachable, $ms);
+        });
+    }
+
     public function operations(): void
     {
         Auth::requireLogin();
@@ -18,6 +36,8 @@ class HealthController
     public function index(): void
     {
         Auth::requireLogin();
+        // 台账未变化时直接 304，省去快照重建与全量载荷传输。
+        conditional_get(asset_etag());
         $this->respond(static function () { return (new HealthService())->dashboard(); });
     }
 

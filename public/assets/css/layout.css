@@ -226,6 +226,13 @@
     margin: 42px 14px 13px;
 }
 
+.nav-hint {
+    font-size: 11px;
+    line-height: 1.7;
+    color: #a1a99e;
+    margin: 0 14px;
+}
+
 .nav-tabs {
     display: flex;
     flex-direction: column;

@@ -47,6 +47,11 @@
     z-index:180;
 }
 
+/* 变更记录弹窗与解析编辑同层：都从域名详情中枢上打开。 */
+.dns-history-overlay {
+    z-index:180;
+}
+
 .dns-review-overlay { z-index: 220; }
 .dns-review-note { margin-bottom: 16px; }
 .dns-review-item { margin-bottom: 18px; }
@@ -90,3 +95,8 @@
     text-align:center;
 }
 
+
+/* 访问检测弹窗：筛选行与结果表 */
+.access-filters{display:flex;gap:8px;flex-wrap:wrap;margin:2px 0 12px}
+.access-filters .domain-filter-tab b{font-weight:600}
+#access-modal-table .domain-name{font-weight:600}

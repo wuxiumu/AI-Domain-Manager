@@ -71,6 +71,36 @@ function json_out($data, int $code = 200): void
     exit;
 }
 
+/**
+ * 条件请求（ETag/304）：响应前声明 ETag，命中 If-None-Match 时只回 304，
+ * 让调用方省去快照重建与全量传输。GET 请求不落操作日志，提前退出不影响审计。
+ */
+function conditional_get(string $etag): void
+{
+    header('ETag: "' . $etag . '"');
+    header('Cache-Control: no-cache');
+    $header = trim((string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? ''));
+    if ($header === '') { return; }
+    if ($header === '*') { http_response_code(304); exit; }
+    foreach (explode(',', $header) as $candidate) {
+        if (trim(preg_replace('/^W\//i', '', trim($candidate)), '"') === $etag) {
+            http_response_code(304);
+            exit;
+        }
+    }
+}
+
+/** 资产数据指纹：核心台账（WorkspaceData::FILES）+ 快照附加数据源 + 5 分钟时间桶（覆盖过时翻转与快照 TTL）。 */
+function asset_etag(string $query = ''): string
+{
+    $parts = [WorkspaceData::revision(DATA_DIR), $query, (string) (int) (time() / 300)];
+    $extras = array_merge([DATA_DIR . '/ip_locations.json'], glob(DATA_DIR . '/cache/dns-*.json') ?: []);
+    foreach ($extras as $file) {
+        $parts[] = is_file($file) ? (string) filemtime($file) : 'missing';
+    }
+    return hash('sha256', implode('|', $parts));
+}
+
 /** 读取请求 JSON body */
 function body_json(): array
 {

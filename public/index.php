@@ -52,6 +52,9 @@ $router->delete('/api/maintenance/backups/{id}', [MaintenanceController::class, 
 $router->get('/api/maintenance/export', [MaintenanceController::class, 'export']);
 $router->post('/api/maintenance/preview', [MaintenanceController::class, 'preview']);
 $router->post('/api/maintenance/restore', [MaintenanceController::class, 'restore']);
+$router->get('/api/maintenance/cleanup', [CleanupController::class, 'overview']);
+$router->post('/api/maintenance/cleanup/orphans', [CleanupController::class, 'orphans']);
+$router->post('/api/maintenance/cleanup/logs', [CleanupController::class, 'logs']);
 
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
 $router->get('/api/calendar', [CalendarController::class, 'index']);
@@ -68,6 +71,7 @@ $router->get('/api/handover', [HandoverController::class, 'index']);
 $router->get('/api/trends', [AnalyticsController::class, 'trends']);
 $router->get('/api/metrics', [AnalyticsController::class, 'metrics']);
 $router->get('/api/issues', [AnalyticsController::class, 'issues']);
+$router->get('/api/https-review', [AnalyticsController::class, 'httpsReview']);
 $router->get('/api/proposals', [ProposalController::class, 'index']);
 $router->post('/api/proposals', [ProposalController::class, 'create']);
 $router->post('/api/proposals/{id}/approve', [ProposalController::class, 'approve']);
@@ -75,6 +79,7 @@ $router->post('/api/proposals/{id}/reject', [ProposalController::class, 'reject'
 $router->post('/api/health/check', [HealthController::class, 'check']);
 $router->post('/api/health/ips', [HealthController::class, 'addIp']);
 $router->post('/api/health/ips/{id}/location', [HealthController::class, 'refreshLocation']);
+$router->post('/api/health/ips/{id}/browser-probe', [HealthController::class, 'browserProbe']);
 $router->delete('/api/health/ips/{id}', [HealthController::class, 'deleteIp']);
 $router->put('/api/health/ips/{id}', [HealthController::class, 'updateIp']);
 $router->put('/api/health/domains/{id}/bindings', [HealthController::class, 'bindings']);

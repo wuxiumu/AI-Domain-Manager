@@ -1,6 +1,6 @@
 <section id="view-settings" class="tab-view hidden" aria-labelledby="settings-title">
-    <div class="page-head"><div><p class="eyebrow">PRODUCT SETTINGS</p><h1 id="settings-title">产品设置<span class="heading-dot">.</span></h1><p class="muted">管理登录、网络、API 权限、资产备份与交付自检。</p></div><a class="btn" href="/api/openapi.json" target="_blank" rel="noopener">查看 OpenAPI</a></div>
-    <div class="settings-tabs domain-filter-tabs" role="tablist" aria-label="产品设置分类"><button class="domain-filter-tab" role="tab" data-settings-tab="general" aria-selected="true">工作台配置</button><button class="domain-filter-tab" role="tab" data-settings-tab="api" aria-selected="false" data-color="tencent">AI API</button><button class="domain-filter-tab" role="tab" data-settings-tab="maintenance" aria-selected="false">数据与交付</button></div>
+    <div class="page-head"><div><p class="eyebrow">PRODUCT SETTINGS</p><h1 id="settings-title">产品设置<span class="heading-dot">.</span></h1><p class="muted">管理登录、云账号、网络、API 权限、资产备份与交付自检。</p></div><a class="btn" href="/api/openapi.json" target="_blank" rel="noopener">查看 OpenAPI</a></div>
+    <div class="settings-tabs domain-filter-tabs" role="tablist" aria-label="产品设置分类"><button class="domain-filter-tab" role="tab" data-settings-tab="general" aria-selected="true">工作台配置</button><button class="domain-filter-tab" role="tab" data-settings-tab="accounts" aria-selected="false">云账号</button><button class="domain-filter-tab" role="tab" data-settings-tab="api" aria-selected="false" data-color="tencent">AI API</button><button class="domain-filter-tab" role="tab" data-settings-tab="cleanup" aria-selected="false">数据清理</button><button class="domain-filter-tab" role="tab" data-settings-tab="maintenance" aria-selected="false">数据与交付</button></div>
     <p id="settings-error" class="error-text hidden" role="alert"></p>
     <div data-settings-panel="general" class="settings-grid">
         <section class="panel settings-card"><div class="panel-title"><h2>网络与云接口</h2><span class="badge">HTTP</span></div><p class="muted">用于云账号连接与域名同步。健康探测保留各自的超时策略。</p>
@@ -19,6 +19,24 @@
                 <label>确认新密码<input id="settings-confirm-password" type="password" required autocomplete="new-password"></label>
                 <p class="error-text hidden" role="alert"></p><button class="btn btn-primary" type="submit">更新登录信息</button>
             </form>
+        </section>
+    </div>
+    <div data-settings-panel="accounts" class="hidden">
+        <div class="page-head"><div><p class="eyebrow">CLOUD CONNECTIONS</p><h2>云账号</h2><p class="muted">随时接入和维护云账号，密钥保存后仅显示配置状态。</p></div><div class="head-actions"><button id="test-all-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg>测试全部连接</button><button id="account-add" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加云账号</button></div></div>
+        <div class="product-note"><strong>配置一次，持续使用。</strong><span>支持阿里云 / 腾讯云 / GoDaddy 多账号。保存配置后可测试连接，再显式同步域名；已有资产和文件缓存会继续保留。</span></div>
+        <div id="accounts-grid" class="grid"></div>
+        <section id="result-section" class="hidden"><div class="section-heading"><h2>连接测试记录</h2><span class="muted">当前会话</span></div><div id="result-list"></div></section>
+    </div>
+    <div data-settings-panel="cleanup" class="hidden">
+        <section class="panel settings-card"><div class="panel-title"><h2>账号不可用的记录</h2><span class="muted" id="cleanup-orphans-meta">尚未加载</span></div>
+            <p class="form-help">云账号被删除或停用后，其域名台账、DNS 缓存、健康检查数据与遗留检测记录会残留在本地。可整组删除，或转为手工资产保留域名资料；删除不可恢复，建议先在「数据与交付」创建备份。</p>
+            <p id="cleanup-error" class="error-text hidden" role="alert"></p>
+            <div id="cleanup-orphans"><p class="muted">正在加载…</p></div>
+        </section>
+        <section class="panel settings-card"><div class="panel-title"><h2>日志清理</h2><span class="muted">按维度删除 · 不可恢复</span></div>
+            <p class="form-help">检查历史支持按域名或时间删除，保留各资产最近一次健康状态；DNS 变更按域名；操作记录按时间；同步日志按类型或时间。勾选“清空全部”将删除该类日志的全部条目。</p>
+            <div id="cleanup-logs"><p class="muted">正在加载…</p></div>
+            <p id="cleanup-message" class="form-help" role="status" aria-live="polite"></p>
         </section>
     </div>
     <div data-settings-panel="api" class="hidden">
@@ -52,7 +70,7 @@
         </section>
         <section class="panel settings-card maintenance-delivery"><div class="panel-title"><h2>交付自检</h2><div class="maintenance-actions"><strong id="maintenance-check-count"></strong><button class="btn btn-sm" id="maintenance-report">导出交付摘要</button></div></div><div id="maintenance-checks" class="maintenance-checks"></div><p class="form-help">自检核对当前环境；实际交付还需在隔离实例完成恢复演练，并确认云账号权限、生产访问与授权范围。</p></section>
         <section class="panel settings-card maintenance-proposals"><div class="panel-title"><h2>AI 变更提案</h2><span class="muted">AI 密钥提交 · 管理员批准后才执行</span></div><p class="form-help">持有 proposals:write 权限的 AI 密钥在此提交 DNS 变更建议；批准时会先读取云端最新版本，再按既有护栏写入并回读核实。拒绝与批准都会记录在案；AI 无法绕过此页面直接修改云端。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>提交时间</th><th>变更内容</th><th>理由</th><th>状态</th><th>审批</th></tr></thead><tbody id="maintenance-proposals"><tr><td colspan="5">尚未加载</td></tr></tbody></table></div></section>
-        <section class="panel settings-card maintenance-dns"><div class="panel-title"><h2>DNS 变更记录</h2><span class="muted">最近 50 条 · 服务器保留 200 条</span></div><p class="form-help">可展开核对原值、拟提交值和云端回读值。待核实表示结果未确认，请先刷新云端记录，避免重复提交。记录包含私有 DNS 数据，仅管理员会话可读。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>发起时间</th><th>目标</th><th>操作与结果</th><th>前后值</th></tr></thead><tbody id="maintenance-dns-changes"><tr><td colspan="4">尚未加载</td></tr></tbody></table></div></section>
+        <section class="panel settings-card maintenance-dns"><div class="panel-title"><h2>DNS 变更记录</h2><span class="muted">最近 50 条 · 服务器保留 200 条</span><div class="maintenance-actions"><button class="btn btn-sm" id="maintenance-dns-copy">复制全部</button></div></div><p class="form-help">可展开核对原值、拟提交值和云端回读值；点击行内“复制”可把单条差异粘贴给 AI 排查。待核实表示结果未确认，请先刷新云端记录，避免重复提交。记录包含私有 DNS 数据，仅管理员会话可读。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>发起时间</th><th>目标</th><th>操作与结果</th><th>前后值</th><th>操作</th></tr></thead><tbody id="maintenance-dns-changes"><tr><td colspan="5">尚未加载</td></tr></tbody></table></div></section>
         <section class="panel settings-card maintenance-audit"><div class="panel-title"><h2>操作记录</h2><span class="muted">最近 100 条 · 服务器保留 1,000 条</span></div><p class="form-help">记录已通过登录与权限校验的写入请求。处理中表示没有完成记录，需要核实实际结果；基础记录不含请求正文或密钥，DNS 前后值请查看上方专用记录。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>发起时间</th><th>操作者</th><th>操作</th><th>结果</th></tr></thead><tbody id="maintenance-audit"><tr><td colspan="4">尚未加载</td></tr></tbody></table></div></section>
     </div>
 </section>

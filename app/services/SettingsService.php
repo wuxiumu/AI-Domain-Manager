@@ -1,6 +1,8 @@
 <?php
 
 /** Editable overrides preserve legacy configuration and stable cloud account IDs. */
+require_once __DIR__ . '/../core/PrivateJsonStore.php';
+
 class SettingsService
 {
     private PrivateJsonStore $store;

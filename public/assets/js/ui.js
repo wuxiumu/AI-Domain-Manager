@@ -2,10 +2,9 @@
 
 /* ============ UI 组件：Toast 通知 / 确认弹窗 / 输入弹窗 ============ */
 
+/* 转义统一走 core.js 的 escapeHtml（补齐单引号），避免两套实现行为漂移。 */
 function esc(s) {
-    return String(s == null ? '' : s)
-        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
+    return escapeHtml(s);
 }
 
 /* ---------- Toast：自动消失、可堆叠、点击可提前关闭 ---------- */
@@ -37,6 +36,47 @@ function toast(message, type = 'success', duration = 3500) {
     setTimeout(remove, duration);
 }
 
+/* ---------- 复制文本：剪贴板 API 不可用时（HTTP 自托管）回退隐藏文本框 ---------- */
+async function copyText(text, okMessage = '已复制到剪贴板') {
+    try {
+        await navigator.clipboard.writeText(text);
+        toast(okMessage);
+        return true;
+    } catch {
+        const helper = document.createElement('textarea');
+        helper.value = text;
+        helper.setAttribute('readonly', '');
+        helper.style.position = 'fixed';
+        helper.style.opacity = '0';
+        document.body.appendChild(helper);
+        helper.focus();
+        helper.select();
+        let copied = false;
+        try { copied = document.execCommand('copy'); } catch { copied = false; }
+        helper.remove();
+        toast(copied ? okMessage : '浏览器拒绝了复制，请手动选择文本复制', copied ? 'success' : 'error', 5000);
+        return copied;
+    }
+}
+
+/* ---------- 对话框键盘与焦点：Esc 取消、Tab 圈闭、关闭后归还焦点 ---------- */
+function bindDialogFocus(overlay, close) {
+    const previous = document.activeElement;
+    const focusables = () => Array.from(overlay.querySelectorAll('button, input, textarea, select, a[href]'))
+        .filter((el) => !el.disabled && el.offsetParent !== null);
+    overlay.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') { e.preventDefault(); close(null); return; }
+        if (e.key === 'Tab') {
+            const items = focusables();
+            if (!items.length) return;
+            const first = items[0], last = items[items.length - 1];
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
+    });
+    return () => { if (previous && typeof previous.focus === 'function') previous.focus(); };
+}
+
 /* ---------- 确认弹窗：返回 Promise<boolean> ---------- */
 function confirmDialog(options = {}) {
     const {
@@ -50,7 +90,7 @@ function confirmDialog(options = {}) {
         const overlay = document.createElement('div');
         overlay.className = 'modal-overlay';
         overlay.innerHTML = `
-            <div class="modal modal-sm">
+            <div class="modal modal-sm" role="dialog" aria-modal="true">
                 <div class="modal-head">
                     <h3>${esc(title)}</h3>
                     <button class="modal-close">×</button>
@@ -65,11 +105,14 @@ function confirmDialog(options = {}) {
             </div>`;
         (document.fullscreenElement || document.body).appendChild(overlay);
 
-        const close = (val) => { overlay.remove(); resolve(val); };
+        const close = (val) => { restoreFocus(); overlay.remove(); resolve(val); };
+        const restoreFocus = bindDialogFocus(overlay, close);
         overlay.querySelector('.modal-close').addEventListener('click', () => close(false));
         overlay.querySelector('.btn-cancel').addEventListener('click', () => close(false));
-        overlay.querySelector('.btn-confirm').addEventListener('click', () => close(true));
+        const confirmBtn = overlay.querySelector('.btn-confirm');
+        confirmBtn.addEventListener('click', () => close(true));
         overlay.addEventListener('click', (e) => { if (e.target === overlay) close(false); });
+        confirmBtn.focus();
     });
 }
 
@@ -103,11 +146,12 @@ function promptDialog(options = {}) {
             </div>`;
         (document.fullscreenElement || document.body).appendChild(overlay);
 
+        const close = (val) => { restoreFocus(); overlay.remove(); resolve(val); };
+        const restoreFocus = bindDialogFocus(overlay, close);
         const input = overlay.querySelector('.dialog-input');
         input.focus();
         input.select();
 
-        const close = (val) => { overlay.remove(); resolve(val); };
         overlay.querySelector('.modal-close').addEventListener('click', () => close(null));
         overlay.querySelector('.btn-cancel').addEventListener('click', () => close(null));
         overlay.querySelector('.btn-ok').addEventListener('click', () => close(input.value));

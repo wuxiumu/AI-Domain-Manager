@@ -52,13 +52,34 @@ window.WorkspaceMaintenance = (() => {
             $('#maintenance-checks').innerHTML = data.checks.map(check => `<div class="maintenance-check"><span class="badge ${check.status === 'ok' ? 'b-green' : check.status === 'fail' ? 'b-red' : 'b-amber'}">${check.status === 'ok' ? '通过' : check.status === 'fail' ? '需修复' : '待确认'}</span><div><strong>${escapeHtml(check.name)}</strong><p>${escapeHtml(check.detail)}</p></div></div>`).join('');
             $('#maintenance-audit').innerHTML = data.audit.length ? data.audit.map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}</td><td>${escapeHtml(entry.actor)}<small>${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(routeNames[entry.route] || (entry.route.includes('/records') ? 'DNS 操作' : entry.route))}<small>${escapeHtml(entry.method)} ${escapeHtml(entry.targets.join(' · '))}</small></td><td><span class="badge ${entry.outcome === 'success' ? 'b-green' : entry.outcome === 'failed' ? 'b-red' : 'b-amber'}">${labels[entry.outcome] || '待核实'}</span></td></tr>`).join('') : '<tr><td colspan="4" class="muted">暂无操作记录，后续通过权限校验的写入操作会记录在这里。</td></tr>';
             const dnsLabels = {verified: '云端已核实', unchanged: '无需变更', pending: '处理中 / 待核实', unconfirmed: '待核实'};
-            $('#maintenance-dns-changes').innerHTML = (data.dns_changes || []).map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}<small>${escapeHtml(entry.actor)} · ${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(entry.domain)}<small>${escapeHtml(entry.account)}</small></td><td>${({add:'新增',update:'修改',delete:'删除'})[entry.action] || '变更'}<br><span class="badge ${['verified','unchanged'].includes(entry.outcome) ? 'b-green' : 'b-amber'}">${dnsLabels[entry.outcome] || '待核实'}</span></td><td><details><summary>查看差异</summary><small>变更编号：${escapeHtml(entry.id)}</small><pre class="dns-change-values">${escapeHtml(JSON.stringify({原值:entry.before,拟提交:entry.requested,回读值:entry.after},null,2))}</pre></details></td></tr>`).join('') || '<tr><td colspan="4" class="muted">暂无 DNS 变更记录。</td></tr>';
+            $('#maintenance-dns-changes').innerHTML = (data.dns_changes || []).map(entry => `<tr><td>${escapeHtml(date(entry.started_at))}<small>${escapeHtml(entry.actor)} · ${entry.via === 'api' ? 'API' : '浏览器'}</small></td><td>${escapeHtml(entry.domain)}<small>${escapeHtml(entry.account)}</small></td><td>${({add:'新增',update:'修改',delete:'删除'})[entry.action] || '变更'}<br><span class="badge ${['verified','unchanged'].includes(entry.outcome) ? 'b-green' : 'b-amber'}">${dnsLabels[entry.outcome] || '待核实'}</span></td><td><details><summary>查看差异</summary><small>变更编号：${escapeHtml(entry.id)}</small><pre class="dns-change-values">${escapeHtml(JSON.stringify({原值:entry.before,拟提交:entry.requested,回读值:entry.after},null,2))}</pre></details></td><td class="maintenance-actions"><button class="btn btn-sm btn-link" data-dns-change-copy="${escapeHtml(entry.id)}">复制</button></td></tr>`).join('') || '<tr><td colspan="5" class="muted">暂无 DNS 变更记录。</td></tr>';
             renderProposals(data.ai_proposals || []);
         } catch (failure) { if (request === generation && visible()) error(failure.message); }
     }
 
     const proposalLabels = {pending: '待审批', executed: '已执行', failed: '执行失败', rejected: '已拒绝'};
     const proposalBadges = {pending: 'b-amber', executed: 'b-green', failed: 'b-red', rejected: ''};
+    /* 变更记录可整段复制给 AI 排查；格式与域名详情里的变更记录弹窗保持一致。 */
+    function dnsChangeLogText(entry) {
+        return [`# DNS 变更记录${entry.id ? ' ' + entry.id : ''}`,
+            `- 时间：${date(entry.started_at)}`,
+            `- 目标：${entry.domain} · 账号 ${entry.account}`,
+            `- 操作：${({add: '新增', update: '修改', delete: '删除'})[entry.action] || '变更'} · 结果：${labels[entry.outcome] || entry.outcome || '待核实'}`,
+            `- 操作者：${entry.actor || '—'} · ${entry.via === 'api' ? 'API' : '浏览器'}`,
+            '', JSON.stringify({原值: entry.before ?? null, 拟提交: entry.requested ?? null, 回读值: entry.after ?? null}, null, 2),
+        ].join('\n');
+    }
+    $('#maintenance-dns-changes').addEventListener('click', event => {
+        const button = event.target.closest('[data-dns-change-copy]');
+        if (!button) return;
+        const entry = (snapshot?.dns_changes || []).find(item => item.id === button.dataset.dnsChangeCopy);
+        if (entry) copyText(dnsChangeLogText(entry), '变更记录已复制，可直接粘贴给 AI 助手');
+    });
+    $('#maintenance-dns-copy').addEventListener('click', () => {
+        const entries = snapshot?.dns_changes || [];
+        if (!entries.length) { toast('没有可复制的变更记录', 'info'); return; }
+        copyText(entries.map(dnsChangeLogText).join('\n\n'), `已复制 ${entries.length} 条变更记录`);
+    });
     function renderProposals(proposals) {
         const actions = proposal => {
             if (proposal.status !== 'pending') return '';
@@ -158,7 +179,9 @@ window.WorkspaceMaintenance = (() => {
         action(button, async () => {
             if (button.dataset.backupDownload) download(await api('/api/maintenance/backups/' + button.dataset.backupDownload));
             if (button.dataset.backupPreview) await showPreview({backup_id: button.dataset.backupPreview});
-            if (button.dataset.backupDelete && confirm('删除这份服务器备份？请先确认已下载需要保留的资料。')) {
+            if (button.dataset.backupDelete) {
+                const ok = await confirmDialog({title: '删除服务器备份', message: '删除这份服务器备份？\n请先确认已下载需要保留的资料。', confirmText: '删除', danger: true});
+                if (!ok) return;
                 await api('/api/maintenance/backups/' + button.dataset.backupDelete, {method: 'DELETE'}); await load();
             }
         });

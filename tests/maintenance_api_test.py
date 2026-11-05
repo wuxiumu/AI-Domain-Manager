@@ -15,6 +15,129 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class MaintenanceAPI(unittest.TestCase):
+    def test_cleanup_endpoints(self):
+        """数据清理：孤儿账号记录删除/转手工 + 日志按维度删除，仅管理员会话。"""
+        import hashlib
+        with tempfile.TemporaryDirectory(prefix="workspace-cleanup-http-") as directory:
+            root = Path(directory)
+            for folder in ["app", "public"]:
+                shutil.copytree(ROOT / folder, root / folder)
+            (root / "config").mkdir()
+            (root / "data" / "cache").mkdir(parents=True)
+            with socket.socket() as listener:
+                listener.bind(("127.0.0.1", 0))
+                port = listener.getsockname()[1]
+            browser = urllib.request.build_opener(urllib.request.ProxyHandler({}), urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar()))
+            anonymous = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+            csrf = None
+
+            def request(method, path, body=None, *, token=None, client=browser, use_csrf=True):
+                headers = {"Content-Type": "application/json"}
+                if use_csrf and csrf:
+                    headers["X-CSRF-Token"] = csrf
+                if token:
+                    headers["Authorization"] = "Bearer " + token
+                req = urllib.request.Request(f"http://127.0.0.1:{port}" + path, method=method, headers=headers,
+                                             data=None if body is None else json.dumps(body).encode())
+                try:
+                    response = client.open(req, timeout=20)
+                except urllib.error.HTTPError as error:
+                    response = error
+                raw = response.read().decode()
+                try:
+                    data = json.loads(raw)
+                except ValueError:
+                    data = raw
+                return response.status, data, response.headers
+
+            with tempfile.TemporaryFile() as log:
+                process = subprocess.Popen([shutil.which("php"), "-S", f"127.0.0.1:{port}", "-t", "public", "public/index.php"],
+                                           cwd=root, stdout=log, stderr=log)
+                try:
+                    for _ in range(100):
+                        try:
+                            setup = request("GET", "/api/setup/status")[1]
+                            break
+                        except urllib.error.URLError:
+                            time.sleep(.05)
+                    else:
+                        self.fail("Disposable PHP server did not start")
+                    csrf = setup["csrf_token"]
+                    identity = request("POST", "/api/setup", {"user": "cleanup", "password": "cleanup-test-password-1"})[1]
+                    csrf = identity["csrf_token"]
+
+                    # 直接种入孤儿数据：已删除账号 aliyun_gone 的域名、缓存与健康残留
+                    gone_id = "domain_" + hashlib.sha256("aliyun_gone|orphan.com".encode()).hexdigest()[:24]
+                    gone_host = "host_" + hashlib.sha256("aliyun_gone|www.orphan.com".encode()).hexdigest()[:24]
+                    (root / "data" / "domains.json").write_text(json.dumps([
+                        {"domain": "orphan.com", "provider": "aliyun_gone", "provider_name": "阿里云-已删", "valid": True, "note": "孤儿样例"},
+                        {"domain": "keep.com", "provider": "manual", "provider_name": "手动添加", "valid": True},
+                    ]), encoding="utf-8")
+                    (root / "data" / "cache" / f"dns-{hashlib.sha256('aliyun_gone|orphan.com'.encode()).hexdigest()}.json").write_text(json.dumps(
+                        {"records": [{"id": "r1", "type": "A", "fqdn": "www.orphan.com", "value": "192.0.2.10", "ttl": 600}], "snapshot_at": "2026-01-01 00:00:00"}), encoding="utf-8")
+                    (root / "data" / "health.json").write_text(json.dumps({
+                        "manual_ips": {}, "bindings": {gone_id: {"ip_x": {"ip": "192.0.2.10"}}},
+                        "observations": {
+                            gone_id: {"health": {"status": "healthy", "checked_at": "2026-01-01 00:00:00", "checks": [], "resolved_ips": []}, "history": []},
+                            gone_host: {"health": {"status": "healthy", "checked_at": "2026-01-01 00:00:00", "checks": [], "resolved_ips": []}, "history": []}},
+                        "check_events": [
+                            {"id": "e1", "asset_id": gone_id, "kind": "domain", "name": "orphan.com", "provider": "aliyun_gone", "domain": "orphan.com", "checked_at": "2026-01-01 00:00:00", "status": "healthy"},
+                        ]}), encoding="utf-8")
+                    (root / "data" / "dns_changes.json").write_text(json.dumps({"entries": [
+                        {"id": "c1", "domain": "orphan.com", "account": "aliyun_gone", "started_at": "2026-01-01T00:00:00+08:00", "outcome": "verified"},
+                        {"id": "c2", "domain": "keep.com", "account": "manual", "started_at": "2026-06-01T00:00:00+08:00", "outcome": "verified"},
+                    ]}), encoding="utf-8")
+                    (root / "data" / "sync_log.json").write_text(json.dumps([
+                        {"time": "2026-01-01 00:00:00", "type": "sync", "data": {}},
+                        {"time": "2026-06-01 00:00:00", "type": "domain_create", "data": {}},
+                    ]), encoding="utf-8")
+
+                    self.assertEqual(request("GET", "/api/maintenance/cleanup", client=anonymous)[0], 401)
+                    self.assertEqual(request("POST", "/api/maintenance/cleanup/logs", {"store": "sync_log", "all": True}, use_csrf=False)[0], 403)
+                    token = request("POST", "/api/tokens", {"name": "cleanup probe", "days": 1, "scopes": ["assets:write"], "current_password": "cleanup-test-password-1"})[1]["token"]
+                    self.assertEqual(request("GET", "/api/maintenance/cleanup", token=token, client=anonymous)[0], 403)
+
+                    status, overview, _ = request("GET", "/api/maintenance/cleanup")
+                    self.assertEqual(status, 200)
+                    self.assertEqual([g["provider"] for g in overview["groups"]], ["aliyun_gone"])
+                    self.assertEqual(overview["logs"]["check_events"]["total"], 1)
+                    self.assertEqual(overview["logs"]["dns_changes"]["total"], 2)
+                    self.assertEqual(overview["logs"]["sync_log"]["total"], 2)
+
+                    self.assertEqual(request("POST", "/api/maintenance/cleanup/logs", {"store": "nope", "all": True})[0], 422)
+                    self.assertEqual(request("POST", "/api/maintenance/cleanup/logs", {"store": "dns_changes"})[0], 422)
+                    self.assertEqual(request("POST", "/api/maintenance/cleanup/orphans", {"provider": "manual", "action": "delete"})[0], 422)
+                    self.assertEqual(request("POST", "/api/maintenance/cleanup/orphans", {"provider": "aliyun_gone", "action": "manual", "domains": ["keep.com"]})[0], 404)
+
+                    status, removed, _ = request("POST", "/api/maintenance/cleanup/logs", {"store": "dns_changes", "domain": "orphan.com"})
+                    self.assertEqual((status, removed["removed"]), (200, 1))
+                    status, removed, _ = request("POST", "/api/maintenance/cleanup/logs", {"store": "sync_log", "type": "sync"})
+                    self.assertEqual(removed["removed"], 1)
+                    status, removed, _ = request("POST", "/api/maintenance/cleanup/logs", {"store": "check_events", "all": True})
+                    self.assertEqual(removed["removed"], 1)
+
+                    status, result, _ = request("POST", "/api/maintenance/cleanup/orphans", {"provider": "aliyun_gone", "action": "manual"})
+                    self.assertEqual(status, 200)
+                    self.assertEqual(result["domains"], 1)
+                    self.assertEqual(result["caches_removed"], 1)
+                    self.assertEqual(result["observations_removed"], 2)
+                    rows = json.loads((root / "data" / "domains.json").read_text())
+                    self.assertEqual([r["provider"] for r in rows], ["manual", "manual"])
+                    self.assertEqual(rows[0]["provider_name"], "手动添加")
+                    self.assertFalse((root / "data" / "cache" / f"dns-{hashlib.sha256('aliyun_gone|orphan.com'.encode()).hexdigest()}.json").exists())
+                    health_after = json.loads((root / "data" / "health.json").read_text())
+                    self.assertNotIn(gone_id, health_after["observations"])
+                    self.assertNotIn(gone_host, health_after["observations"])
+                    self.assertEqual(health_after["check_events"], [])
+                    _, overview_after, _ = request("GET", "/api/maintenance/cleanup")
+                    self.assertEqual(overview_after["groups"], [])
+                    self.assertEqual(overview_after["logs"]["dns_changes"]["total"], 1)
+                    _, audit_log, _ = request("GET", "/api/maintenance")
+                    self.assertTrue(any(entry["route"] == "/api/maintenance/cleanup/orphans" and entry["outcome"] == "success" for entry in audit_log["audit"]))
+                finally:
+                    process.terminate()
+                    process.wait(timeout=10)
+
     def test_delivery_flow(self):
         with tempfile.TemporaryDirectory(prefix="workspace-delivery-http-") as directory:
             root = Path(directory)

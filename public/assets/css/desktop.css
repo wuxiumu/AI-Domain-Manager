@@ -205,6 +205,7 @@
     html[data-sidebar="collapsed"] .sidebar .brand { padding: 0; justify-content: center; }
     html[data-sidebar="collapsed"] .brand > span:last-child,
     html[data-sidebar="collapsed"] .nav-caption,
+    html[data-sidebar="collapsed"] .nav-hint,
     html[data-sidebar="collapsed"] .sidebar-note,
     html[data-sidebar="collapsed"] .sidebar-foot,
     html[data-sidebar="collapsed"] .tab-btn > span,

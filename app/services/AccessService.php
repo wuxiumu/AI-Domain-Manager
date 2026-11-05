@@ -79,6 +79,7 @@ class AccessService
             'ok'         => $okCount,
             'fail'       => $failCount,
             'fail_list'  => self::failList($data),
+            'results'    => self::resultList($data),
         ];
     }
 
@@ -95,7 +96,34 @@ class AccessService
             'ok'         => (int) ($data['ok'] ?? 0),
             'fail'       => (int) ($data['fail'] ?? 0),
             'fail_list'  => self::failList($data),
+            'results'    => self::resultList($data),
         ];
+    }
+
+    /** 全部逐域结果：异常在前，按域名排序，供弹窗完整展示状态与时间。 */
+    private static function resultList(array $data): array
+    {
+        $out = [];
+        foreach ($data['results'] ?? [] as $r) {
+            if (!is_array($r)) {
+                continue;
+            }
+            $out[] = [
+                'provider'   => (string) ($r['provider'] ?? ''),
+                'domain'     => (string) ($r['domain'] ?? ''),
+                'status'     => (string) ($r['status'] ?? ''),
+                'http_code'  => (int) ($r['http_code'] ?? 0),
+                'ms'         => (int) ($r['ms'] ?? 0),
+                'scheme'     => (string) ($r['scheme'] ?? ''),
+                'error'      => (string) ($r['error'] ?? ''),
+                'checked_at' => (string) ($r['checked_at'] ?? ''),
+            ];
+        }
+        usort($out, static function (array $a, array $b): int {
+            return [$a['status'] === 'fail' ? 0 : 1, $a['domain'], $a['provider']]
+                <=> [$b['status'] === 'fail' ? 0 : 1, $b['domain'], $b['provider']];
+        });
+        return $out;
     }
 
     /** 某域名（provider|domain）是否在"无法访问"列表中 */

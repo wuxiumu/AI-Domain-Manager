@@ -4,8 +4,8 @@ $assetUrl = static function (string $path): string {
     return $path . '?v=' . filemtime(PUBLIC_DIR . $path);
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
-$scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'accounts',
-    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'setup', 'login-promo', 'calendar', 'login', 'app'];
+$scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'dns-history', 'accounts',
+    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'setup', 'login-promo', 'calendar', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -29,6 +29,9 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
     <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
     <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
     <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.5m0 3h.01"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 20v-7m5 7V4m5 16v-10m5 10V8"/><path d="M2.5 20h19"/></symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4m-4 4v2"/></symbol>
 </svg>
 <?php require __DIR__ . '/setup.php'; ?>
 
@@ -89,12 +92,12 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
         <p class="nav-caption">工作空间</p>
         <nav class="nav-tabs" id="nav-tabs" aria-label="主导航">
             <button class="tab-btn active" data-tab="dashboard"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>健康看板</span></button>
-            <button class="tab-btn" data-tab="relations"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg><span>资产关系</span></button>
             <button class="tab-btn" data-tab="domains"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><span>域名管理</span></button>
             <button class="tab-btn" data-tab="ips"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>IP 资产</span></button>
-            <button class="tab-btn" data-tab="keys"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg><span>云账号</span></button>
             <button class="tab-btn" data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>产品设置</span></button>
         </nav>
+        <p class="nav-caption">更多视图</p>
+        <p class="nav-hint muted">问题中心、趋势、关系图与云账号<br>从看板卡片与资产行内跳转进入</p>
         <div class="sidebar-note"><span class="sidebar-note-line"></span><strong>看清资产，也看清状态。</strong><p>域名与 IP 统一归档<br>每一次检查都有迹可循</p></div>
         <div class="sidebar-foot"><span class="workspace-dot"></span> 统一资产管理 <span class="version-tag">V1</span></div>
     </aside>
@@ -115,8 +118,34 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                     <button id="health-check-domains-all" class="btn">检查所有域名（含子域名）</button><button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查主域名与 IP</button>
                 </div>
             </div>
-            <section class="asset-panel" id="issues-panel" aria-labelledby="issues-title"><div class="trend-heading"><div><h2 id="issues-title">问题中心 <span id="issues-count" class="count-tag">加载中</span></h2><p class="muted" id="issues-sub">正在汇总待处理问题…</p></div><div class="trend-actions" id="issue-filters" role="group" aria-label="问题筛选"><button type="button" class="domain-filter-tab" data-issue-filter="all" aria-pressed="true">全部 <b id="issues-total">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="unhealthy" aria-pressed="false">检查异常 <b id="issues-unhealthy">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="https_pending" aria-pressed="false">HTTPS 未确认 <b id="issues-https_pending">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="stale" aria-pressed="false">结果过时 <b id="issues-stale">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="expiring" aria-pressed="false">即将到期 <b id="issues-expiring">0</b></button><button type="button" class="btn btn-sm btn-primary" id="issues-check-all">检查全部问题</button></div></div><div id="issues-list" class="table-wrap"><p class="muted">正在加载问题清单…</p></div><p class="trend-note"><span class="info-dot">i</span> 问题按 P0 立即 / P1 尽快 / P2 择期分级，检查通过后自动移出。AI 与脚本可通过 <code>GET /api/issues</code> 读取同一份清单来定位、记录并处理问题。</p></section>
-            <section class="asset-panel" id="trend-panel" aria-labelledby="trend-title"><div class="trend-heading"><div><h2 id="trend-title">近 30 天检查趋势</h2><p class="muted" id="trend-summary">检查趋势展示最近 30 天逐项检查的分布与延迟。</p></div><div class="trend-actions"><span class="trend-legend"><i class="trend-dot" style="background:var(--green)"></i>正常</span><span class="trend-legend"><i class="trend-dot" style="background:var(--red)"></i>异常</span><button class="btn btn-sm" id="trend-refresh">刷新趋势</button></div></div><div id="health-trend-chart" role="img" aria-label="最近 30 天检查趋势图，加载中"><p class="muted">正在加载趋势…</p></div><details class="trend-table"><summary>查看每日明细</summary><div class="table-wrap"><table id="trend-table"><thead><tr><th>日期</th><th>检查</th><th>正常</th><th>异常</th><th>完整检查</th><th>平均延迟</th></tr></thead><tbody><tr><td colspan="6">尚未加载</td></tr></tbody></table></div></details><p class="trend-note"><span class="info-dot">i</span> 趋势来自服务器缓存证据；AI 与监控平台可通过 <code>GET /api/trends</code> 与 <code>GET /api/metrics</code>（Prometheus 格式）读取同一份数据。</p></section>
+            <div id="dash-problem-strip" class="dash-problem-strip hidden" role="region" aria-label="待处理问题"></div>
+            <div class="dashboard-links">
+                <button type="button" class="dash-link-card" data-goto-tab="issues" aria-label="进入问题中心">
+                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-alert"/></svg>问题中心<em class="dash-link-arrow" aria-hidden="true">→</em></span>
+                    <strong id="dash-issues-count">加载中</strong>
+                    <span class="muted" id="dash-issues-sub">正在汇总待处理问题…</span>
+                </button>
+                <button type="button" class="dash-link-card" data-goto-tab="trends" aria-label="进入检查趋势">
+                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-chart"/></svg>近 30 天检查趋势<em class="dash-link-arrow" aria-hidden="true">→</em></span>
+                    <strong id="dash-trend-checks">—</strong>
+                    <span class="muted" id="dash-trend-summary">正在加载趋势…</span>
+                </button>
+                <button type="button" class="dash-link-card" data-goto-tab="https" aria-label="进入 HTTPS 跟进">
+                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-lock"/></svg>HTTPS 跟进<em class="dash-link-arrow" aria-hidden="true">→</em></span>
+                    <strong id="dash-https-count">—</strong>
+                    <span class="muted" id="dash-https-sub">证书与 HTTPS 可达性专项</span>
+                </button>
+                <button type="button" class="dash-link-card" data-goto-tab="relations" aria-label="进入资产关系">
+                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg>资产关系<em class="dash-link-arrow" aria-hidden="true">→</em></span>
+                    <strong>域名 ↔ IP</strong>
+                    <span class="muted">承载关系与影响范围</span>
+                </button>
+                <button type="button" class="dash-link-card" data-goto-tab="settings" data-goto-panel="accounts" aria-label="进入云账号配置">
+                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg>云账号<em class="dash-link-arrow" aria-hidden="true">→</em></span>
+                    <strong id="dash-accounts-count">—</strong>
+                    <span class="muted">在产品设置中维护连接</span>
+                </button>
+            </div>
             <div class="asset-type-tabs" role="group" aria-label="健康看板资产类型"><button type="button" data-health-type="domain" aria-pressed="true">主域名 <b id="health-type-domain-count">0</b></button><button type="button" data-health-type="ip" aria-pressed="false">IP / 服务器 <b id="health-type-ip-count">0</b></button></div><div id="health-overview" class="asset-progress" aria-label="所选资产检查统计"></div><div id="health-progress-slot"></div><div id="health-progress" class="health-progress hidden" role="status" aria-live="polite"><div><span class="running-dot"></span><strong id="health-progress-text">正在检查资产…</strong></div><div class="health-progress-track"><div id="health-progress-fill"></div></div></div>
             <div id="health-list-panel" role="region" aria-label="资产列表" data-panel-group="health">
             <section class="asset-panel" aria-labelledby="asset-list-title">
@@ -145,8 +174,45 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
             <div id="health-domains-panel" class="hidden" role="region" aria-label="域名统计与同步" data-panel-group="health">
             <div class="section-heading"><h2>域名资产概况</h2><span class="muted">注册状态与到期提醒</span></div>
             <div id="stats-grid" class="stats-grid compact-stats"></div>
-            <div class="two-col supplementary-grid"><section class="panel"><div class="panel-title"><h3>账号资产分布</h3><span class="panel-meta">DOMAINS</span></div><div id="provider-dist"><p class="muted">正在加载…</p></div></section><section class="panel"><div class="panel-title"><h3>最近同步</h3><span class="panel-meta">ACTIVITY</span></div><div id="recent-sync"><p class="muted">正在加载…</p></div></section></div>
+            <div class="two-col supplementary-grid"><section class="panel"><div class="panel-title"><h3>账号资产分布</h3><span class="panel-meta">DOMAINS</span></div><div id="provider-dist"><p class="muted">正在加载…</p></div></section><section class="panel"><div class="panel-title"><h3>最近同步</h3><span class="panel-meta">ACTIVITY</span><div class="maintenance-actions"><button class="btn btn-sm" id="recent-sync-copy" title="复制最近一次同步的账号结果与错误，便于排查或粘贴给 AI">复制日志</button></div></div><div id="recent-sync"><p class="muted">正在加载…</p></div></section></div>
             </div>
+        </section>
+
+        <section id="view-issues" class="inventory-page tab-view hidden" aria-labelledby="issues-page-title">
+            <div class="page-head">
+                <div><p class="eyebrow">ISSUE CENTER</p><h1 id="issues-page-title">问题中心<span class="heading-dot">.</span> <span id="issues-count" class="count-tag">加载中</span></h1></div>
+                <div class="head-actions"><button id="issues-refresh" class="btn btn-icon" type="button" aria-label="刷新问题清单" title="刷新问题清单"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button><button type="button" class="btn btn-primary" id="issues-check-all"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查全部问题</button></div>
+            </div>
+            <div id="issues-progress-slot"></div>
+            <section class="asset-panel" id="issues-panel" aria-labelledby="issues-title">
+                <div class="trend-heading"><div><h2 id="issues-title">待处理问题</h2><p class="muted" id="issues-sub">正在汇总待处理问题…</p></div><div class="trend-actions" id="issue-filters" role="group" aria-label="问题筛选"><button type="button" class="domain-filter-tab" data-issue-filter="all" aria-pressed="true">全部 <b id="issues-total">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="unhealthy" aria-pressed="false">HTTP 异常 <b id="issues-unhealthy">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="stale" aria-pressed="false">结果过时 <b id="issues-stale">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="expiring" aria-pressed="false">即将到期 <b id="issues-expiring">0</b></button></div></div>
+                <div id="issues-list" class="table-wrap"><p class="muted">正在加载问题清单…</p></div>
+                <p class="trend-note"><span class="info-dot">i</span> 可达性判定只看 HTTP 访问，HTTPS 证书与 HTTPS 可达性不在这里展示，请在「HTTPS 跟进」页单独跟进。AI 与脚本可通过 <code>GET /api/issues</code> 与 <code>GET /api/https-review</code> 分别读取两份清单。</p>
+            </section>
+        </section>
+
+        <section id="view-trends" class="inventory-page tab-view hidden" aria-labelledby="trends-page-title">
+            <div class="page-head">
+                <div><p class="eyebrow">CHECK TRENDS</p><h1 id="trends-page-title">检查趋势<span class="heading-dot">.</span></h1></div>
+                <div class="head-actions"><button class="btn" id="trend-refresh" type="button">刷新趋势</button></div>
+            </div>
+            <section class="asset-panel" id="trend-panel" aria-labelledby="trend-title">
+                <div class="trend-heading"><div><h2 id="trend-title">近 30 天检查趋势</h2><p class="muted" id="trend-summary">检查趋势展示最近 30 天逐项检查的分布与延迟。</p></div><div class="trend-actions"><span class="trend-legend"><i class="trend-dot" style="background:var(--green)"></i>正常</span><span class="trend-legend"><i class="trend-dot" style="background:var(--red)"></i>异常</span></div></div>
+                <div class="trend-body"><div id="health-trend-chart" role="img" aria-label="最近 30 天检查趋势图，加载中"><p class="muted">正在加载趋势…</p></div><details class="trend-table"><summary>查看每日明细</summary><div class="table-wrap"><table id="trend-table"><thead><tr><th>日期</th><th>检查</th><th>正常</th><th>异常</th><th>完整检查</th><th>平均延迟</th></tr></thead><tbody><tr><td colspan="6">尚未加载</td></tr></tbody></table></div></details></div>
+                <p class="trend-note"><span class="info-dot">i</span> 趋势来自服务器缓存证据；AI 与监控平台可通过 <code>GET /api/trends</code> 与 <code>GET /api/metrics</code>（Prometheus 格式）读取同一份数据。</p>
+            </section>
+        </section>
+
+        <section id="view-https" class="inventory-page tab-view hidden" aria-labelledby="https-page-title">
+            <div class="page-head">
+                <div><p class="eyebrow">HTTPS FOLLOW-UPS</p><h1 id="https-page-title">HTTPS 跟进<span class="heading-dot">.</span> <span id="https-count" class="count-tag">加载中</span></h1></div>
+                <div class="head-actions"><button id="https-refresh" class="btn btn-icon" type="button" aria-label="刷新 HTTPS 跟进清单" title="刷新 HTTPS 跟进清单"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button></div>
+            </div>
+            <section class="asset-panel" id="https-panel" aria-labelledby="https-title">
+                <div class="trend-heading"><div><h2 id="https-title">证书与 HTTPS 可达性</h2><p class="muted">不影响可达性判定：HTTP 正常的域名在这里只做证书与 HTTPS 专项跟进。</p></div><div class="trend-actions" id="https-filters" role="group" aria-label="HTTPS 跟进筛选"><button type="button" class="domain-filter-tab" data-https-filter="all" aria-pressed="true">全部 <b id="https-total">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="fail" aria-pressed="false">HTTPS 异常 <b id="https-fail">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="unknown" aria-pressed="false">未确认 <b id="https-unknown">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="stale" aria-pressed="false">证据过时 <b id="https-stale">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="pending" aria-pressed="false">待复检 <b id="https-pending">0</b></button></div></div>
+                <div id="https-list" class="table-wrap"><p class="muted">正在加载 HTTPS 跟进清单…</p></div>
+                <p class="trend-note"><span class="info-dot">i</span> 可达性判定只看 HTTP；本页汇总 HTTPS 证书验证失败、HTTPS 连接异常与尚未确认的域名，检查通过后自动移出。AI 与脚本可通过 <code>GET /api/https-review</code> 读取同一份清单。</p>
+            </section>
         </section>
 
         <section id="view-calendar" class="tab-view hidden" aria-labelledby="calendar-title">
@@ -201,7 +267,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                     <div class="domain-filter-group"><span class="domain-filter-label">健康状态</span><input type="hidden" id="f-access" value=""><div class="domain-filter-tabs" data-filter-tabs="f-access" role="group" aria-label="健康状态"></div></div>
                     <div class="domain-filter-group"><span class="domain-filter-label">排序</span><input type="hidden" id="f-sort" value="expire"><div class="domain-filter-tabs" data-filter-tabs="f-sort" role="group" aria-label="排序"></div></div>
                 </div></div>
-                <div class="health-selection-bar hidden"><span id="domain-selected-count">未选择域名</span><button class="btn btn-sm btn-primary" id="domains-to-relations" disabled>查看选中域名关系图</button><button class="btn btn-sm" id="domain-selection-clear">清除选择</button></div><div class="table-wrap"><table id="domains-table"><thead><tr><th><input type="checkbox" id="domain-select-all" aria-label="选择当前列表中的有效域名"></th><th>域名</th><th>云商</th><th>状态</th><th>到期时间</th><th>健康状态</th><th>备注</th><th>操作</th></tr></thead><tbody></tbody></table></div>
+                <div class="health-selection-bar hidden"><span id="domain-selected-count">未选择域名</span><button class="btn btn-sm btn-primary" id="domains-to-relations" disabled>查看选中域名关系图</button><button class="btn btn-sm" id="domains-batch-ip" disabled title="把所选域名的 @ A 记录批量改为新 IP">批量改解析 IP</button><button class="btn btn-sm" id="domain-selection-clear">清除选择</button></div><div class="table-wrap"><table id="domains-table"><thead><tr><th><input type="checkbox" id="domain-select-all" aria-label="选择当前列表中的有效域名"></th><th>域名</th><th>云商</th><th>状态</th><th>到期时间</th><th>健康状态</th><th>备注</th><th>操作</th></tr></thead><tbody></tbody></table></div>
                 <div id="domains-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><strong>暂无域名数据</strong><p>同步云账号中的域名，或手动添加一条资产。</p></div>
             </section>
         </section>
@@ -211,7 +277,6 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
             <div id="ip-progress-slot"></div><section class="asset-panel"><div class="panel-heading"><div><h2>IP 资产列表 </h2></div></div><div class="filters unified-filters ip-filters"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="ip-query" aria-label="搜索 IP 资产" placeholder="搜索名称、IP、备注、网站或关联域名"></label><div class="ip-filter-row" aria-label="IP 筛选条件"><input type="hidden" id="ip-version" value=""><input type="hidden" id="ip-status" value=""><div class="ip-filter-group" role="group" aria-label="地址类型"><span class="ip-filter-label">地址类型</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv4" data-color="tencent" aria-pressed="false">IPv4</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv6" data-color="violet" aria-pressed="false">IPv6</button></div><div class="ip-filter-group" role="group" aria-label="IP 状态"><span class="ip-filter-label">IP 状态</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="healthy" data-color="healthy" aria-pressed="false">IP 正常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unhealthy" data-color="unhealthy" aria-pressed="false">IP 异常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="stale" data-color="stale" aria-pressed="false">结果过时</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unchecked" aria-pressed="false">未检查</button></div></div></div><div class="table-wrap"><table id="ip-table"><thead><tr><th>名称与 IP</th><th>网站链接</th><th>用途与备注</th><th>关联域名</th><th>状态</th><th>检查时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载 IP 资产…</td></tr></tbody></table></div><div id="ip-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><strong>还没有 IP 资产</strong><p>点击“添加 IP 资产”，或检查域名以发现其解析地址。</p></div><div class="panel-caption"><span class="info-dot">i</span> 归属地查询会将 IP 发送给 ipwho.is，结果为近似位置并缓存在服务器；可手动重新查询。HTTP 检查不跟随重定向，结果与时间保存在服务器。</div></section>
         </section>
 
-        <?php require __DIR__ . '/accounts.php'; ?>
         <?php require __DIR__ . '/settings.php'; ?>
         <footer class="workspace-footer"><span>资产工作台</span><span>每一项资产，都有清晰的状态。</span></footer>
     </main>

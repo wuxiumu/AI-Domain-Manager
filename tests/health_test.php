@@ -54,6 +54,54 @@ try {
     $domain = assetByName($dashboard, 'example.com');
     expect($domain['health']['source'] === 'legacy' && $domain['history'][0]['source'] === 'legacy', 'legacy history labelled');
     expect(!is_file($root . '/health.json'), 'read-only dashboard does not create state');
+
+    // 多账号同域名：优先在用账号，已移除 / 停用账号的重复资产不再进入展示。
+    file_put_contents($root . '/settings.json', json_encode(['config' => ['accounts' => [
+        ['id' => 'act', 'provider' => 'aliyun', 'name' => '在用账号', 'enabled' => true],
+        ['id' => 'off', 'provider' => 'aliyun', 'name' => '停用账号', 'enabled' => false],
+    ]]]));
+    fixture($root, [
+        ['domain' => 'twin.example', 'provider' => 'gone'],
+        ['domain' => 'twin.example', 'provider' => 'act'],
+        ['domain' => 'twin.example', 'provider' => 'off'],
+        ['domain' => 'orphan.example', 'provider' => 'gone'],
+    ]);
+    $dedupe = new HealthService($root, $probe, $clock);
+    $rows = [];
+    foreach ($dedupe->dashboard()['assets'] as $asset) {
+        if ($asset['kind'] === 'domain') { $rows[$asset['name']] = $asset['provider']; }
+    }
+    expect(($rows['twin.example'] ?? '') === 'act', 'twin domain resolves to the in-use account (got ' . ($rows['twin.example'] ?? 'missing') . ')');
+    expect(count(array_keys($rows, 'gone', true)) === 1, 'orphan domain without in-use account is kept once');
+    expect(($rows['orphan.example'] ?? '') === 'gone', 'orphan keeps its original provider');
+
+    // 浏览器侧探测：可达计入健康状态并标注来源 browser；不可达不改记录。
+    $ipAsset = $dedupe->addIp(['ip' => '9.9.9.9', 'name' => '9.9.9.9'])['asset'];
+    $recorded = $dedupe->recordBrowserProbe($ipAsset['id'], true, 1454);
+    $probeState = $dedupe->dashboard();
+    $probeAsset = null;
+    foreach ($probeState['assets'] as $asset) { if ($asset['id'] === $ipAsset['id']) { $probeAsset = $asset; break; } }
+    expect($recorded['ok'] === true && $recorded['recorded'] === true, 'browser probe success is recorded');
+    expect($probeAsset !== null && $probeAsset['health']['status'] === 'healthy', 'browser probe success counts as healthy');
+    expect($probeAsset['health']['source'] === 'browser', 'browser probe marks source browser');
+    expect(strpos($probeAsset['health']['message'], '浏览器') !== false, 'browser probe message discloses vantage');
+    expect($probeAsset['health']['url'] === 'http://9.9.9.9/', 'browser probe stores target url');
+    $events = json_decode(file_get_contents($root . '/health.json'), true)['check_events'] ?? [];
+    expect(isset($events[0]['asset_id']) && $events[0]['asset_id'] === $ipAsset['id'] && $events[0]['status'] === 'healthy', 'browser probe lands in check events');
+    $unchanged = $dedupe->recordBrowserProbe($ipAsset['id'], false, 8000);
+    expect($unchanged['recorded'] === false, 'browser probe failure does not change the record');
+    try {
+        $dedupe->recordBrowserProbe('ip_missing', true, 100);
+        expect(false, 'missing asset rejects browser probe');
+    } catch (OutOfBoundsException $e) {
+        expect(true, 'missing asset rejects browser probe');
+    }
+    fixture($root, [
+        ['domain' => 'Example.com', 'provider' => 'test', 'provider_name' => 'Test', 'expire_at' => '2026-11-01'],
+        ['domain' => 'second.example', 'provider' => 'manual'],
+        ['domain' => 'removed.example', 'provider' => 'test', 'valid' => false],
+    ]);
+    unlink($root . '/settings.json');
     expect(count($service->operations()['pending_domains']) === 2, 'unknown HTTPS is visible in pending list');
     $httpsProbe = static function ($asset) {
         return ['status' => 'unhealthy', 'message' => 'HTTP failed', 'checks' => [], 'resolved_ips' => ['8.8.8.8'],
@@ -133,8 +181,9 @@ try {
         return $scheme === 'http' ? ['code' => 200, 'errno' => 0, 'error' => '', 'ms' => 10] : ['code' => 0, 'errno' => 60, 'error' => 'certificate expired', 'ms' => 10];
     });
     $health = $badTls->check([$tlsId])['results'][0]['health'];
-    expect($health['status'] === 'unhealthy' && count($calls) === 2, 'HTTPS certificate failure remains unhealthy despite HTTP success');
-    expect($health['checks'][2]['label'] === 'HTTPS' && $health['checks'][2]['status'] === 'unhealthy', 'record HTTPS certificate failure separately');
+    expect($health['status'] === 'healthy' && count($calls) === 2, 'HTTP success keeps domain reachable despite HTTPS certificate failure');
+    expect($health['checks'][2]['label'] === 'HTTPS' && $health['checks'][2]['status'] === 'unhealthy', 'record HTTPS certificate failure separately without failing reachability');
+    expect(strpos($health['message'], 'HTTPS') !== false, 'message points at HTTPS follow-up');
     $privateDns = new HealthService($transportDir, null, $clock, static function () { return [['type' => 'A', 'ip' => '169.254.169.254']]; }, static function () { throw new RuntimeException('Must not connect'); });
     $health = $privateDns->check([$tlsId])['results'][0]['health'];
     expect($health['checks'][0]['label'] === 'DNS' && $health['resolved_ips'] === [], 'block private DNS response before transport');

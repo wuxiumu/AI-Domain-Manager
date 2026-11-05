@@ -10,7 +10,17 @@ async function loadDashboard() {
         renderProviderDist(stats);
         renderRecentSync(stats, logs);
     } catch (err) {
-        $('#dash-sub').textContent = '加载失败: ' + err.message;
+        const sub = $('#dash-sub');
+        const message = document.createElement('span');
+        message.textContent = '看板数据加载失败：' + err.message + ' ';
+        const retry = document.createElement('button');
+        retry.type = 'button';
+        retry.className = 'btn btn-link btn-sm';
+        retry.textContent = '重试';
+        retry.addEventListener('click', () => { retry.disabled = true; retry.textContent = '重试中…'; loadDashboard(); });
+        sub.textContent = '';
+        sub.append(message, retry);
+        toast('看板数据加载失败：' + err.message, 'error');
     }
 }
 
@@ -77,9 +87,27 @@ function navigateToDomains(filters) {
     switchTab('domains');
 }
 
+let recentSyncLog = null;
+
+/* 同步失败时整段复制日志，粘贴给 AI 或留存排查。 */
+function syncLogText(log) {
+    const d = log?.data || {};
+    const lines = [`# 同步日志`, `- 时间：${log?.time || '未知'}`, `- 汇总：共 ${d.total ?? '-'} 个域名，新增 ${d.new ?? '-'}，失效 ${d.stale ?? '-'}`];
+    for (const r of d.accounts || []) {
+        lines.push(r.ok ? `- ✓ ${r.name}：${r.count} 个 · ${r.latency_ms}ms` : `- ✗ ${r.name}：${r.error || '未知错误'}`);
+    }
+    return lines.join('\n');
+}
+
+$('#recent-sync-copy').addEventListener('click', () => {
+    if (!recentSyncLog) { toast('还没有同步记录', 'info'); return; }
+    copyText(syncLogText(recentSyncLog), '同步日志已复制');
+});
+
 function renderRecentSync(s, logs) {
     const el = $('#recent-sync');
     const syncLog = logs.find((l) => l.type === 'sync');
+    recentSyncLog = syncLog || null;
     if (!syncLog) {
         el.innerHTML = '<p class="muted">还没有同步记录</p>';
         return;
