@@ -273,6 +273,19 @@ try {
         foreach ($children as $pid) { pcntl_waitpid($pid, $status); expect(pcntl_wexitstatus($status) === 0, 'parallel writer succeeded'); }
         expect((new HealthService($parallel))->dashboard()['summary']['ips'] === 6, 'no lost updates under concurrent writers');
     }
+    // 事件日志封顶：写入超过上限后仅保留最新窗口（文件内最新在前）。
+    $capDir = $root . '/cap'; mkdir($capDir);
+    file_put_contents($capDir . '/health.json', json_encode(['version' => 1, 'manual_ips' => [], 'observations' => [],
+        'check_events' => array_map(static function ($i) {
+            return ['id' => 'evt' . $i, 'checked_at' => date('Y-m-d H:i:s', 1700000000 + $i), 'status' => 'healthy',
+                'asset_id' => 'domain_x', 'kind' => 'domain', 'name' => 'cap.example', 'provider' => 'test',
+                'domain' => 'cap.example', 'message' => '', 'checks' => []];
+        }, range(5004, 0))]));
+    (new HealthService($capDir, $probe, $clock))->addIp(['ip' => '8.8.8.8', 'port' => 443]);
+    $events = json_decode(file_get_contents($capDir . '/health.json'), true)['check_events'];
+    expect(count($events) === 5000, 'check events capped to 5000');
+    expect($events[0]['id'] === 'evt5004' && end($events)['id'] === 'evt5', 'event cap keeps newest-first window');
+
     echo 'PASS: ' . $assertions . " offline health assertions\n";
 } finally {
     removeTree($root);

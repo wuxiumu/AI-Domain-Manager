@@ -458,6 +458,8 @@ window.HealthWorkbench = (() => {
                     if (results.length !== batch.length || results.some(r => !kinds.has(r.id) || !['healthy','unhealthy'].includes(r.health?.status))) throw new Error('检查结果不完整');
                     abnormal += results.filter(r => r.health.status === 'unhealthy').length;
                     for (const result of results) counts[kinds.get(result.id)][result.health.status]++;
+                    // 检查产生新历史：失效对应缓存，详情与复制日志下次按需重取。
+                    for (const result of results) historyCache.delete(result.id);
                 } catch (err) {
                     failed += batch.length;
                     lastError = err.message;

@@ -12,11 +12,15 @@ class HealthService
     public const FRESHNESS_SECONDS = 86400;
     private const MAX_BATCH = 5;
     private const MAX_HISTORY = 10;
+    /** 检查事件封顶（最新在前），防止日志随检查次数无限增长。 */
+    private const MAX_EVENTS = 5000;
     private $dir;
     private $probe;
     private $clock;
     private $dnsLookup;
     private $httpProbe;
+    /** 旧版主文件内嵌观测缓存：迁移兼容读取只解析一次，避免重建看板时按资产反复全量解析。 */
+    private $legacyObservations;
 
     public function __construct(?string $dataDir = null, ?callable $probe = null, ?callable $clock = null, ?callable $dnsLookup = null, ?callable $httpProbe = null)
     {
@@ -879,6 +883,11 @@ class HealthService
             if (!flock($lock, LOCK_EX)) { throw new RuntimeException('无法锁定健康数据'); }
             $state = $this->readState();
             $mutate($state);
+            // 事件日志封顶（最新在前，保留最近 N 条）：与 sync_log 的防膨胀策略一致，
+            // 日历与趋势只读最近窗口，更早的历史可经数据清理按需修剪。
+            if (isset($state['check_events']) && is_array($state['check_events']) && count($state['check_events']) > self::MAX_EVENTS) {
+                $state['check_events'] = array_slice($state['check_events'], 0, self::MAX_EVENTS);
+            }
             // 历史拆分迁移：主文件只保留当前健康状态，按资产历史写入 data/history/ 独立小文件，
             // 让批量检查不再为追加历史而全量重写 977×10 条记录。
             foreach (($state['observations'] ?? []) as $id => $observation) {
@@ -895,6 +904,8 @@ class HealthService
             @chmod($tmp, 0600);
             if (!@rename($tmp, $this->dir . '/health.json')) { throw new RuntimeException('健康数据保存失败'); }
             $tmp = null;
+            // 主文件已剥离内嵌历史：失效迁移缓存，保证同请求内后续读取不拿到过期数据。
+            $this->legacyObservations = null;
         } finally {
             if ($tmp !== null && is_file($tmp)) { @unlink($tmp); }
             flock($lock, LOCK_UN);
@@ -918,8 +929,18 @@ class HealthService
             $data = is_string($raw) ? json_decode($raw, true) : null;
             return is_array($data) ? array_values($data) : [];
         }
-        $legacy = $this->readJson($this->dir . '/health.json', [])['observations'][$id]['history'] ?? [];
-        return is_array($legacy) ? array_values($legacy) : [];
+        return $this->legacyHistory($id);
+    }
+
+    /** 迁移兼容：内嵌历史只解析一次主文件并缓存；迁移完成后缓存为空表，仅为零成本兜底。 */
+    private function legacyHistory(string $id): array
+    {
+        if ($this->legacyObservations === null) {
+            $observations = $this->readJson($this->dir . '/health.json', [])['observations'] ?? [];
+            $this->legacyObservations = is_array($observations) ? $observations : [];
+        }
+        $history = $this->legacyObservations[$id]['history'] ?? [];
+        return is_array($history) ? array_values($history) : [];
     }
 
     /** 写入单资产历史（原子替换 + 0600）；仅在 transaction 锁内调用。 */
