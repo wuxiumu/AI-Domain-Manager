@@ -113,6 +113,8 @@ try {
     expect(count($operations['pending_domains']) === 1, 'HTTPS success removes domain even when HTTP failed');
     expect($operations['unhealthy_domains'][0]['resolved_ips'] === ['8.8.8.8'], 'unhealthy domains expose observed IPs');
     unlink($root . '/health.json');
+    // 历史已拆分为独立文件：完全重置需要连同历史目录一起清空（恢复资产时会自动清空）。
+    foreach (glob($root . '/history/*.json') ?: [] as $historyFile) { unlink($historyFile); }
 
     foreach (['127.0.0.1', '10.0.0.1', '169.254.169.254', '100.64.0.1', '192.0.2.1', '198.18.0.1', '224.0.0.1', '240.1.2.3', '::1', 'fc00::1', 'fe80::1', '::ffff:127.0.0.1', '2001:db8::1', '2002:a00:1::', '3fff::1', '8.8.8.8/24', '2130706433'] as $ip) {
         expect(!HealthService::isPublicIp($ip), 'reject non-public/ambiguous IP ' . $ip);
@@ -131,6 +133,12 @@ try {
 
     $checked = $service->check([$domain['id']]);
     expect($checked['checked'] === 1 && count($checked['results'][0]['history']) === 1, 'check response includes newest-first history');
+    $mainState = json_decode(file_get_contents($root . '/health.json'), true);
+    expect(!isset($mainState['observations'][$domain['id']]['history']), 'main file no longer embeds per-asset history');
+    expect(count($service->readHistory($domain['id'])) === 1, 'per-asset history stored in its own file');
+    expect($service->historyFor($domain['id'])['history'][0]['status'] === 'healthy', 'historyFor returns newest-first history');
+    throwsClass(static function () use ($service) { $service->historyFor('missing_000000000000000000000000'); }, OutOfBoundsException::class, 'historyFor rejects unknown assets');
+    throwsClass(static function () use ($service) { $service->historyFor('../escape'); }, InvalidArgumentException::class, 'historyFor validates asset id charset');
     $events = json_decode(file_get_contents($root . '/health.json'), true)['check_events'];
     expect(count($events) === 1 && $events[0]['kind'] === 'domain' && $events[0]['name'] === 'example.com' && $events[0]['status'] === 'healthy', 'single check writes an identifiable calendar event');
     expect($checked['results'][0]['health']['resolved_ips'] === ['9.9.9.9'], 'filter private addresses from probe results');

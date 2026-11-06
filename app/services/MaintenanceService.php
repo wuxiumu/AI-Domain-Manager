@@ -108,6 +108,8 @@ class MaintenanceService
             $files = $plan['files'];
             $files['meta.json'] = ['status' => 'restored', 'restored_at' => date('Y-m-d H:i:s')];
             WorkspaceData::replace($this->dir, $files);
+            // 按资产检查历史不在恢复范围内（派生证据）；清空旧文件，避免指向恢复前的资产。
+            HealthService::purgeHistories($this->dir);
             // Consume only after a committed restore; an expired preview cannot be replayed.
             unlink($path);
             return ['ok' => true, 'safety_backup' => $safety, 'message' => '资产已恢复，历史检查缓存已清空，请重新检查状态'];

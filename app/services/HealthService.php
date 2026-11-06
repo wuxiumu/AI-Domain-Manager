@@ -277,6 +277,7 @@ class HealthService
             foreach (array_keys($idSet) as $id) {
                 if (isset($state['observations'][$id])) { unset($state['observations'][$id]); $removed['observations_removed']++; }
                 if (isset($state['bindings'][$id])) { unset($state['bindings'][$id]); $removed['bindings_removed']++; }
+                if (is_file($this->historyPath((string) $id))) { @unlink($this->historyPath((string) $id)); $removed['history_removed']++; }
             }
             $kept = [];
             foreach ($state['check_events'] ?? [] as $event) {
@@ -325,16 +326,20 @@ class HealthService
                 $removed['events_removed']++;
             }
             $state['check_events'] = $kept;
-            foreach (($state['observations'] ?? []) as $id => $observation) {
+            foreach (array_keys(($state['observations'] ?? [])) as $id) {
                 $targeted = $all || isset($idSet[(string) $id]);
                 if (!$all && $before === null && !$targeted) { continue; }
+                $history = $this->historyOf((string) $id, $state);
                 $keptHistory = [];
-                foreach ($observation['history'] ?? [] as $entry) {
+                foreach ($history as $entry) {
                     $time = strtotime((string) ($entry['checked_at'] ?? ''));
                     if (is_int($before) && $time !== false && $time >= $before) { $keptHistory[] = $entry; continue; }
                     $removed['history_removed']++;
                 }
-                $state['observations'][$id]['history'] = $keptHistory;
+                // 历史已拆分为独立小文件：修剪后写回或删除文件，主文件不再内嵌历史。
+                if ($keptHistory) { $this->writeHistory((string) $id, $keptHistory); }
+                else { @unlink($this->historyPath((string) $id)); }
+                if (isset($state['observations'][$id]) && is_array($state['observations'][$id])) { unset($state['observations'][$id]['history']); }
             }
         });
         return $removed;
@@ -392,10 +397,13 @@ class HealthService
         $this->transaction(function (&$state) use ($observations, $assets, &$histories, $epoch) {
             if ($epoch !== WorkspaceData::epoch($this->dir)) { throw new DomainException('检查期间资产已恢复，本批结果已丢弃，请重新检查'); }
             foreach ($observations as $id => $health) {
-                $history = $state['observations'][$id]['history'] ?? [];
+                $history = $this->historyOf($id, $state);
                 array_unshift($history, $health);
-                $state['observations'][$id] = ['health' => $health, 'history' => array_slice($history, 0, self::MAX_HISTORY)];
-                $histories[$id] = $state['observations'][$id]['history'];
+                $kept = array_slice($history, 0, self::MAX_HISTORY);
+                // 历史写入独立小文件：一批检查只触碰被检查资产，不再全量重写台账。
+                $this->writeHistory($id, $kept);
+                $histories[$id] = $kept;
+                $state['observations'][$id] = ['health' => $health];
                 $asset = $assets[$id];
                 $event = ['id' => bin2hex(random_bytes(12)), 'asset_id' => $id, 'kind' => $asset['kind'],
                     'name' => $asset['kind'] === 'ip' ? $asset['ip'] : $asset['name'], 'provider' => $asset['provider'] ?? '',
@@ -472,7 +480,7 @@ class HealthService
             $provider = (string) ($domain['provider'] ?? 'manual');
             $id = 'domain_' . substr(hash('sha256', $provider . '|' . $name), 0, 24);
             $health = $this->healthOf($id, $state);
-            $history = $state['observations'][$id]['history'] ?? [];
+            $history = $this->historyOf($id, $state);
             $old = $legacy[$provider . '|' . $domain['domain']] ?? null;
             if ($health['status'] === 'unchecked' && is_array($old)) {
                 $health['legacy'] = ['source' => 'legacy', 'checked_at' => $old['checked_at'] ?? null,
@@ -549,7 +557,7 @@ class HealthService
             'linked_subdomains' => [], 'dns_links' => [],
             'server_provider' => $entry['server_provider'] ?? '', 'configuration' => $entry['configuration'] ?? '', 'note' => $entry['note'] ?? '', 'links' => $entry['links'] ?? [],
             'expires_at' => $entry['expires_at'] ?? null, 'health' => $this->healthOf($id, $state),
-            'history' => $state['observations'][$id]['history'] ?? []];
+            'history' => $this->historyOf($id, $state)];
     }
 
     private function healthOf(string $id, array $state): array
@@ -706,9 +714,10 @@ class HealthService
                 'checked_at' => $this->timestamp(), 'latency_ms' => $ms, 'http_code' => null, 'url' => $url,
                 'checks' => [['label' => 'HTTP（浏览器）', 'status' => 'healthy', 'message' => $url . ' · 浏览器探测可达 · ' . $ms . ' ms']],
                 'resolved_ips' => [], 'source' => 'browser', 'check_type' => 'http'];
-            $history = $state['observations'][$id]['history'] ?? [];
+            $history = $this->historyOf($id, $state);
             array_unshift($history, $health);
-            $state['observations'][$id] = ['health' => $health, 'history' => array_slice($history, 0, self::MAX_HISTORY)];
+            $this->writeHistory($id, $history);
+            $state['observations'][$id] = ['health' => $health];
             $event = ['id' => bin2hex(random_bytes(12)), 'asset_id' => $id, 'kind' => 'ip', 'name' => $ip,
                 'provider' => $assets[$id]['provider'] ?? '', 'domain' => '', 'checked_at' => $health['checked_at'],
                 'status' => 'healthy', 'message' => $health['message'], 'checks' => $health['checks']];
@@ -870,7 +879,16 @@ class HealthService
             if (!flock($lock, LOCK_EX)) { throw new RuntimeException('无法锁定健康数据'); }
             $state = $this->readState();
             $mutate($state);
-            $json = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+            // 历史拆分迁移：主文件只保留当前健康状态，按资产历史写入 data/history/ 独立小文件，
+            // 让批量检查不再为追加历史而全量重写 977×10 条记录。
+            foreach (($state['observations'] ?? []) as $id => $observation) {
+                if (is_array($observation) && array_key_exists('history', $observation)) {
+                    $this->writeHistory((string) $id, is_array($observation['history']) ? $observation['history'] : []);
+                    unset($state['observations'][$id]['history']);
+                }
+            }
+            // 紧凑编码：这是机器读写的台账文件，缩进会让每次全量重写的字节量翻倍。
+            $json = json_encode($state, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             if ($json === false) { throw new RuntimeException('无法编码健康数据'); }
             $tmp = $this->dir . '/health.json.tmp.' . bin2hex(random_bytes(8));
             if (@file_put_contents($tmp, $json) !== strlen($json)) { throw new RuntimeException('健康数据写入失败'); }
@@ -881,6 +899,67 @@ class HealthService
             if ($tmp !== null && is_file($tmp)) { @unlink($tmp); }
             flock($lock, LOCK_UN);
             fclose($lock);
+        }
+    }
+
+    /** 单资产历史文件路径；ID 先经字符集校验，杜绝路径拼接风险。 */
+    private function historyPath(string $id): string
+    {
+        return $this->dir . '/history/' . $id . '.json';
+    }
+
+    /** 读取单资产最近检查历史：独立小文件优先，兼容迁移前主文件内嵌历史。 */
+    public function readHistory(string $id): array
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]{1,80}$/', (string) $id)) { return []; }
+        $path = $this->historyPath($id);
+        if (is_file($path)) {
+            $raw = @file_get_contents($path);
+            $data = is_string($raw) ? json_decode($raw, true) : null;
+            return is_array($data) ? array_values($data) : [];
+        }
+        $legacy = $this->readJson($this->dir . '/health.json', [])['observations'][$id]['history'] ?? [];
+        return is_array($legacy) ? array_values($legacy) : [];
+    }
+
+    /** 写入单资产历史（原子替换 + 0600）；仅在 transaction 锁内调用。 */
+    private function writeHistory(string $id, array $history): void
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]{1,80}$/', (string) $id)) { throw new InvalidArgumentException('资产 ID 格式不正确'); }
+        $dir = $this->dir . '/history';
+        if (!is_dir($dir) && !@mkdir($dir, 0770, true) && !is_dir($dir)) { throw new RuntimeException('无法创建历史目录'); }
+        $json = json_encode(array_values(array_slice($history, 0, self::MAX_HISTORY)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($json === false) { throw new RuntimeException('无法编码检查历史'); }
+        $tmp = $dir . '/' . $id . '.json.tmp.' . bin2hex(random_bytes(8));
+        if (@file_put_contents($tmp, $json) !== strlen($json)) { throw new RuntimeException('检查历史写入失败'); }
+        @chmod($tmp, 0600);
+        if (!@rename($tmp, $dir . '/' . $id . '.json')) { @unlink($tmp); throw new RuntimeException('检查历史保存失败'); }
+    }
+
+    /** 内存态中的资产历史：迁移前的内嵌历史优先，迁移后读取独立文件。 */
+    private function historyOf(string $id, array $state): array
+    {
+        $embedded = $state['observations'][$id]['history'] ?? null;
+        if (is_array($embedded)) { return $embedded; }
+        return $this->readHistory($id);
+    }
+
+    /** 单资产最近检查历史（列表出口不再内嵌，详情按需读取）。 */
+    public function historyFor(string $id): array
+    {
+        if (!preg_match('/^[A-Za-z0-9_-]{1,80}$/', (string) $id)) { throw new InvalidArgumentException('asset_id 格式不正确'); }
+        if (!isset($this->assets($this->readState())[$id])) { throw new OutOfBoundsException('资产不存在，请刷新后再试'); }
+        return ['ok' => true, 'asset_id' => $id, 'history' => $this->readHistory($id)];
+    }
+
+    /** 清空全部按资产历史（恢复资产/清空检查历史时调用；当前健康状态保留）。 */
+    public static function purgeHistories(string $dir): void
+    {
+        $path = $dir . '/history';
+        if (!is_dir($path)) { return; }
+        foreach (scandir($path) ?: [] as $name) {
+            if ($name === '.' || $name === '..') { continue; }
+            if (is_file($path . '/' . $name)) { @unlink($path . '/' . $name); }
         }
     }
 }

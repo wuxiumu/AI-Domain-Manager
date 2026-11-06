@@ -50,6 +50,7 @@ async function showApp() {
     }
     const initial = location.hash.slice(1).split('?')[0];
     switchTab(TABS.includes(initial) ? initial : 'dashboard');
+    refreshBackgroundTasks();
 }
 
 $$('.tab-btn').forEach((btn) => {
@@ -104,6 +105,36 @@ document.addEventListener('click', event => {
         if (panel && panel.getAttribute('aria-selected') !== 'true') panel.click();
     }
 });
+
+/* ---------- 后台任务指示：轮询队列摘要，有执行中/排队任务时在顶栏显示胶囊 ---------- */
+async function refreshBackgroundTasks() {
+    if (document.hidden || $('#app-view').classList.contains('hidden')) return;
+    const pill = $('#bg-tasks-pill');
+    if (!pill) return;
+    try {
+        const data = await api('/api/tasks');
+        const active = data.active;
+        if (!active) { pill.classList.add('hidden'); pill.textContent = ''; return; }
+        const p = active.progress || {};
+        const progress = p.total ? ` ${p.done}/${p.total}` : '';
+        pill.textContent = `${active.status === 'running' ? '后台执行中' : '后台排队'}：${active.label}${progress}`;
+        pill.title = `任务在服务器后台执行，关闭页面也会继续。${p.message ? '\n' + p.message : ''}`;
+        pill.classList.remove('hidden');
+    } catch { /* 指示器失败静默：不影响主流程 */ }
+}
+window.BackgroundTasks = { refresh: refreshBackgroundTasks };
+$('#bg-tasks-pill')?.addEventListener('click', async () => {
+    try {
+        const data = await api('/api/tasks');
+        const lines = (data.tasks || []).slice(0, 5).map(t => {
+            const label = {pending: '排队中', running: '执行中', done: '已完成', failed: '失败'}[t.status] || t.status;
+            const when = t.finished_at || t.started_at || t.created_at || '';
+            return `· ${when} ${label} ${t.type === 'health-check' ? '全量健康检查' : t.type === 'access-check' ? '域名访问检测' : t.type === 'sync' ? '域名同步' : t.type}${t.error ? '：' + t.error : ''}`;
+        });
+        toast(lines.length ? '最近后台任务：\n' + lines.join('\n') : '暂无后台任务记录', 'info', 8000);
+    } catch (err) { toast('读取后台任务失败：' + err.message, 'error'); }
+});
+setInterval(refreshBackgroundTasks, 30000);
 
 /* ---------- 初始化 ---------- */
 (async function init() {

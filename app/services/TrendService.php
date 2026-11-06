@@ -40,15 +40,13 @@ class TrendService
         }
         foreach ($state['observations'] ?? [] as $observation) {
             if (!is_array($observation)) { continue; }
-            foreach ($observation['history'] ?? [] as $entry) {
-                if (!is_array($entry) || !isset($entry['latency_ms'])) { continue; }
-                $ts = strtotime((string) ($entry['checked_at'] ?? ''));
-                if ($ts === false || $ts < $start || !isset($daily[date('Y-m-d', $ts)])) { continue; }
-                $bucket = &$daily[date('Y-m-d', $ts)];
-                $bucket['latency_sum'] += (int) $entry['latency_ms'];
-                $bucket['latency_samples']++;
-                unset($bucket);
-            }
+            foreach ($observation['history'] ?? [] as $entry) { $this->bucketLatency($daily, $entry, $start); }
+        }
+        // 历史已拆分为按资产小文件：迁移前的内嵌历史仍从上面分支读取，迁移后从这里读取。
+        foreach (glob($this->dir . '/history/*.json') ?: [] as $file) {
+            $entries = json_decode((string) @file_get_contents($file), true);
+            if (!is_array($entries)) { continue; }
+            foreach ($entries as $entry) { $this->bucketLatency($daily, $entry, $start); }
         }
         $calendar = $this->readFile('calendar.json');
         foreach ($calendar['runs'] ?? [] as $run) {
@@ -74,6 +72,18 @@ class TrendService
                 'full_runs_30d' => $runs, 'active_days' => count(array_filter($daily, static function ($b) { return $b['checks'] > 0; })),
                 'avg_latency_ms' => $latencySamplesAll ? (int) round($latencyTotal / $latencySamplesAll) : null],
             'current' => $this->current()];
+    }
+
+    /** 把一条历史记录的延迟归入当日桶；缺延迟或超出窗口的记录忽略。 */
+    private function bucketLatency(array &$daily, $entry, int $start): void
+    {
+        if (!is_array($entry) || !isset($entry['latency_ms'])) { return; }
+        $ts = strtotime((string) ($entry['checked_at'] ?? ''));
+        if ($ts === false || $ts < $start || !isset($daily[date('Y-m-d', $ts)])) { return; }
+        $bucket = &$daily[date('Y-m-d', $ts)];
+        $bucket['latency_sum'] += (int) $entry['latency_ms'];
+        $bucket['latency_samples']++;
+        unset($bucket);
     }
 
     /** 当前时点状态分布（与看板同源），供图表与监控对照。 */

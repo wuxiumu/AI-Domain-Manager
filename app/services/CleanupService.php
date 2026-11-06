@@ -206,6 +206,11 @@ class CleanupService
         foreach ((is_array($health['observations'] ?? null) ? $health['observations'] : []) as $observation) {
             if (is_array($observation['history'] ?? null)) { $historyEntries += count($observation['history']); }
         }
+        // 历史拆分为按资产小文件后从这里计数；迁移前的内嵌历史仍从上面分支读取。
+        foreach (glob($this->dir . '/history/*.json') ?: [] as $file) {
+            $entries = json_decode((string) @file_get_contents($file), true);
+            if (is_array($entries)) { $historyEntries += count($entries); }
+        }
         $dns = (new PrivateJsonStore($this->dir . '/dns_changes.json'))->read();
         $audit = (new PrivateJsonStore($this->dir . '/audit.json'))->read();
         $sync = JsonStore::read($this->dir . '/sync_log.json', []);

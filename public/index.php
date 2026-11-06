@@ -56,6 +56,10 @@ $router->get('/api/maintenance/cleanup', [CleanupController::class, 'overview'])
 $router->post('/api/maintenance/cleanup/orphans', [CleanupController::class, 'orphans']);
 $router->post('/api/maintenance/cleanup/logs', [CleanupController::class, 'logs']);
 
+// 后台任务队列（仅管理员会话；执行由 scripts/task-worker.php 在 cron 中认领）
+$router->get('/api/tasks', [TaskController::class, 'index']);
+$router->post('/api/tasks', [TaskController::class, 'create']);
+
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
 $router->get('/api/calendar', [CalendarController::class, 'index']);
 $router->put('/api/calendar/checkins/{date}', [CalendarController::class, 'saveCheckin']);
@@ -65,6 +69,7 @@ $router->put('/api/calendar/tasks/{id}', [CalendarController::class, 'updateTask
 $router->delete('/api/calendar/tasks/{id}', [CalendarController::class, 'deleteTask']);
 $router->post('/api/calendar/runs', [CalendarController::class, 'addRun']);
 $router->get('/api/health', [HealthController::class, 'index']);
+$router->get('/api/health/history', [HealthController::class, 'history']);
 $router->get('/api/operations', [HealthController::class, 'operations']);
 $router->get('/api/health/report', [HealthController::class, 'report']);
 $router->get('/api/handover', [HandoverController::class, 'index']);

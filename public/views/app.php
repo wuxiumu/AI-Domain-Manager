@@ -104,7 +104,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
     <header class="topbar">
         <div class="topbar-inner">
             <div class="topbar-start"><button id="sidebar-toggle" class="btn btn-icon shell-toggle" type="button" aria-label="收起侧栏" aria-expanded="true" aria-controls="workspace-sidebar" title="收起侧栏"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m7-11-3 3 3 3"/></svg></button><div class="breadcrumb">工作空间 <span>/</span> <strong id="page-title">健康看板</strong></div></div>
-            <div class="topbar-right"><button type="button" id="calendar-clock" class="calendar-clock" title="打开检查日历" aria-label="打开检查日历"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg><time id="calendar-clock-time"></time></button><div class="display-density" role="group" aria-label="显示密度"><button type="button" data-density="comfortable" aria-pressed="true">舒适</button><button type="button" data-density="compact" aria-pressed="false">紧凑</button></div><span class="user-avatar" aria-hidden="true">A</span><span id="current-user" class="muted">管理账号</span><button id="logout-btn" class="btn btn-ghost btn-sm">退出</button></div>
+            <div class="topbar-right"><button type="button" id="bg-tasks-pill" class="btn btn-ghost btn-sm hidden" title="在服务器后台执行，关闭浏览器也会继续"></button><button type="button" id="calendar-clock" class="calendar-clock" title="打开检查日历" aria-label="打开检查日历"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg><time id="calendar-clock-time"></time></button><div class="display-density" role="group" aria-label="显示密度"><button type="button" data-density="comfortable" aria-pressed="true">舒适</button><button type="button" data-density="compact" aria-pressed="false">紧凑</button></div><span class="user-avatar" aria-hidden="true">A</span><span id="current-user" class="muted">管理账号</span><button id="logout-btn" class="btn btn-ghost btn-sm">退出</button></div>
         </div>
     </header>
 
@@ -115,7 +115,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                 <div class="head-actions">
                     <button class="btn" data-open-health-stats>统计概况</button><button id="health-report" class="btn" title="生成可交给 AI 分析的健康报告">AI 分析</button><button id="health-refresh" class="btn btn-icon" aria-label="刷新看板" title="刷新看板"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
                     <button id="sync-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg>同步域名</button>
-                    <button id="health-check-domains-all" class="btn">检查所有域名（含子域名）</button><button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查主域名与 IP</button>
+                    <button id="health-check-domains-all" class="btn">检查所有域名（含子域名）</button><button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查主域名与 IP</button><button id="health-background-btn" class="btn" title="在服务器后台执行全量检查（不含子域名），关闭页面也会继续，完成后自动刷新">转后台执行</button>
                 </div>
             </div>
             <div id="dash-problem-strip" class="dash-problem-strip hidden" role="region" aria-label="待处理问题"></div>

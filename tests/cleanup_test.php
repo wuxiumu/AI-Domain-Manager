@@ -154,7 +154,7 @@ try {
     $result = $service->cleanLogs('check_events', ['before' => date('Y-m-d', time() - 30 * 86400)]);
     check($result['events_removed'] === 0 && $result['history_removed'] === 1, '检查历史按时间删除旧条目');
     $state = JsonStore::read($root . '/health.json');
-    check(($state['observations'][$liveId]['health']['status'] ?? '') === 'healthy' && count($state['observations'][$liveId]['history']) === 0, '清历史后保留最近健康状态');
+    check(($state['observations'][$liveId]['health']['status'] ?? '') === 'healthy' && !is_file($root . '/history/' . $liveId . '.json'), '清历史后保留最近健康状态，历史文件一并删除');
     $result = $service->cleanLogs('check_events', ['all' => true]);
     check($result['events_removed'] === 1 && $result['removed'] === 1, '清空检查事件');
     check(JsonStore::read($root . '/health.json')['check_events'] === [], '检查事件已清空');

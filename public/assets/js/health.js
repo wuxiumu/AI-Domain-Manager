@@ -14,6 +14,19 @@ window.HealthWorkbench = (() => {
     /* 浏览器侧探测：走管理员本机网络（含系统代理），与检查机直连视角互补。不写入平台证据链。 */
     const browserProbeResults = new Map();
     const browserProbing = new Set();
+    /* 按资产历史：列表出口不内嵌，详情/复制日志按需读取并缓存；每次 load() 失效。 */
+    const historyCache = new Map();
+    async function fetchHistory(id) {
+        if (!historyCache.has(id)) {
+            try {
+                const data = await api('/api/health/history?asset_id=' + encodeURIComponent(id));
+                historyCache.set(id, data.history || []);
+            } catch {
+                historyCache.set(id, []);
+            }
+        }
+        return historyCache.get(id);
+    }
     async function browserProbeFetch(url, timeoutMs = 8000) {
         const controller = new AbortController();
         const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -93,7 +106,7 @@ window.HealthWorkbench = (() => {
             lines.push('', '## 检查证据');
             for (const c of health.checks) lines.push(`- [${evidenceLabel(c)}] ${c.label || c.name || c.type || '检查项'}：${c.message || c.error || '—'}`);
         }
-        const history = asset.history || health.history || [];
+        const history = historyCache.get(asset.id) ?? asset.history ?? health.history ?? [];
         if (history.length) {
             lines.push('', '## 最近检查记录');
             for (const item of history.slice(0, 10)) lines.push(`- ${item.checked_at || '时间未知'} · ${labels[item.status || item.last_status] || '未检查'} · ${item.message || ''}${item.latency_ms != null ? `（${item.latency_ms} ms${item.http_code != null ? ' · HTTP ' + item.http_code : ''}）` : ''}`);
@@ -112,6 +125,7 @@ window.HealthWorkbench = (() => {
                     api('/api/https-review').catch(() => null),
                 ]);
                 snapshot = snap;
+                historyCache.clear();
                 if (issueData) issues = issueData;
                 if (httpsData) { httpsReview = httpsData; renderHttpsReview(); }
                 render();
@@ -191,7 +205,7 @@ window.HealthWorkbench = (() => {
         }).join('')}</tbody></table>` : '<div class="hc-empty">没有待处理问题，全部正常。<button class="btn btn-link" data-issue-filter-reset>查看全部类型</button></div>';
     }
     /* 问题行内的跳转与复制：域名异常 → 解析管理，到期 → 域名台账，日志 → 剪贴板。 */
-    document.addEventListener('click', event => {
+    document.addEventListener('click', async event => {
         const dns = event.target.closest('[data-issue-dns]');
         if (dns) { window.WorkspaceUI?.closeDialog(); openRecordsModal(dns.dataset.domain, dns.dataset.provider); return; }
         const gotoDomain = event.target.closest('[data-issue-goto-domain]');
@@ -206,7 +220,10 @@ window.HealthWorkbench = (() => {
         const copyHistory = event.target.closest('[data-copy-history]');
         if (copyHistory) {
             const asset = (snapshot?.assets || []).find(a => a.id === copyHistory.dataset.copyHistory);
-            if (asset) copyText(assetLogText(asset), '检查日志已复制，可直接粘贴给 AI 助手');
+            if (asset) {
+                await fetchHistory(asset.id);
+                copyText(assetLogText(asset), '检查日志已复制，可直接粘贴给 AI 助手');
+            }
         }
     });
 
@@ -383,7 +400,7 @@ window.HealthWorkbench = (() => {
             });
         }
         const health = getHealth(asset);
-        const history = asset.history || health.history || [];
+        const history = historyCache.get(asset.id) ?? asset.history ?? health.history ?? [];
         const checks = health.checks || [];
         const ipTargetUrl = 'http://' + (asset.ip.includes(':') ? '[' + asset.ip + ']' : asset.ip) + '/';
         const targetFact = asset.kind === 'domain'
@@ -449,7 +466,8 @@ window.HealthWorkbench = (() => {
                     stopped = true;
                 }
                 done += batch.length;
-                await load();
+                // 全量刷新按批节流：每 5 批（约 10 项）重建一次表格，批内不重绘，末批必刷。
+                if (i + 2 >= unique.length || (done / 2) % 5 === 0) await load();
                 if (discover && !discovered && i + 2 >= unique.length && !stopped) {
                     discovered = true;
                     const additions = (snapshot?.assets || []).filter(a => a.kind === 'ip' && !unique.includes(a.id));
@@ -508,7 +526,7 @@ window.HealthWorkbench = (() => {
         if (!button) return;
         const id = button.dataset.id;
         switch (button.dataset.healthAction) {
-            case 'detail': renderDetail(id); break;
+            case 'detail': void (async () => { renderDetail(id); await fetchHistory(id); if (detailId === id) renderDetail(id); })(); break;
             case 'check': await check([id]); break;
             case 'refresh': await load(); break;
             case 'clear': ['health-query', 'health-status'].forEach(key => { $('#' + key).value = ''; }); renderRows(); break;
@@ -527,14 +545,32 @@ window.HealthWorkbench = (() => {
         $('#health-status').value = '';
         render();
     }));
-    ['health-query', 'health-kind', 'health-status'].forEach(id => $('#' + id).addEventListener(id === 'health-query' ? 'input' : 'change', renderRows));
-    $('#ip-query').addEventListener('input', renderIPs);
+    /* 搜索输入防抖：大列表击键全量重建 tbody 是卡顿源头，与域名管理页保持同一节奏。 */
+    const debounce = (fn, wait) => { let timer = null; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; };
+    const debouncedRenderRows = debounce(renderRows, 300);
+    const debouncedRenderIPs = debounce(renderIPs, 300);
+    ['health-query', 'health-kind', 'health-status'].forEach(id => $('#' + id).addEventListener(id === 'health-query' ? 'input' : 'change', debouncedRenderRows));
+    $('#ip-query').addEventListener('input', debouncedRenderIPs);
     document.querySelectorAll('[data-ip-filter]').forEach(button => button.addEventListener('click', () => {
         const input = $('#' + button.dataset.ipFilter);
         input.value = input.value === button.dataset.value ? '' : button.dataset.value;
         renderIPs();
     }));
     $('#health-refresh').addEventListener('click', () => { window.WorkspaceCache?.clear(); load(true); loadDashboard(); });
+    /* 转后台执行：入队后由服务器 cron 的 worker 认领，关闭浏览器也会继续。 */
+    $('#health-background-btn')?.addEventListener('click', async () => {
+        const btn = $('#health-background-btn');
+        btn.disabled = true;
+        try {
+            await api('/api/tasks', { method: 'POST', body: JSON.stringify({ type: 'health-check' }) });
+            toast('已转入后台：全量检查将在服务器继续（不含子域名），完成后看板自动刷新。\n需服务器已配置 cron：php scripts/task-worker.php', 'success', 8000);
+            window.BackgroundTasks?.refresh?.();
+        } catch (err) {
+            toast('转入后台失败：' + err.message, 'error', 6000);
+        } finally {
+            btn.disabled = false;
+        }
+    });
     $('#health-check-all').addEventListener('click', async () => {
         if (running) return;
         if (await load(true)) await check(snapshot.assets.map(a => a.id), true);
@@ -685,5 +721,5 @@ window.HealthWorkbench = (() => {
     if (!$('#app-view').classList.contains('hidden')) load();
     /* 供解析记录等外部模块按 IP 值查找台账资产（需先 await load()）。 */
     const findIp = ip => (snapshot?.assets || []).find(a => a.kind === 'ip' && a.ip === ip) || null;
-    return { load, loadHttpsReview, closeDetail, checkIds: check, openDetail: async id => { await load(); renderDetail(id); }, checkDomains: () => checkKind('domain'), openDomain, findIp };
+    return { load, loadHttpsReview, closeDetail, checkIds: check, openDetail: async id => { await load(); renderDetail(id); await fetchHistory(id); if (detailId === id) renderDetail(id); }, checkDomains: () => checkKind('domain'), openDomain, findIp };
 })();

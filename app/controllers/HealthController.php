@@ -38,7 +38,20 @@ class HealthController
         Auth::requireLogin();
         // 台账未变化时直接 304，省去快照重建与全量载荷传输。
         conditional_get(asset_etag());
-        $this->respond(static function () { return (new HealthService())->dashboard(); });
+        $this->respond(static function () {
+            $snapshot = (new HealthService())->dashboard();
+            // 列表出口剥离历史（占载荷大头且只在详情使用），按需走 /api/health/history。
+            foreach (($snapshot['assets'] ?? []) as $key => $asset) { unset($snapshot['assets'][$key]['history']); }
+            return $snapshot;
+        });
+    }
+
+    /** 单资产最近检查历史：详情弹窗与复制日志按需读取，列表不再内嵌。 */
+    public function history(): void
+    {
+        Auth::requireLogin();
+        $id = (string) ($_GET['asset_id'] ?? '');
+        $this->respond(static function () use ($id) { return (new HealthService())->historyFor($id); });
     }
 
     /** AI 协同入口：把缓存证据整理成可直接交给 AI 分析的报告。 */

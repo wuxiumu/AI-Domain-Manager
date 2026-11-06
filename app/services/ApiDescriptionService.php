@@ -147,8 +147,11 @@ TEXT;
         }
         $add('GET', '/api/me', 'getIdentity', '读取当前登录身份');
         $add('POST', '/api/logout', 'logout', '退出管理员会话', null, null, [], 'session');
-        $add('GET', '/api/health', 'getHealthSnapshot', '读取缓存健康看板、子域名和 IP 关系', 'assets:read', null, [], 'api',
+        $add('GET', '/api/health', 'getHealthSnapshot', '读取缓存健康看板、子域名和 IP 关系（列表不内嵌检查历史）', 'assets:read', null, [], 'api',
             self::object(['assets' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Asset']], 'summary' => ['type' => 'object'], 'cache' => ['type' => 'object']]));
+        $add('GET', '/api/health/history', 'getAssetHistory', '读取单资产最近 10 次检查历史；列表出口不内嵌历史，详情按需读取', 'assets:read', null,
+            ['asset_id' => ['type' => 'string', 'description' => '资产 ID，从 /api/health 的 assets[].id 读取']], 'api',
+            self::object(['ok' => $boolean, 'asset_id' => $string, 'history' => ['type' => 'array', 'items' => ['type' => 'object']]]));
         $operationItem = self::object(['id' => $string, 'domain' => $string, 'provider' => $string,
             'checked_at' => ['type' => ['string', 'null']], 'health_status' => $string,
             'https_status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'unknown']],
@@ -298,6 +301,16 @@ TEXT;
                 'domain' => $string, 'provider' => $string, 'type' => $string,
                 'before' => ['type' => 'string', 'description' => '仅删除早于此时间的条目，Y-m-d 或完整时间'],
                 'all' => ['type' => 'boolean', 'description' => '清空该类日志全部条目']], ['store']), [], 'session');
+        $taskItem = self::object(['id' => $string, 'type' => ['type' => 'string', 'enum' => ['health-check', 'access-check', 'sync']],
+            'status' => ['type' => 'string', 'enum' => ['pending', 'running', 'done', 'failed']],
+            'progress' => ['type' => 'object'], 'result' => ['type' => ['object', 'null']], 'error' => ['type' => ['string', 'null']],
+            'actor' => $string, 'created_at' => $string, 'started_at' => ['type' => ['string', 'null']], 'finished_at' => ['type' => ['string', 'null']]]);
+        $add('GET', '/api/tasks', 'listBackgroundTasks', '后台任务队列：当前执行摘要与最近任务；执行由服务器 cron 的 worker（scripts/task-worker.php）逐个认领', null, null, [], 'session',
+            self::object(['ok' => $boolean, 'active' => ['type' => ['object', 'null']], 'tasks' => ['type' => 'array', 'items' => $taskItem]]));
+        $add('POST', '/api/tasks', 'enqueueBackgroundTask', '把长任务转入后台队列后立即返回；关闭浏览器也会继续执行。health-check=全量健康检查（可限定 kind=domain|ip，不含子域名）、access-check=域名访问检测、sync=域名同步', null,
+            self::object(['type' => ['type' => 'string', 'enum' => ['health-check', 'access-check', 'sync']],
+                'params' => self::object(['kind' => ['type' => 'string', 'enum' => ['domain', 'ip'], 'description' => '仅 health-check 支持；缺省检查域名与 IP']])]), [], 'session',
+            self::object(['ok' => $boolean, 'task' => $taskItem]));
         return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => AssetSnapshot::VERSION,
                 'description' => '缓存优先的域名 / IP 工作台。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],
             'servers' => [['url' => '/']], 'paths' => $paths, 'components' => [
