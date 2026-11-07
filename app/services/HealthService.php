@@ -724,10 +724,13 @@ class HealthService
         $message = $httpOk
             ? ($httpsOk ? 'HTTP 和 HTTPS 均正常' : 'HTTP 可访问；HTTPS 待跟进（' . ($checks[2]['message'] ?? '未通过') . '）')
             : 'HTTP 检查异常';
-        return ['status' => $httpOk ? 'healthy' : 'unhealthy', 'message' => $message,
+        $health = ['status' => $httpOk ? 'healthy' : 'unhealthy', 'message' => $message,
             'http_code' => $results['http']['code'], 'protocols' => $results, 'checks' => $checks,
             'url' => 'http://' . strtolower($host) . '/', 'https_url' => 'https://' . strtolower($host) . '/',
             'resolved_ips' => $ips, 'probed_ip' => $ips[0], 'latency_ms' => $results['http']['latency_ms'] + $results['https']['latency_ms']];
+        // 证书到期跟踪：HTTPS 探测读取到叶子证书时随观测存储（到期日 / 主体 / 签发方）。
+        if (!empty($results['https']['cert'])) { $health['cert'] = $results['https']['cert']; }
+        return $health;
     }
 
     /** 记录浏览器侧探测结果：可达计入健康状态并标注来源 browser；不可达不改变既有证据。 */
@@ -803,6 +806,10 @@ class HealthService
         if (defined('CURLOPT_PROTOCOLS') && defined('CURLPROTO_HTTPS')) {
             curl_setopt($ch, CURLOPT_PROTOCOLS, $scheme === 'http' ? CURLPROTO_HTTP : CURLPROTO_HTTPS);
         }
+        if ($scheme === 'https') {
+            // 证书到期跟踪：读取完整证书链，探测结果附带叶子证书的到期时间与签发方。
+            curl_setopt($ch, CURLOPT_CERTINFO, true);
+        }
         if (!$head) {
             curl_setopt($ch, CURLOPT_RANGE, '0-1023');
         }
@@ -812,8 +819,41 @@ class HealthService
             $result['errno'] = 0;
             $result['error'] = '';
         }
+        if ($scheme === 'https') {
+            $cert = self::parseCertInfo(curl_getinfo($ch, CURLINFO_CERTINFO));
+            if ($cert !== null) { $result['cert'] = $cert; }
+        }
         curl_close($ch);
         return $result;
+    }
+
+    /** 解析 CURLINFO_CERTINFO：取链首（叶子证书）的到期时间与签发方；无法解析返回 null。 */
+    public static function parseCertInfo($certInfo): ?array
+    {
+        if (!is_array($certInfo)) { return null; }
+        foreach ($certInfo as $cert) {
+            if (!is_array($cert)) { continue; }
+            $expire = $subject = $issuer = null;
+            foreach ($cert as $key => $value) {
+                $key = strtolower((string) $key);
+                if ($key === 'expire time') { $expire = (string) $value; }
+                elseif ($key === 'subject') { $subject = (string) $value; }
+                elseif ($key === 'issuer') { $issuer = (string) $value; }
+            }
+            $timestamp = $expire !== null ? strtotime($expire) : false;
+            if ($timestamp === false || $timestamp <= 0) { continue; }
+            return ['expires_at' => date('Y-m-d', $timestamp),
+                'subject' => self::certCn($subject), 'issuer' => self::certCn($issuer)];
+        }
+        return null;
+    }
+
+    /** 从 DN 字符串提取 CN；无 CN 时保留原文。 */
+    private static function certCn(?string $dn): ?string
+    {
+        $dn = trim((string) $dn);
+        if ($dn === '') { return null; }
+        return preg_match('/CN=([^,\/]+)/i', $dn, $matches) ? trim($matches[1]) : $dn;
     }
 
     /** 发起 HTTP 请求：无并发任务时阻塞执行；并发任务内经调度器挂起，句柄完成后恢复。 */

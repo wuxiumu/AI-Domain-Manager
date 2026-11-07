@@ -29,6 +29,10 @@ try {
         ['domain' => 'expiring.example', 'provider' => 'manual', 'expire_at' => date('Y-m-d', $now + 8 * 86400)],
         ['domain' => 'drift.example', 'provider' => 'manual'],
         ['domain' => 'tls.example', 'provider' => 'manual'],
+        ['domain' => 'cert7.example', 'provider' => 'manual'],
+        ['domain' => 'cert14.example', 'provider' => 'manual'],
+        ['domain' => 'cert30.example', 'provider' => 'manual'],
+        ['domain' => 'certok.example', 'provider' => 'manual'],
     ]));
     $state = [
         'version' => 1, 'manual_ips' => [], 'check_events' => [],
@@ -52,12 +56,23 @@ try {
                 'message' => 'DNS 已更新，请重新检查；上次结果：正常', 'resolved_ips' => [], 'protocols' => ['https' => ['status' => 'healthy']]], 'history' => []],
         ],
     ];
+    // TLS 证书临期夹具：同一「现状/方案/验收」分级（≤7 P1、≤14 P2、≤30 P2），60 天不报；健康 HTTPS 也进入跟进页。
+    $certHealth = static function (int $days) use ($now): array {
+        return ['status' => 'healthy', 'checked_at' => date('Y-m-d H:i:s', $now - 600),
+            'message' => 'HTTP 和 HTTPS 均正常', 'resolved_ips' => ['1.2.3.4'],
+            'protocols' => ['http' => ['status' => 'healthy'], 'https' => ['status' => 'healthy']],
+            'cert' => ['expires_at' => date('Y-m-d', $now + $days * 86400), 'subject' => 'site.example', 'issuer' => 'R3']];
+    };
+    $state['observations']['cert7'] = ['health' => $certHealth(5), 'history' => []];
+    $state['observations']['cert14'] = ['health' => $certHealth(12), 'history' => []];
+    $state['observations']['cert30'] = ['health' => $certHealth(25), 'history' => []];
+    $state['observations']['certok'] = ['health' => $certHealth(60), 'history' => []];
     // 观测必须挂在真实资产 ID 上：先建空看板取回 ID 映射，再写回观测。
     file_put_contents($root . '/health.json', json_encode(['version' => 1, 'manual_ips' => [], 'observations' => [], 'check_events' => []]));
     $ids = [];
     foreach ((new HealthService($root, null, $clock))->dashboard()['assets'] as $asset) { $ids[$asset['name']] = $asset['id']; }
     $state['observations'] = array_combine(array_map(static function ($name) use ($ids) { return $ids[$name]; },
-        ['broken.example', 'tls.example', 'old.example', 'fine.example', 'drift.example']), array_values($state['observations']));
+        ['broken.example', 'tls.example', 'old.example', 'fine.example', 'drift.example', 'cert7.example', 'cert14.example', 'cert30.example', 'certok.example']), array_values($state['observations']));
     file_put_contents($root . '/health.json', json_encode($state));
     // 过时的 IP：走真实登记 + 检查流程，再把时钟推进 2 天让它变过时。
     $seedProbe = static function ($asset) { return ['status' => 'unhealthy', 'message' => 'HTTP 503', 'checks' => [], 'resolved_ips' => [], 'latency_ms' => 30]; };
@@ -67,8 +82,8 @@ try {
 
     $result = (new IssueService($root, $clock))->issues();
     $counts = $result['counts'];
-    expect($result['ok'] === true && $counts['total'] === 5, "five issues across three types (got {$counts['total']})");
-    expect($counts['unhealthy'] === 1 && $counts['stale'] === 3 && $counts['expiring'] === 1, 'counts per type');
+    expect($result['ok'] === true && $counts['total'] === 8, "eight issues across four types (got {$counts['total']})");
+    expect($counts['unhealthy'] === 1 && $counts['stale'] === 3 && $counts['expiring'] === 1 && $counts['cert_expiring'] === 3, 'counts per type');
     expect(!isset($counts['https_pending']) && !array_filter($result['issues'], static function ($i) { return $i['type'] === 'https_pending'; }), 'HTTPS items stay out of the issue center');
     expect($result['issues'][0]['severity'] === 'P0' && $result['issues'][0]['type'] === 'unhealthy' && $result['issues'][0]['name'] === 'broken.example', 'P0 unhealthy sorts first');
     expect(strpos($result['issues'][0]['summary'], 'HTTP 检查异常') !== false, 'P0 summary carries evidence');
@@ -83,6 +98,17 @@ try {
     expect(in_array('expiring:domain:expiring.example', $ids, true), 'expiring domain listed');
     $expiring = $result['issues'][array_search('expiring:domain:expiring.example', $ids, true)];
     expect($expiring['severity'] === 'P2' && strpos($expiring['summary'], '天内到期') !== false && $expiring['due'] !== null, 'expiring issue carries due date');
+    // 证书临期：稳定 ID（cert:domain:域名）去重；≤7 天 P1、≤14/≤30 P2；60 天不报。
+    expect(in_array('cert:domain:cert7.example', $ids, true) && in_array('cert:domain:cert14.example', $ids, true) && in_array('cert:domain:cert30.example', $ids, true), 'cert expiring issues listed with stable ids');
+    expect(!in_array('cert:domain:certok.example', $ids, true), 'certificate beyond 30 days not listed');
+    $certIssue = $result['issues'][array_search('cert:domain:cert7.example', $ids, true)];
+    expect($certIssue['severity'] === 'P1' && strpos($certIssue['summary'], '天内到期') !== false, 'cert within 7 days escalates to P1');
+    expect(strpos($certIssue['summary'], $certIssue['due']) !== false && strpos($certIssue['summary'], 'TLS 证书') !== false, 'cert issue summary carries expiry and type');
+    expect(strpos($result['issues'][array_search('cert:domain:cert14.example', $ids, true)]['summary'], '天内到期') !== false, 'cert within 14 days uses middle tier');
+    expect($result['issues'][array_search('cert:domain:cert30.example', $ids, true)]['severity'] === 'P2', 'cert within 30 days stays P2');
+    $again = (new IssueService($root, $clock))->issues();
+    $firstIds = array_column($result['issues'], 'id');
+    expect(array_column($again['issues'], 'id') === $firstIds, 'repeated reads produce identical stable list (no duplicates)');
     expect(!isset($result['issues'][array_search('unhealthy:domain:broken.example', $ids, true)]['due']), 'check issues have no due field set');
     foreach ($result['issues'] as $issue) {
         expect(in_array($issue['severity'], ['P0', 'P1', 'P2'], true), 'severity present');
@@ -97,17 +123,20 @@ try {
     (new IssueService($root, $clock))->issues();
     expect(glob($root . '/*') === $before, 'issue reads never create or modify files');
 
-    // HTTPS 跟进清单：HTTP 正常但 HTTPS 异常的域名在这里，且不影响问题中心。
+    // HTTPS 跟进清单：HTTP 正常但 HTTPS 异常的域名在这里，证书临期（≤30 天）的健康域名也进入；不影响问题中心。
     $review = (new IssueService($root, $clock))->httpsReview();
-    expect($review['ok'] === true && $review['counts']['total'] === 5, 'https review totals five items (got ' . $review['counts']['total'] . ')');
-    expect($review['counts']['fail'] === 2 && $review['counts']['unknown'] === 2 && $review['counts']['pending'] === 1 && $review['counts']['stale'] === 0, 'https review counts per state');
+    expect($review['ok'] === true && $review['counts']['total'] === 8, 'https review totals eight items (got ' . $review['counts']['total'] . ')');
+    expect($review['counts']['fail'] === 2 && $review['counts']['unknown'] === 2 && $review['counts']['pending'] === 1 && $review['counts']['stale'] === 0 && $review['counts']['expiring'] === 3, 'https review counts per state');
     $reviewIds = array_column($review['items'], 'name');
     expect(in_array('tls.example', $reviewIds, true) && in_array('broken.example', $reviewIds, true), 'https failures listed');
     expect(in_array('pending.example', $reviewIds, true) && in_array('expiring.example', $reviewIds, true), 'never-checked domains listed as unknown');
     expect(in_array('drift.example', $reviewIds, true), 'invalidated https listed as pending');
-    expect(!in_array('fine.example', $reviewIds, true) && !in_array('old.example', $reviewIds, true), 'healthy https excluded');
+    expect(in_array('cert7.example', $reviewIds, true) && in_array('cert14.example', $reviewIds, true) && in_array('cert30.example', $reviewIds, true), 'healthy https with expiring certificate listed as expiring');
+    expect(!in_array('fine.example', $reviewIds, true) && !in_array('old.example', $reviewIds, true) && !in_array('certok.example', $reviewIds, true), 'healthy https without cert window excluded');
     expect($review['items'][0]['state'] === 'fail', 'https failures sort first');
     expect($review['items'][0]['url'] === 'https://' . $review['items'][0]['name'] . '/', 'https review items carry the follow-up URL');
+    $certRow = $review['items'][array_search('cert7.example', array_column($review['items'], 'name'), true)];
+    expect($certRow['state'] === 'expiring' && $certRow['cert_days_left'] >= 4 && $certRow['cert_days_left'] <= 7 && $certRow['cert_issuer'] === 'R3' && $certRow['cert_expires_at'] === $certIssue['due'], 'expiring item carries certificate expiry and days left');
 
     echo 'PASS: ' . $assertions . " issue triage assertions\n";
 } finally {

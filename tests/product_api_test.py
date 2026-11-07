@@ -164,7 +164,7 @@ try:
     check(status == 200 and trends["days"] == 30 and len(trends["daily"]) == 30, "Trend endpoint serves the 30-day series to readers")
     check(fresh.request("GET", "/api/trends", anonymous=True)[0] == 401, "Anonymous trend access is rejected")
     status, issues, _ = fresh.request("GET", "/api/issues", token=token, anonymous=True)
-    check(status == 200 and set(issues["counts"]) == {"total", "unhealthy", "stale", "expiring"}, "Issue triage endpoint serves counts")
+    check(status == 200 and set(issues["counts"]) == {"total", "unhealthy", "stale", "expiring", "cert_expiring"}, "Issue triage endpoint serves counts")
     check(all(("id" in i and "severity" in i and "actions" in i) for i in issues["issues"]), "Every issue carries a stable id, severity and actions")
     check("proposals:write" in issues["usage"], "Issue usage documents the AI record-and-act flow")
     check(fresh.request("GET", "/api/issues", anonymous=True)[0] == 401, "Anonymous issue access is rejected")

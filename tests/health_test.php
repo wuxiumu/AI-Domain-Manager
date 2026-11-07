@@ -121,6 +121,16 @@ try {
         throwsClass(static function () use ($service, $ip) { $service->addIp(['ip' => $ip]); }, InvalidArgumentException::class, 'invalid IP cannot be added');
     }
     expect(HealthService::isPublicIp('8.8.8.8') && HealthService::isPublicIp('2606:4700:4700::1111'), 'allow normal public addresses');
+
+    // 证书到期解析：取链首叶子证书，提取到期日与 CN；无法解析返回 null。
+    $cert = HealthService::parseCertInfo([
+        ['Name' => 'a.crt', 'Subject' => 'CN=example.com, OU=IT', 'Issuer' => "CN=R3, O=Let's Encrypt, C=US",
+            'Start time' => 'Sun, 01 Nov 2026 10:00:00 GMT', 'Expire time' => 'Fri, 06 Nov 2026 10:00:00 GMT'],
+        ['Subject' => 'CN=R3', 'Issuer' => 'CN=ISRG Root X1', 'Expire time' => 'Fri, 06 Nov 2027 10:00:00 GMT'],
+    ]);
+    expect($cert !== null && $cert['expires_at'] === '2026-11-06', 'leaf certificate expiry parsed (chain head first)');
+    expect($cert['subject'] === 'example.com' && strpos($cert['issuer'], 'R3') !== false, 'subject/issuer CN extracted');
+    expect(HealthService::parseCertInfo([]) === null && HealthService::parseCertInfo([['Expire time' => 'not a date']]) === null, 'unparseable certificate info returns null');
     foreach ([0, 65536, '443x', 443.5] as $port) {
         throwsClass(static function () use ($service, $port) { $service->addIp(['ip' => '8.8.8.8', 'port' => $port]); }, InvalidArgumentException::class, 'invalid port');
     }

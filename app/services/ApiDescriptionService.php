@@ -38,7 +38,7 @@ Authentication:
 
 Workflow:
 1. GET /api/handover is the takeover briefing: current summary counts, your granted scopes, next actions and the full playbook.
-2. GET /api/issues is the triage list: every problem (P0 HTTP-unreachable, P1 stale, P2 expiring) with a stable id, evidence, dns_path and suggested actions. Accessibility is judged by HTTP only; HTTPS certificate follow-ups live in GET /api/https-review — the same list the administrator sees first on the dashboard. Triage it, record your conclusion in the asset note (assets:write) or a proposal rationale referencing the issue id, act via checks:run / proposals:write, then re-read this endpoint to confirm the issue disappeared.
+2. GET /api/issues is the triage list: every problem (P0 HTTP-unreachable, P1 stale or TLS certificate expiring within 7 days, P2 domain/certificate expiring within 30 days) with a stable id, evidence, dns_path and suggested actions. Accessibility is judged by HTTP only; HTTPS certificate VALIDITY failures live in GET /api/https-review (which also lists certificates expiring within 30 days) — the same list the administrator sees first on the dashboard. Triage it, record your conclusion in the asset note (assets:write) or a proposal rationale referencing the issue id, act via checks:run / proposals:write, then re-read this endpoint to confirm the issue disappeared.
 3. GET /api/health for cached domains, IPs, health evidence, subdomains and relationship IDs.
    GET /api/operations lists domains without a successful latest HTTPS check and unhealthy domains with observed IPs. Unknown is not proof of no HTTPS; check timestamps and stale status.
    GET /api/health/report returns the same cached evidence compiled into one bounded Markdown report (failing domains, unconfirmed HTTPS, failing IPs, 30-day expiries, interpretation guide).
@@ -184,7 +184,7 @@ TEXT;
             self::object(['ok' => $boolean, 'counts' => ['type' => 'object'], 'proposals' => ['type' => 'array', 'items' => ['type' => 'object']]]));
         $dailyItem = self::object(['date' => $string, 'checks' => $integer, 'healthy' => $integer, 'unhealthy' => $integer,
             'full_runs' => $integer, 'avg_latency_ms' => ['type' => ['integer', 'null']]]);
-        $add('GET', '/api/https-review', 'listHttpsFollowups', '读取 HTTPS 跟进清单（证书未通过、HTTPS 未确认或证据过时的域名，items 含可直接访问的 url），独立于可达性问题；只读', 'assets:read', null, [], 'api',
+        $add('GET', '/api/https-review', 'listHttpsFollowups', '读取 HTTPS 跟进清单（证书验证未通过、HTTPS 未确认、证据过时或证书 30 天内临期的域名，items 含 url 与证书到期日/剩余天数），独立于可达性问题；只读', 'assets:read', null, [], 'api',
             self::object(['ok' => $boolean, 'generated_at' => $string, 'counts' => ['type' => 'object'],
                 'items' => ['type' => 'array', 'items' => ['type' => 'object']], 'usage' => $string]));
         $add('GET', '/api/trends', 'getTrends', '读取最近 30 天检查趋势（每日检查数、健康 / 异常、平均延迟），供图表展示；只读', 'assets:read', null, [], 'api',
@@ -200,7 +200,7 @@ TEXT;
             'url' => ['type' => ['string', 'null'], 'description' => '本次检查探测的目标 URL，可直接访问核对；IP 为 http://IP/'],
             'dns_path' => ['type' => ['string', 'null'], 'description' => '云托管域名的问题附带 DNS 记录读取路径，manual 为空'],
             'actions' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['type' => ['type' => 'string'], 'label' => ['type' => 'string']]]]]);
-        $add('GET', '/api/issues', 'getIssues', '读取分级问题清单（P0 HTTP 异常 / P1 过时 / P2 到期；可达性只看 HTTP），与首页问题中心同源；只读', 'assets:read', null, [], 'api',
+        $add('GET', '/api/issues', 'getIssues', '读取分级问题清单（P0 HTTP 异常 / P1 过时或证书 7 天内到期 / P2 域名与证书临期；可达性只看 HTTP），与首页问题中心同源；只读', 'assets:read', null, [], 'api',
             self::object(['ok' => $boolean, 'generated_at' => $string, 'counts' => ['type' => 'object'],
                 'issues' => ['type' => 'array', 'items' => $issueItem], 'truncated' => $boolean,
                 'severity_labels' => ['type' => 'object'], 'usage' => $string]));
@@ -346,6 +346,7 @@ TEXT;
                     'name' => $string, 'provider' => $string, 'ip' => $string, 'ip_version' => ['type' => 'string', 'enum' => ['IPv4', 'IPv6']],
                     'port' => $integer, 'note' => $string, 'links' => $links, 'linked_ips' => ['type' => 'array', 'items' => $string], 'bound_ips' => ['type' => 'array', 'items' => $string],
                     'subdomain_count' => ['type' => ['integer', 'null']], 'subdomains' => ['type' => 'array', 'items' => ['type' => 'object']],
-                    'health' => self::object(['status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'stale', 'unchecked']], 'message' => $string, 'checked_at' => ['type' => ['string', 'null']]])], ['id', 'kind', 'name', 'health'])]]];
+                    'health' => self::object(['status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'stale', 'unchecked']], 'message' => $string, 'checked_at' => ['type' => ['string', 'null']],
+                        'cert' => self::object(['expires_at' => ['type' => 'string', 'description' => 'TLS 叶子证书到期日 Y-m-d（HTTPS 检查时采集）'], 'subject' => ['type' => ['string', 'null']], 'issuer' => ['type' => ['string', 'null']]])])], ['id', 'kind', 'name', 'health'])]]];
     }
 }
