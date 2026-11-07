@@ -65,6 +65,7 @@ $router->get('/api/plans', [PlanController::class, 'index']);
 $router->post('/api/plans', [PlanController::class, 'create']);
 $router->put('/api/plans/{id}', [PlanController::class, 'update']);
 $router->post('/api/plans/{id}/review', [PlanController::class, 'review']);
+$router->post('/api/plans/ai-suggest', [PlanController::class, 'aiSuggest']);
 $router->delete('/api/plans/{id}', [PlanController::class, 'remove']);
 
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）

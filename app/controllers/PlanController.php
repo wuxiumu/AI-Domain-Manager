@@ -52,4 +52,15 @@ class PlanController
         Auth::requireSession();
         json_out((new PlanService())->remove($id));
     }
+
+    /** AI 优化建议：调用已配置的智谱 GLM 生成详情改写稿，仅返回建议文本，不落盘。 */
+    public function aiSuggest(): void
+    {
+        Auth::requireSession();
+        try {
+            json_out(['ok' => true] + (new PlanAiService())->suggest(body_json()));
+        } catch (InvalidArgumentException $e) {
+            json_out(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+    }
 }

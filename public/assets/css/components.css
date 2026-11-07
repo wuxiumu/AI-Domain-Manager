@@ -1282,3 +1282,28 @@ thead th:last-child, tbody td:last-child {
 .plan-md li { margin: 3px 0; }
 .plan-md code { background: #eef1ec; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
 .plan-md a { color: var(--primary); }
+
+/* 计划表单：专属布局（不借用 ip-add-form 网格，桌面端四列会挤压详情输入区） */
+.plan-form-fields { display: block; }
+.plan-form-fields label { display: block; font-size: 11px; color: #778a6a; }
+.plan-form-fields label .muted { margin-left: 4px; font-size: 10px; }
+.plan-form-fields input[type="text"], .plan-form-fields select, .plan-form-fields textarea {
+    display: block; width: 100%; margin-top: 7px; padding: 8px 10px;
+    border: 1px solid #dfe6d7; border-radius: 5px; background: #fff; color: var(--text);
+    font-size: 13px; font-family: inherit; box-sizing: border-box;
+}
+.plan-form-fields input[type="text"] { height: 37px; }
+.plan-form-fields textarea { min-height: 220px; resize: vertical; line-height: 1.65; }
+.plan-form-fields input:focus, .plan-form-fields select:focus, .plan-form-fields textarea:focus { border-color: #86a773; outline: none; }
+.plan-form-row { display: flex; align-items: flex-end; gap: 10px; margin-top: 12px; }
+.plan-form-row label { flex: 0 0 200px; }
+.plan-form-row .btn { min-height: 37px; white-space: nowrap; }
+
+/* AI 建议对比面板 */
+.plan-ai-panel { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #fbfcf9; }
+.plan-ai-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; font-size: 13px; }
+.plan-ai-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.plan-ai-compare > div { border: 1px solid var(--border); border-radius: 6px; padding: 10px 12px; background: #fff; max-height: 280px; overflow: auto; }
+.plan-ai-compare h5 { margin: 0 0 6px; font-size: 11px; color: var(--muted); font-weight: 600; }
+.plan-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+@media (max-width: 760px) { .plan-ai-compare { grid-template-columns: 1fr; } }

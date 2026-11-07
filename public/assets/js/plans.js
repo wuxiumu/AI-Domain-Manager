@@ -167,6 +167,7 @@ window.WorkspacePlans = (() => {
         overlay.querySelector('#plan-form-priority').value = item?.priority || 'medium';
         overlay.querySelector('#plan-form-detail').value = item?.detail || '';
         overlay.querySelector('#plan-form-title-input').focus();
+        wireAiSuggest(overlay);
         overlay.querySelector('#plan-form').addEventListener('submit', async event => {
             event.preventDefault();
             const body = {
@@ -184,6 +185,41 @@ window.WorkspacePlans = (() => {
                 overlay.remove();
                 await load();
             } catch (failure) { showFormError(overlay, 'plan-form-error', failure.message); button.disabled = false; }
+        });
+    }
+
+    /* ---------- AI 建议（智谱 GLM）：生成改写稿 → 当前/建议双栏对比 → 采用则回填，保存仍由管理员确认 ---------- */
+    function wireAiSuggest(overlay) {
+        const button = overlay.querySelector('#plan-ai-suggest');
+        const panel = overlay.querySelector('#plan-ai-panel');
+        const titleInput = overlay.querySelector('#plan-form-title-input');
+        const detailInput = overlay.querySelector('#plan-form-detail');
+        const request = async () => {
+            const title = titleInput.value.trim();
+            if (!title) { showFormError(overlay, 'plan-form-error', '先填写标题，再让 AI 给建议'); titleInput.focus(); return; }
+            button.disabled = true;
+            button.textContent = 'AI 生成中…';
+            showFormError(overlay, 'plan-form-error', '');
+            try {
+                const data = await api('/api/plans/ai-suggest', { method: 'POST', body: JSON.stringify({ title, detail: detailInput.value }) });
+                overlay.querySelector('#plan-ai-model').textContent = `· ${data.model || 'GLM'}`;
+                overlay.querySelector('#plan-ai-original').innerHTML = renderMarkdown(detailInput.value);
+                overlay.querySelector('#plan-ai-suggestion').innerHTML = renderMarkdown(data.suggestion || '');
+                overlay.querySelector('#plan-ai-adopt').dataset.suggestion = data.suggestion || '';
+                panel.classList.remove('hidden');
+            } catch (failure) { showFormError(overlay, 'plan-form-error', failure.message); }
+            finally { button.disabled = false; button.textContent = 'AI 建议'; }
+        };
+        button.addEventListener('click', request);
+        overlay.querySelector('#plan-ai-close').addEventListener('click', () => panel.classList.add('hidden'));
+        overlay.querySelector('#plan-ai-regenerate').addEventListener('click', request);
+        overlay.querySelector('#plan-ai-adopt').addEventListener('click', event => {
+            const suggestion = event.currentTarget.dataset.suggestion || '';
+            if (!suggestion) return;
+            detailInput.value = suggestion;
+            panel.classList.add('hidden');
+            toast('已采用建议，保存前可继续修改');
+            detailInput.focus();
         });
     }
 

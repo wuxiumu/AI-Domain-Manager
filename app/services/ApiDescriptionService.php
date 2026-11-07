@@ -329,6 +329,9 @@ TEXT;
         $add('POST', '/api/plans/{id}/review', 'reviewImprovementPlan', '审核计划条目：decision=approve 通过 / reject 驳回（驳回必须附 note 原因）', null,
             self::object(['decision' => ['type' => 'string', 'enum' => ['approve', 'reject']], 'note' => ['type' => 'string', 'description' => '审核意见；驳回时必填']]), ['decision'], 'session',
             self::object(['ok' => $boolean, 'item' => $planItem]));
+        $add('POST', '/api/plans/ai-suggest', 'suggestImprovementPlan', 'AI 优化建议：调用已配置的智谱 GLM（config/config.php 的 ai 节点）生成详情 Markdown 改写稿；仅返回建议文本不落盘，由管理员对比后决定是否采用', null,
+            self::object(['title' => $string, 'detail' => $string], ['title']), [], 'session',
+            self::object(['ok' => $boolean, 'suggestion' => $string, 'model' => $string]));
         $add('DELETE', '/api/plans/{id}', 'deleteImprovementPlan', '删除计划条目', null, null, [], 'session',
             self::object(['ok' => $boolean]));
         return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => AssetSnapshot::VERSION,
