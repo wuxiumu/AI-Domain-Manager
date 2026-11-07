@@ -60,6 +60,13 @@ $router->post('/api/maintenance/cleanup/logs', [CleanupController::class, 'logs'
 $router->get('/api/tasks', [TaskController::class, 'index']);
 $router->post('/api/tasks', [TaskController::class, 'create']);
 
+// 改进计划（仅管理员会话）：功能点提出、审核与执行跟踪
+$router->get('/api/plans', [PlanController::class, 'index']);
+$router->post('/api/plans', [PlanController::class, 'create']);
+$router->put('/api/plans/{id}', [PlanController::class, 'update']);
+$router->post('/api/plans/{id}/review', [PlanController::class, 'review']);
+$router->delete('/api/plans/{id}', [PlanController::class, 'remove']);
+
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
 $router->get('/api/calendar', [CalendarController::class, 'index']);
 $router->put('/api/calendar/checkins/{date}', [CalendarController::class, 'saveCheckin']);

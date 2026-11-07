@@ -29,7 +29,7 @@ function showLogin() {
 }
 
 /* ---------- 视图 / Tab ---------- */
-const TABS = ['dashboard', 'issues', 'trends', 'https', 'calendar', 'relations', 'domains', 'ips', 'settings'];
+const TABS = ['dashboard', 'issues', 'trends', 'https', 'calendar', 'relations', 'domains', 'ips', 'plans', 'settings'];
 
 async function showApp() {
     window.WorkspaceLogin.leave();
@@ -75,7 +75,7 @@ function switchTab(tab) {
     const changed = state.tab !== tab;
     state.tab = tab;
     if (changed) window.scrollTo(0, 0);
-    if ($('#page-title')) $('#page-title').textContent = ({dashboard:'健康看板',issues:'问题中心',trends:'检查趋势',https:'HTTPS 跟进',calendar:'检查日历',relations:'资产关系',domains:'域名管理',ips:'IP 资产',settings:'产品设置'})[tab];
+    if ($('#page-title')) $('#page-title').textContent = ({dashboard:'健康看板',issues:'问题中心',trends:'检查趋势',https:'HTTPS 跟进',calendar:'检查日历',relations:'资产关系',domains:'域名管理',ips:'IP 资产',plans:'改进计划',settings:'产品设置'})[tab];
     if (location.hash.split('?')[0] !== '#' + tab) history.replaceState(null, '', '#' + tab);
     $$('.tab-btn').forEach((b) => b.classList.toggle('active', b.dataset.tab === tab));
     $('#calendar-clock').classList.toggle('active', tab === 'calendar');
@@ -91,6 +91,7 @@ function switchTab(tab) {
     }
     if (tab === 'relations') window.Relationships?.load();
     if (tab === 'ips') window.HealthWorkbench?.load();
+    if (tab === 'plans') window.WorkspacePlans?.load();
     if (tab === 'settings') window.WorkspaceSettings?.load();
 }
 window.addEventListener('hashchange', () => switchTab(location.hash.slice(1).split('?')[0]));

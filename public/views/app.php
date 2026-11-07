@@ -5,7 +5,7 @@ $assetUrl = static function (string $path): string {
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
 $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'dns-history', 'accounts',
-    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'setup', 'login-promo', 'calendar', 'login', 'app'];
+    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'plans', 'setup', 'login-promo', 'calendar', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -94,6 +94,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
             <button class="tab-btn active" data-tab="dashboard"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>健康看板</span></button>
             <button class="tab-btn" data-tab="domains"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><span>域名管理</span></button>
             <button class="tab-btn" data-tab="ips"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>IP 资产</span></button>
+            <button class="tab-btn" data-tab="plans"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg><span>改进计划</span></button>
             <button class="tab-btn" data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>产品设置</span></button>
         </nav>
         <p class="nav-caption">更多视图</p>
@@ -277,6 +278,11 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
             <div id="ip-progress-slot"></div><section class="asset-panel"><div class="panel-heading"><div><h2>IP 资产列表 </h2></div></div><div class="filters unified-filters ip-filters"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="ip-query" aria-label="搜索 IP 资产" placeholder="搜索名称、IP、备注、网站或关联域名"></label><div class="ip-filter-row" aria-label="IP 筛选条件"><input type="hidden" id="ip-version" value=""><input type="hidden" id="ip-status" value=""><div class="ip-filter-group" role="group" aria-label="地址类型"><span class="ip-filter-label">地址类型</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv4" data-color="tencent" aria-pressed="false">IPv4</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv6" data-color="violet" aria-pressed="false">IPv6</button></div><div class="ip-filter-group" role="group" aria-label="IP 状态"><span class="ip-filter-label">IP 状态</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="healthy" data-color="healthy" aria-pressed="false">IP 正常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unhealthy" data-color="unhealthy" aria-pressed="false">IP 异常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="stale" data-color="stale" aria-pressed="false">结果过时</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unchecked" aria-pressed="false">未检查</button></div></div></div><div class="table-wrap"><table id="ip-table"><thead><tr><th>名称与 IP</th><th>网站链接</th><th>用途与备注</th><th>关联域名</th><th>状态</th><th>检查时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载 IP 资产…</td></tr></tbody></table></div><div id="ip-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><strong>还没有 IP 资产</strong><p>点击“添加 IP 资产”，或检查域名以发现其解析地址。</p></div><div class="panel-caption"><span class="info-dot">i</span> 归属地查询会将 IP 发送给 ipwho.is，结果为近似位置并缓存在服务器；可手动重新查询。HTTP 检查不跟随重定向，结果与时间保存在服务器。</div></section>
         </section>
 
+        <section id="view-plans" class="inventory-page tab-view hidden" aria-labelledby="plans-title">
+            <div class="page-head"><div><p class="eyebrow">IMPROVEMENT PLAN</p><h1 id="plans-title">改进计划<span class="heading-dot">.</span> <span id="plans-count" class="count-tag">加载中</span></h1><p class="muted">功能点逐条审核：通过后进入执行，AI 协助提出的计划与手动新增的都在这里跟踪。</p></div><div class="head-actions"><button id="plan-open-create" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>新增计划点</button></div></div>
+            <section class="asset-panel"><div class="panel-heading"><div><h2>计划条目</h2></div></div><div class="table-wrap"><table id="plans-table"><thead><tr><th>计划点</th><th>优先级</th><th>来源</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="6" class="table-loading"><span class="loading-ring"></span>正在加载改进计划…</td></tr></tbody></table></div><div id="plans-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg><strong>还没有计划条目</strong><p>点击「新增计划点」，或让 AI 协助提出改进建议。</p></div><p id="plans-error" class="error-text hidden" role="alert"></p></section>
+        </section>
+
         <?php require __DIR__ . '/settings.php'; ?>
         <footer class="workspace-footer"><span>资产工作台</span><span>每一项资产，都有清晰的状态。</span></footer>
     </main>
@@ -287,6 +293,38 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
         <form id="ip-add-form" class="ip-create-form">
             <div class="modal-body"><div class="ip-add-form"><label for="ip-name">资产名称 <span class="muted">选填</span><input id="ip-name" type="text" placeholder="如：生产服务器 · 上海" maxlength="120"></label><label for="ip-address">IP 地址 <span class="required-dot">*</span><input id="ip-address" type="text" placeholder="IPv4 或 IPv6 地址" required spellcheck="false" autocomplete="off"></label><label for="ip-note" class="ip-note-field">用途与备注 <span class="muted">选填</span><textarea id="ip-note" rows="2" maxlength="2000" placeholder="记录服务器用途或维护说明"></textarea></label><fieldset class="asset-links-field"><legend>网站链接 <span class="muted">选填</span></legend><div id="ip-links-editor"></div></fieldset><p id="ip-add-error" class="error-text hidden" role="alert"></p></div></div>
             <div class="modal-foot"><button type="button" class="btn" data-ip-cancel>取消</button><button id="ip-add-btn" class="btn btn-primary" type="submit">添加资产</button></div>
+        </form>
+    </section>
+</template>
+
+<template id="plan-form-template">
+    <section class="modal plan-form-modal" role="dialog" aria-modal="true" aria-labelledby="plan-form-title">
+        <div class="modal-head"><h3 id="plan-form-title">新增计划点</h3><button type="button" class="modal-close" aria-label="关闭计划表单">×</button></div>
+        <form id="plan-form">
+            <div class="modal-body"><div class="ip-add-form">
+                <input type="hidden" id="plan-form-id" value="">
+                <label for="plan-form-title-input">标题 <span class="required-dot">*</span><input id="plan-form-title-input" type="text" maxlength="120" required placeholder="一句话说清这个功能点"></label>
+                <label for="plan-form-priority">优先级 <select id="plan-form-priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label>
+                <label for="plan-form-detail">现状与方案 <span class="muted">选填，支持换行</span><textarea id="plan-form-detail" rows="6" maxlength="4000" placeholder="现状：…&#10;方案：…&#10;验收：…"></textarea></label>
+                <p id="plan-form-error" class="error-text hidden" role="alert"></p>
+            </div></div>
+            <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-form-submit" class="btn btn-primary" type="submit">保存</button></div>
+        </form>
+    </section>
+</template>
+
+<template id="plan-review-template">
+    <section class="modal plan-review-modal" role="dialog" aria-modal="true" aria-labelledby="plan-review-title">
+        <div class="modal-head"><h3 id="plan-review-title">审核计划点</h3><button type="button" class="modal-close" aria-label="关闭审核">×</button></div>
+        <form id="plan-review-form">
+            <div class="modal-body"><div class="ip-add-form">
+                <input type="hidden" id="plan-review-id" value="">
+                <input type="hidden" id="plan-review-decision" value="">
+                <p id="plan-review-target" class="muted"></p>
+                <label for="plan-review-note">审核意见 <span class="muted" id="plan-review-note-hint">选填</span><textarea id="plan-review-note" rows="3" maxlength="500" placeholder="通过时可写补充要求；驳回时必填原因"></textarea></label>
+                <p id="plan-review-error" class="error-text hidden" role="alert"></p>
+            </div></div>
+            <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-review-submit" class="btn btn-primary" type="submit">确认</button></div>
         </form>
     </section>
 </template>

@@ -311,6 +311,26 @@ TEXT;
             self::object(['type' => ['type' => 'string', 'enum' => ['health-check', 'access-check', 'sync']],
                 'params' => self::object(['kind' => ['type' => 'string', 'enum' => ['domain', 'ip'], 'description' => '仅 health-check 支持；缺省检查域名与 IP']])]), [], 'session',
             self::object(['ok' => $boolean, 'task' => $taskItem]));
+        $planItem = self::object(['id' => $string, 'title' => $string, 'detail' => $string,
+            'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
+            'source' => ['type' => 'string', 'enum' => ['agent', 'admin'], 'description' => 'agent=AI 协助提出，admin=工作台手动提出'],
+            'status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected']],
+            'review_note' => $string, 'result_note' => $string,
+            'created_at' => $string, 'updated_at' => $string, 'reviewed_at' => ['type' => ['string', 'null']]]);
+        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序', null, null, [], 'session',
+            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => $planItem]]));
+        $add('POST', '/api/plans', 'createImprovementPlan', '新增改进计划条目（待审核）；同名待处理条目会返回 409', null,
+            self::object(['title' => $string, 'detail' => $string, 'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']]], ['title']), [], 'session',
+            self::object(['ok' => $boolean, 'item' => $planItem]));
+        $add('PUT', '/api/plans/{id}', 'updateImprovementPlan', '编辑条目或推进执行状态：status 仅支持 proposed / in_progress / done（通过 / 驳回走审核接口）', null,
+            self::object(['title' => $string, 'detail' => $string, 'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
+                'status' => ['type' => 'string', 'enum' => ['proposed', 'in_progress', 'done']], 'result_note' => ['type' => 'string', 'description' => '执行结果说明，标记完成时填写']]), [], 'session',
+            self::object(['ok' => $boolean, 'item' => $planItem]));
+        $add('POST', '/api/plans/{id}/review', 'reviewImprovementPlan', '审核计划条目：decision=approve 通过 / reject 驳回（驳回必须附 note 原因）', null,
+            self::object(['decision' => ['type' => 'string', 'enum' => ['approve', 'reject']], 'note' => ['type' => 'string', 'description' => '审核意见；驳回时必填']]), ['decision'], 'session',
+            self::object(['ok' => $boolean, 'item' => $planItem]));
+        $add('DELETE', '/api/plans/{id}', 'deleteImprovementPlan', '删除计划条目', null, null, [], 'session',
+            self::object(['ok' => $boolean]));
         return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => AssetSnapshot::VERSION,
                 'description' => '缓存优先的域名 / IP 工作台。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],
             'servers' => [['url' => '/']], 'paths' => $paths, 'components' => [
