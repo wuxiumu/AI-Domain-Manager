@@ -1,6 +1,7 @@
 <?php
 
 require_once __DIR__ . '/../core/WorkspaceData.php';
+require_once __DIR__ . '/../core/ConcurrentCurl.php';
 require_once __DIR__ . '/SettingsService.php';
 
 /**
@@ -21,6 +22,8 @@ class HealthService
     private $httpProbe;
     /** 旧版主文件内嵌观测缓存：迁移兼容读取只解析一次，避免重建看板时按资产反复全量解析。 */
     private $legacyObservations;
+    /** 并发探测时的 curl 调度器；null 表示阻塞模式。 */
+    private $curlScheduler;
 
     public function __construct(?string $dataDir = null, ?callable $probe = null, ?callable $clock = null, ?callable $dnsLookup = null, ?callable $httpProbe = null)
     {
@@ -374,28 +377,31 @@ class HealthService
             }
         }
         $observations = [];
-        foreach ($ids as $id) {
-            $asset = $assets[$id];
-            $started = microtime(true);
-            try {
-                $health = $this->probe ? call_user_func($this->probe, $asset) : $this->probeAsset($asset);
-                if (!is_array($health) || !in_array($health['status'] ?? '', ['healthy', 'unhealthy'], true)) {
-                    throw new RuntimeException('探测器没有返回有效状态');
-                }
-            } catch (Throwable $e) {
-                $health = ['status' => 'unhealthy', 'message' => '检测未完成：' . $e->getMessage(),
-                    'checks' => [['label' => '检测', 'status' => 'unhealthy', 'message' => $e->getMessage()]], 'resolved_ips' => []];
+        if ($this->probe !== null || $this->httpProbe !== null || !ConcurrentCurl::supported()) {
+            // 注入探测器/HTTP 传输（离线测试）或环境不支持 Fiber：保持串行路径，行为与历史版本一致。
+            foreach ($ids as $id) {
+                $observations[$id] = $this->probeOne($assets[$id]);
             }
-            $health['last_status'] = $health['status'];
-            $health['checked_at'] = $this->timestamp();
-            $health['latency_ms'] = $health['latency_ms'] ?? (int) round((microtime(true) - $started) * 1000);
-            $health['message'] = (string) ($health['message'] ?? '');
-            $health['checks'] = $health['checks'] ?? [];
-            $health['resolved_ips'] = array_values(array_unique(array_filter($health['resolved_ips'] ?? [], [self::class, 'isPublicIp'])));
-            $health['source'] = 'verified';
-            if ($asset['kind'] === 'ip') { $health['check_type'] = 'http'; }
-            else { $health['check_type'] = 'http_https'; }
-            $observations[$id] = $health;
+        } else {
+            // 并发探测：同一资产的请求序列（HTTP→重试→HTTPS）仍串行，跨资产并行；
+            // 句柄并发数由批量大小决定（≤ MAX_BATCH ≤ MAX_CONCURRENCY），结果结构与串行完全一致。
+            $jobs = [];
+            foreach ($ids as $id) {
+                $jobs[$id] = function (ConcurrentCurl $scheduler) use ($assets, $id) {
+                    $this->curlScheduler = $scheduler;
+                    return $this->probeOne($assets[$id]);
+                };
+            }
+            try {
+                $outcomes = ConcurrentCurl::run($jobs);
+            } finally {
+                $this->curlScheduler = null;
+            }
+            foreach ($outcomes as $id => $outcome) {
+                $observations[$id] = $outcome['ok'] ? $outcome['value']
+                    : ['status' => 'unhealthy', 'message' => '检测未完成：' . $outcome['error']->getMessage(),
+                        'checks' => [['label' => '检测', 'status' => 'unhealthy', 'message' => $outcome['error']->getMessage()]], 'resolved_ips' => []];
+            }
         }
         $histories = [];
         $this->transaction(function (&$state) use ($observations, $assets, &$histories, $epoch) {
@@ -421,6 +427,31 @@ class HealthService
             $results[] = ['id' => $id, 'health' => $health, 'history' => $histories[$id]];
         }
         return ['ok' => true, 'checked' => count($results), 'results' => $results];
+    }
+
+    /** 单资产探测与结果规整（串行/并发共用，保证结果结构一致）。 */
+    private function probeOne(array $asset): array
+    {
+        $started = microtime(true);
+        try {
+            $health = $this->probe ? call_user_func($this->probe, $asset) : $this->probeAsset($asset);
+            if (!is_array($health) || !in_array($health['status'] ?? '', ['healthy', 'unhealthy'], true)) {
+                throw new RuntimeException('探测器没有返回有效状态');
+            }
+        } catch (Throwable $e) {
+            $health = ['status' => 'unhealthy', 'message' => '检测未完成：' . $e->getMessage(),
+                'checks' => [['label' => '检测', 'status' => 'unhealthy', 'message' => $e->getMessage()]], 'resolved_ips' => []];
+        }
+        $health['last_status'] = $health['status'];
+        $health['checked_at'] = $this->timestamp();
+        $health['latency_ms'] = $health['latency_ms'] ?? (int) round((microtime(true) - $started) * 1000);
+        $health['message'] = (string) ($health['message'] ?? '');
+        $health['checks'] = $health['checks'] ?? [];
+        $health['resolved_ips'] = array_values(array_unique(array_filter($health['resolved_ips'] ?? [], [self::class, 'isPublicIp'])));
+        $health['source'] = 'verified';
+        if ($asset['kind'] === 'ip') { $health['check_type'] = 'http'; }
+        else { $health['check_type'] = 'http_https'; }
+        return $health;
     }
 
     /** 在用账号集合（已配置且未停用）；配置不可读时返回 null，保持不去重的旧行为。 */
@@ -775,9 +806,7 @@ class HealthService
         if (!$head) {
             curl_setopt($ch, CURLOPT_RANGE, '0-1023');
         }
-        curl_exec($ch);
-        $result = ['code' => (int) curl_getinfo($ch, CURLINFO_HTTP_CODE), 'errno' => curl_errno($ch),
-            'error' => curl_error($ch), 'ms' => (int) round(curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000)];
+        $result = $this->execCurl($ch);
         // A bounded GET intentionally stops reading large bodies after headers.
         if ($limited && $result['errno'] === CURLE_WRITE_ERROR && $result['code'] > 0) {
             $result['errno'] = 0;
@@ -785,6 +814,13 @@ class HealthService
         }
         curl_close($ch);
         return $result;
+    }
+
+    /** 发起 HTTP 请求：无并发任务时阻塞执行；并发任务内经调度器挂起，句柄完成后恢复。 */
+    private function execCurl($ch): array
+    {
+        $scheduler = $this->curlScheduler ?? new ConcurrentCurl();
+        return $scheduler->exec($ch);
     }
 
     public static function normalizeHost(string $host): ?string
