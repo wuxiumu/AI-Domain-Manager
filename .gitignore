@@ -22,3 +22,6 @@ __pycache__/
 node_modules/
 vendor/
 /dist/
+
+# Local dev unlock flag (loopback password-free login)
+/config/dev-unlock.flag
