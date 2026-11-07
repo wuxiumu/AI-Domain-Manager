@@ -1265,3 +1265,20 @@ thead th:last-child, tbody td:last-child {
 .workspace-tabs > button:hover { background: #eef3e9; color: var(--text); }
 .workspace-tabs > button[aria-selected="true"] { color: #44673b; background: #eaf1e8; border-color: #dce7d7; font-weight: 600; }
 .workspace-tabs > button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
+
+/* ---------- 改进计划：行点击详情弹窗与 Markdown 正文 ---------- */
+.plan-row { cursor: pointer; }
+.plan-row:hover td { background: #f7f9f5; }
+.plan-title-btn { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; text-align: left; display: block; }
+.plan-title-btn:hover { color: var(--primary); text-decoration: underline; }
+.plan-row .hc-subline { display: block; }
+.plan-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 14px; }
+.plan-note { margin: 12px 0 0; padding: 8px 12px; background: #f5f6f2; border-left: 3px solid var(--border); border-radius: 0 6px 6px 0; color: var(--muted); font-size: 13px; }
+.plan-md { font-size: 14px; line-height: 1.7; overflow-wrap: anywhere; }
+.plan-md h4 { margin: 14px 0 4px; font-size: 14px; color: var(--primary-dark); }
+.plan-md h4:first-child { margin-top: 0; }
+.plan-md p { margin: 6px 0; }
+.plan-md ul, .plan-md ol { margin: 6px 0; padding-left: 22px; }
+.plan-md li { margin: 3px 0; }
+.plan-md code { background: #eef1ec; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; }
+.plan-md a { color: var(--primary); }

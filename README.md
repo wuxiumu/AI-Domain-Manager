@@ -176,7 +176,7 @@ IP 服务器列表可按需查询或重新查询归属地，也可批量查询�
 
 worker 每次认领一个任务后退出；执行中进程中断（心跳超过 15 分钟）的任务会被标记失败并可重新入队，不会重复写入。未配置该 cron 时任务会保留在队列中，入队不会触发任何网络操作。
 
-改进计划页（#plans）用于功能点的提出、逐条审核与执行跟踪：条目由工作台手动新增或 AI 协助提出（`php scripts/seed-improvement-plan.php` 可写入种子计划），状态流为待审核 → 已通过 → 执行中 → 已完成，驳回需附原因；执行侧只实施「已通过」条目，完成后回填执行结果。接口为 `GET/POST /api/plans`、`PUT/DELETE /api/plans/{id}` 与 `POST /api/plans/{id}/review`（仅管理员会话），记录保存在 `data/improvement_plan.json`。
+改进计划页（#plans）用于功能点的提出、逐条审核与执行跟踪：条目由工作台手动新增或 AI 协助提出（`php scripts/seed-improvement-plan.php` 可写入种子计划），状态流为待审核 → 已通过 → 执行中 → 已完成，驳回需附原因；执行侧只实施「已通过」条目，完成后回填执行结果。点击列表条目弹窗查看详情，正文支持 Markdown（标题、加粗、列表、行内代码与链接，服务端转义优先防注入），弹窗内可直接编辑。接口为 `GET/POST /api/plans`、`PUT/DELETE /api/plans/{id}` 与 `POST /api/plans/{id}/review`（仅管理员会话），记录保存在 `data/improvement_plan.json`。
 
 也可以随时在部署服务器的项目目录运行 `php scripts/generate-health-report.php`，直接在终端输出同一份 Markdown 健康报告（只读缓存证据），便于通过脚本或邮件交给 AI 分析；加 `--prompt` 则输出已内嵌报告的完整分析提示词。
 

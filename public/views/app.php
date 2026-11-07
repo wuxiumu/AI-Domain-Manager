@@ -305,11 +305,25 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                 <input type="hidden" id="plan-form-id" value="">
                 <label for="plan-form-title-input">标题 <span class="required-dot">*</span><input id="plan-form-title-input" type="text" maxlength="120" required placeholder="一句话说清这个功能点"></label>
                 <label for="plan-form-priority">优先级 <select id="plan-form-priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label>
-                <label for="plan-form-detail">现状与方案 <span class="muted">选填，支持换行</span><textarea id="plan-form-detail" rows="6" maxlength="4000" placeholder="现状：…&#10;方案：…&#10;验收：…"></textarea></label>
+                <label for="plan-form-detail">详情 <span class="muted">选填，支持 Markdown（## 小节、**加粗**、- 列表）</span><textarea id="plan-form-detail" rows="8" maxlength="4000" placeholder="## 现状&#10;…&#10;&#10;## 方案&#10;…&#10;&#10;## 验收&#10;…"></textarea></label>
                 <p id="plan-form-error" class="error-text hidden" role="alert"></p>
             </div></div>
             <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-form-submit" class="btn btn-primary" type="submit">保存</button></div>
         </form>
+    </section>
+</template>
+
+<template id="plan-detail-template">
+    <section class="modal plan-detail-modal" role="dialog" aria-modal="true" aria-labelledby="plan-detail-title">
+        <div class="modal-head"><h3 id="plan-detail-title"></h3><button type="button" class="modal-close" aria-label="关闭详情">×</button></div>
+        <div class="modal-body">
+            <p id="plan-detail-meta" class="plan-meta"></p>
+            <div id="plan-detail-content" class="plan-md"></div>
+            <p id="plan-detail-review" class="plan-note hidden"></p>
+            <p id="plan-detail-result" class="plan-note hidden"></p>
+            <p id="plan-detail-error" class="error-text hidden" role="alert"></p>
+        </div>
+        <div class="modal-foot" id="plan-detail-actions"><button type="button" class="btn" data-plan-close>关闭</button></div>
     </section>
 </template>
 
