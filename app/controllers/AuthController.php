@@ -59,7 +59,10 @@ class AuthController
     {
         header('Cache-Control: no-store');
         if (Auth::isBearer()) { Auth::requireLogin(); }
+        // /api/me 在路由豁免名单内、不经过 requireLogin：开发免登录在这里补一次自动建立会话。
+        if (!Auth::isBearer()) { Auth::devUnlock(); }
         json_out(['user' => Auth::user(), 'auth_type' => Auth::isBearer() ? 'bearer' : 'session',
+            'dev_unlock' => !Auth::isBearer() && !empty($_SESSION['dev_unlock']),
             'csrf_token' => !Auth::isBearer() && Auth::check() ? Auth::csrfToken() : null]);
     }
 }

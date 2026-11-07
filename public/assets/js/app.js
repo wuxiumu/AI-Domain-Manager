@@ -23,6 +23,7 @@ function showLogin() {
     state.csrf = '';
     window.WorkspaceCache?.clear();
     window.WorkspaceCache?.setUser(null);
+    $('#dev-mode-badge')?.classList.add('hidden');
     $('#setup-view').classList.add('hidden');
     $('#login-view').classList.remove('hidden');
     window.WorkspaceLogin.load();
@@ -144,6 +145,7 @@ setInterval(refreshBackgroundTasks, 30000);
         const data = await api('/api/me');
         state.csrf = data.csrf_token || '';
         window.WorkspaceCache?.setUser(data.user);
+        $('#dev-mode-badge')?.classList.toggle('hidden', !data.dev_unlock);
         if (data.user) showApp();
         else showLogin();
     } catch (error) {

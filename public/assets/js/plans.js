@@ -170,6 +170,8 @@ window.WorkspacePlans = (() => {
         overlay.querySelector('#plan-form-detail').value = item?.detail || '';
         overlay.querySelector('#plan-form-title-input').focus();
         wireAiSuggest(overlay);
+        // 程序化赋值不触发 change：显式同步 select → 选项卡按钮组（ChoiceTabs 约定）。
+        window.ChoiceTabs?.sync?.();
         overlay.querySelector('#plan-form').addEventListener('submit', async event => {
             event.preventDefault();
             const body = {
@@ -207,6 +209,7 @@ window.WorkspacePlans = (() => {
         const initial = models.includes(saved) ? saved : (aiMeta.default && models.includes(aiMeta.default) ? aiMeta.default : models[0]);
         modelSelect.innerHTML = models.map(model => `<option value="${escapeHtml(model)}"${model === initial ? ' selected' : ''}>${escapeHtml(model)}</option>`).join('');
         modelSelect.addEventListener('change', () => localStorage.setItem('plans-ai-model', modelSelect.value));
+        window.ChoiceTabs?.sync?.();
         const request = async () => {
             const title = titleInput.value.trim();
             if (!title) { showFormError(overlay, 'plan-form-error', '先填写标题，再让 AI 给建议'); titleInput.focus(); return; }
@@ -237,6 +240,35 @@ window.WorkspacePlans = (() => {
     }
 
     /* ---------- 审核：通过 / 驳回（驳回必填原因）；完成时复用同一弹窗填执行结果 ---------- */
+    /* 快捷理由：真实审阅中的高频结论，点选即拼入意见框，可多选、可继续手改。 */
+    const QUICK_NOTES = {
+        approve: ['通过，按方案执行', '通过，先做核心部分', '通过，注意不改变现有行为', '通过，做完补验收截图'],
+        reject: ['范围太大，先拆成小步', '验收标准不够具体', '与现有功能重复', '优先级不足，暂缓', '方案有风险，先验证可行性'],
+        finish: ['已完成并回归验证', '已上线，观察一天无异常', '已实现，验收项逐条核对通过'],
+    };
+
+    function renderQuickNotes(overlay, decision) {
+        const box = overlay.querySelector('#plan-quick-notes');
+        const notes = QUICK_NOTES[decision] || [];
+        const quickSet = new Set(notes);
+        const selected = new Set();
+        const noteInput = overlay.querySelector('#plan-review-note');
+        const compose = () => {
+            // 自定义片段保留，快捷项按点选状态重组，分号拼接。
+            const manual = noteInput.value.split(/[；;]/).map(part => part.trim()).filter(part => part !== '' && !quickSet.has(part));
+            noteInput.value = [...manual, ...selected].join('；');
+        };
+        box.innerHTML = notes.map(text => `<button type="button" class="domain-filter-tab" data-quick-note="${escapeHtml(text)}" aria-pressed="false">${escapeHtml(text)}</button>`).join('');
+        box.addEventListener('click', event => {
+            const chip = event.target.closest('[data-quick-note]');
+            if (!chip) return;
+            const text = chip.dataset.quickNote;
+            if (selected.has(text)) { selected.delete(text); chip.setAttribute('aria-pressed', 'false'); }
+            else { selected.add(text); chip.setAttribute('aria-pressed', 'true'); }
+            compose();
+        });
+    }
+
     function openReview(item, decision) {
         const { overlay } = openModal('plan-review-template');
         const noteHint = overlay.querySelector('#plan-review-note-hint');
@@ -261,6 +293,7 @@ window.WorkspacePlans = (() => {
             request = note => api(`/api/plans/${encodeURIComponent(item.id)}/review`, { method: 'POST', body: JSON.stringify({ decision, note }) });
             successMessage = decision === 'approve' ? '已通过，可开始执行' : '已驳回';
         }
+        renderQuickNotes(overlay, decision);
         overlay.querySelector('#plan-review-note').focus();
         overlay.querySelector('#plan-review-form').addEventListener('submit', async event => {
             event.preventDefault();

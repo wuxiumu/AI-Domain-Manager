@@ -100,7 +100,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
         <p class="nav-caption">更多视图</p>
         <p class="nav-hint muted">问题中心、趋势、关系图与云账号<br>从看板卡片与资产行内跳转进入</p>
         <div class="sidebar-note"><span class="sidebar-note-line"></span><strong>看清资产，也看清状态。</strong><p>域名与 IP 统一归档<br>每一次检查都有迹可循</p></div>
-        <div class="sidebar-foot"><span class="workspace-dot"></span> 统一资产管理 <span class="version-tag">V1</span></div>
+        <div class="sidebar-foot"><span class="workspace-dot"></span> 统一资产管理 <span id="dev-mode-badge" class="badge b-amber hidden" title="开发免登录模式：仅回环生效，删除 config/dev-unlock.flag 恢复登录">DEV</span> <span class="version-tag">V1</span></div>
     </aside>
     <header class="topbar">
         <div class="topbar-inner">
@@ -305,8 +305,8 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                 <input type="hidden" id="plan-form-id" value="">
                 <label for="plan-form-title-input">标题 <span class="required-dot">*</span><input id="plan-form-title-input" type="text" maxlength="120" required placeholder="一句话说清这个功能点"></label>
                 <div class="plan-form-row">
-                    <label for="plan-form-priority">优先级 <select id="plan-form-priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label>
-                    <label for="plan-ai-model">AI 模型 <select id="plan-ai-model"></select></label>
+                    <select id="plan-form-priority" aria-label="优先级"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select>
+                    <select id="plan-ai-model" aria-label="AI 模型"></select>
                     <button type="button" id="plan-ai-suggest" class="btn" title="让 AI（智谱 GLM）改写详情，对比后决定是否采用"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>AI 建议</button>
                 </div>
                 <label for="plan-form-detail">详情（Markdown）<span class="muted">## 小节 · **加粗** · - 列表</span><textarea id="plan-form-detail" rows="10" maxlength="4000" placeholder="## 现状&#10;…&#10;&#10;## 方案&#10;…&#10;&#10;## 验收&#10;…"></textarea></label>
@@ -343,11 +343,12 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
     <section class="modal plan-review-modal" role="dialog" aria-modal="true" aria-labelledby="plan-review-title">
         <div class="modal-head"><h3 id="plan-review-title">审核计划点</h3><button type="button" class="modal-close" aria-label="关闭审核">×</button></div>
         <form id="plan-review-form">
-            <div class="modal-body"><div class="ip-add-form">
+            <div class="modal-body"><div class="plan-form-fields">
                 <input type="hidden" id="plan-review-id" value="">
                 <input type="hidden" id="plan-review-decision" value="">
                 <p id="plan-review-target" class="muted"></p>
-                <label for="plan-review-note">审核意见 <span class="muted" id="plan-review-note-hint">选填</span><textarea id="plan-review-note" rows="3" maxlength="500" placeholder="通过时可写补充要求；驳回时必填原因"></textarea></label>
+                <label for="plan-review-note">审核意见 <span class="muted" id="plan-review-note-hint">选填，可点下方快捷理由多选拼接</span><textarea id="plan-review-note" rows="3" maxlength="500" placeholder="通过时可写补充要求；驳回时必填原因"></textarea></label>
+                <div class="plan-quick-notes" id="plan-quick-notes" aria-label="快捷理由"></div>
                 <p id="plan-review-error" class="error-text hidden" role="alert"></p>
             </div></div>
             <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-review-submit" class="btn btn-primary" type="submit">确认</button></div>

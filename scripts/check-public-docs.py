@@ -29,7 +29,7 @@ PUBLIC_HOSTS = {
 }
 FILE_SUFFIXES = {
     "md", "php", "js", "mjs", "css", "json", "py", "sh", "txt", "lock", "log",
-    "png", "jpg", "jpeg", "webp", "svg", "gif", "pdf", "zip", "yaml", "yml",
+    "png", "jpg", "jpeg", "webp", "svg", "gif", "pdf", "zip", "yaml", "yml", "flag",
 }
 # Reviewed screenshots captured from an isolated demo installation with synthetic data.
 REVIEWED_IMAGES = {

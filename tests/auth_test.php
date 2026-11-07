@@ -62,6 +62,31 @@ try {
     $now += 1000; $limiter->run('new-ip', 'captcha');
     verify(count(json_decode(file_get_contents($root . '/login_limits.json'), true)['entries']) === 1, 'Expired IP entries are pruned');
 
+    // 开发免登录守卫：回环地址与显式开关（env 或 flag 文件）缺一不可，生产不会意外启用。
+    require_once __DIR__ . '/../app/core/Auth.php';
+    $remote = $_SERVER['REMOTE_ADDR'] ?? null;
+    $_SERVER['REMOTE_ADDR'] = '203.0.113.9';
+    putenv('AW_DEV_UNLOCK=1');
+    verify(!Auth::isDevUnlock(), 'dev unlock refused for non-loopback even with env');
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+    verify(Auth::isDevUnlock(), 'dev unlock allowed for IPv4 loopback with env');
+    putenv('AW_DEV_UNLOCK');
+    verify(!Auth::isDevUnlock(), 'env off without flag stays locked');
+    $_SERVER['REMOTE_ADDR'] = '::1';
+    putenv('AW_DEV_UNLOCK=1');
+    verify(Auth::isDevUnlock(), 'IPv6 loopback honored');
+    putenv('AW_DEV_UNLOCK');
+    verify(!Auth::isDevUnlock(), 'IPv6 loopback without env stays locked');
+    $_SERVER['REMOTE_ADDR'] = '127.0.0.1';
+    $flagDir = $root . '-cfg'; mkdir($flagDir, 0700, true);
+    define('CONFIG_DIR', $flagDir);
+    verify(!Auth::isDevUnlock(), 'no flag file stays locked');
+    file_put_contents(CONFIG_DIR . '/dev-unlock.flag', "dev\n");
+    verify(Auth::isDevUnlock(), 'flag file enables dev unlock for loopback');
+    unlink(CONFIG_DIR . '/dev-unlock.flag');
+    verify(!Auth::isDevUnlock(), 'removing flag restores login');
+    if ($remote === null) { unset($_SERVER['REMOTE_ADDR']); } else { $_SERVER['REMOTE_ADDR'] = $remote; }
+
     // Separate PHP processes exercise the same stable file lock, rather than a single-server simulation.
     $workers = [];
     $source = 'require ' . var_export(__DIR__ . '/../app/core/PrivateJsonStore.php', true) . ';require '

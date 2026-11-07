@@ -107,8 +107,29 @@ class Auth
         session_destroy();
     }
 
+    /** 开发环境免登录：仅回环请求 + 显式开启（AW_DEV_UNLOCK=1 或 config/dev-unlock.flag），生产不会意外启用。 */
+    public static function isDevUnlock(): bool
+    {
+        $remote = $_SERVER['REMOTE_ADDR'] ?? '';
+        if ($remote !== '127.0.0.1' && $remote !== '::1') { return false; }
+        if (getenv('AW_DEV_UNLOCK') === '1') { return true; }
+        return defined('CONFIG_DIR') && is_file(CONFIG_DIR . '/dev-unlock.flag');
+    }
+
+    /** 开发模式下为未登录的回环请求自动建立会话；未启用或已登录时不动。 */
+    public static function devUnlock(): void
+    {
+        if (self::check() || !self::isDevUnlock()) { return; }
+        // 回环开发模式：用在用账号名自动建立会话，与正常登录等价（含 CSRF 与指纹校验），并打标供界面提示。
+        error_log('DEV-UNLOCK: loopback request auto-login (dev mode)');
+        $configured = (string) (settings_service()->all()['auth']['user'] ?? '');
+        self::establish($configured !== '' ? $configured : 'dev');
+        $_SESSION['dev_unlock'] = true;
+    }
+
     public static function requireLogin(): void
     {
+        self::devUnlock();
         if (!self::check()) {
             if (self::isBearer()) { header('WWW-Authenticate: Bearer realm="Asset Workspace"'); }
             json_out(['ok' => false, 'error' => self::isBearer() ? 'API 密钥无效、已过期或已撤销' : '未登录', 'code' => 'unauthenticated'], 401);

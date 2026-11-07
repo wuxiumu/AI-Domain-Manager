@@ -1296,9 +1296,10 @@ thead th:last-child, tbody td:last-child {
 .plan-form-fields input[type="text"] { height: 37px; }
 .plan-form-fields textarea { min-height: 320px; resize: vertical; line-height: 1.65; }
 .plan-form-fields input:focus, .plan-form-fields select:focus, .plan-form-fields textarea:focus { border-color: #86a773; outline: none; }
-.plan-form-row { display: flex; align-items: flex-end; gap: 10px; margin-top: 12px; }
-.plan-form-row label { flex: 0 0 180px; }
-.plan-form-row .btn { min-height: 37px; white-space: nowrap; }
+.plan-form-row { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-top: 12px; }
+.plan-form-row .choice-control { flex: 0 1 auto; }
+.plan-form-row .choice-control .domain-filter-label { line-height: 30px; }
+.plan-form-row .btn { min-height: 34px; white-space: nowrap; }
 
 /* AI 建议对比面板 */
 .plan-ai-panel { margin-top: 14px; border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: #fbfcf9; }
@@ -1308,3 +1309,11 @@ thead th:last-child, tbody td:last-child {
 .plan-ai-compare h5 { margin: 0 0 6px; font-size: 11px; color: var(--muted); font-weight: 600; }
 .plan-ai-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 @media (max-width: 760px) { .plan-ai-compare { grid-template-columns: 1fr; } }
+
+/* 审核快捷理由：多选 chips，点选拼接进意见框 */
+.plan-quick-notes { display: flex; flex-wrap: wrap; gap: 7px; margin: 2px 0 4px; }
+.plan-quick-notes .domain-filter-tab { padding: 4px 10px; font-size: 11px; line-height: 1.5; }
+.plan-quick-notes .domain-filter-tab[aria-pressed="true"] { color: var(--primary-dark); border-color: var(--primary); background: #eaf1e8; font-weight: 600; }
+/* 审核弹窗：单列紧凑布局，意见框不需要编辑表单的大高度 */
+.plan-review-modal .plan-form-fields textarea { min-height: 90px; }
+.plan-review-modal #plan-review-target { margin: 0 0 10px; }
