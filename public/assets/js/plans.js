@@ -200,6 +200,28 @@ window.WorkspacePlans = (() => {
     /* ---------- 新增 / 编辑 ---------- */
     $('#plan-open-create').addEventListener('click', () => openForm(null));
 
+    /* 复制执行中：把 in_progress 条目整理为纯文本简报，可直接粘贴给 AI 领任务；完成后按内含提示回填状态。 */
+    const plainText = markdown => String(markdown || '')
+        .replace(/^#{2,4}\s+/gm, '')
+        .replace(/\*\*([^*]+)\*\*/g, '$1')
+        .replace(/`([^`]+)`/g, '$1')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '$1（$2）')
+        .replace(/^\s*[-*]\s+/gm, '· ');
+    $('#plan-copy-active').addEventListener('click', () => {
+        const active = items.filter(item => item.status === 'in_progress');
+        if (!active.length) { toast('当前没有执行中的计划点，先在行内点「开始执行」', 'info'); return; }
+        const lines = [`【执行中计划简报】共 ${active.length} 条 · ${new Date().toLocaleString('zh-CN')}`, ''];
+        active.forEach((item, index) => {
+            lines.push(`${index + 1}. ${item.title}`);
+            lines.push(`   优先级：${PRIORITY_LABELS[item.priority] || item.priority} · 来源：${SOURCE_LABELS[item.source] || item.source} · 条目 ID：${item.id}`);
+            if (item.result_note) lines.push(`   执行备注：${item.result_note}`);
+            if (item.detail) lines.push(item.detail.split(/\r?\n/).map(line => '   ' + plainText(line)).join('\n'));
+            lines.push(`   （完成后把该条目标记为已完成：状态 status=done，ID ${item.id}）`);
+            lines.push('');
+        });
+        copyText(lines.join('\n'), `已复制 ${active.length} 条执行中简报，可直接粘贴给 AI`);
+    });
+
     function openForm(item) {
         const { overlay } = openModal('plan-form-template');
         overlay.querySelector('#plan-form-title').textContent = item ? '编辑计划点' : '新增计划点';
