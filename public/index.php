@@ -68,6 +68,9 @@ $router->post('/api/plans/{id}/review', [PlanController::class, 'review']);
 $router->post('/api/plans/ai-suggest', [PlanController::class, 'aiSuggest']);
 $router->delete('/api/plans/{id}', [PlanController::class, 'remove']);
 
+// 提示词库（仅管理员会话）：prompts/*.md 只读展示，内容即文件
+$router->get('/api/prompts', [PromptController::class, 'index']);
+
 // 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
 $router->get('/api/calendar', [CalendarController::class, 'index']);
 $router->put('/api/calendar/checkins/{date}', [CalendarController::class, 'saveCheckin']);

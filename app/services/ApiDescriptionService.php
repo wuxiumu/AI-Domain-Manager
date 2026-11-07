@@ -337,6 +337,9 @@ TEXT;
             self::object(['ok' => $boolean, 'suggestion' => $string, 'model' => $string]));
         $add('DELETE', '/api/plans/{id}', 'deleteImprovementPlan', '删除计划条目', null, null, [], 'session',
             self::object(['ok' => $boolean]));
+        $add('GET', '/api/prompts', 'listPromptLibrary', '提示词库：prompts/ 目录下 Markdown 文件的只读清单（标题/文件名/更新时间/全文）；内容即文件，调整直接编辑 md', null, null, [], 'session',
+            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => self::object(['name' => $string, 'file' => $string, 'title' => $string,
+                'updated_at' => $string, 'bytes' => $integer, 'content' => $string])]]));
         return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => AssetSnapshot::VERSION,
                 'description' => '缓存优先的域名 / IP 工作台。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],
             'servers' => [['url' => '/']], 'paths' => $paths, 'components' => [

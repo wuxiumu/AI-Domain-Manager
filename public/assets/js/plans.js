@@ -96,39 +96,7 @@ window.WorkspacePlans = (() => {
         return buttons.join('');
     }
 
-    /* ---------- 极简 Markdown：先整体转义再生成标签，杜绝注入；支持 ## 标题、**加粗**、`行内代码`、链接、- / 1. 列表 ---------- */
-    function renderMarkdown(source) {
-        const inline = text => text
-            .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
-        const blocks = [];
-        let list = null;
-        const flushList = () => {
-            if (!list) return;
-            blocks.push(`<${list.tag}>${list.items.map(item => `<li>${inline(escapeHtml(item))}</li>`).join('')}</${list.tag}>`);
-            list = null;
-        };
-        for (const line of String(source || '').split(/\r?\n/)) {
-            if (line.trim() === '') { flushList(); continue; }
-            const heading = line.match(/^#{2,4}\s+(.*)$/);
-            if (heading) { flushList(); blocks.push(`<h4>${inline(escapeHtml(heading[1]))}</h4>`); continue; }
-            const unordered = line.match(/^\s*[-*]\s+(.*)$/);
-            const ordered = line.match(/^\s*\d+[.、]\s+(.*)$/);
-            if (unordered || ordered) {
-                const tag = unordered ? 'ul' : 'ol';
-                if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
-                list.items.push((unordered || ordered)[1]);
-                continue;
-            }
-            flushList();
-            blocks.push(`<p>${inline(escapeHtml(line))}</p>`);
-        }
-        flushList();
-        return blocks.join('') || '<p class="muted">暂无详情，点击「编辑」补充。</p>';
-    }
-
-    /* ---------- 详情弹窗：点击行 / 标题打开，弹窗内编辑与状态动作 ---------- */
+    /* ---------- 详情弹窗：点击行 / 标题打开，弹窗内编辑与状态动作（Markdown 渲染用全局 renderMarkdown） ---------- */
     function openView(item) {
         const { overlay, close } = openModal('plan-detail-template');
         overlay.querySelector('#plan-detail-title').textContent = item.title;

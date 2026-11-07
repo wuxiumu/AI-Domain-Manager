@@ -5,7 +5,7 @@ $assetUrl = static function (string $path): string {
 };
 $styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
 $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'dns-history', 'accounts',
-    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'plans', 'setup', 'login-promo', 'calendar', 'login', 'app'];
+    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'plans', 'prompts', 'setup', 'login-promo', 'calendar', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -95,6 +95,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
             <button class="tab-btn" data-tab="domains"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><span>域名管理</span></button>
             <button class="tab-btn" data-tab="ips"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>IP 资产</span></button>
             <button class="tab-btn" data-tab="plans"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg><span>改进计划</span></button>
+            <button class="tab-btn" data-tab="prompts"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg><span>提示词库</span></button>
             <button class="tab-btn" data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>产品设置</span></button>
         </nav>
         <p class="nav-caption">更多视图</p>
@@ -276,6 +277,11 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
         <section id="view-ips" class="inventory-page tab-view hidden" aria-labelledby="ips-title">
             <div class="page-head"><div><p class="eyebrow">IP INVENTORY</p><h1 id="ips-title">IP 资产<span class="heading-dot">.</span> <span id="ip-count" class="count-tag">加载中</span></h1><p class="muted">统一收录服务器与 DNS 发现的 IP，管理网站链接并检查 HTTP 访问状态。</p></div><div class="head-actions"><button id="ip-open-create" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加 IP 资产</button><button id="ip-location-missing" class="btn">查询未缓存归属地</button><button id="ip-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查全部 IP</button></div></div>
             <div id="ip-progress-slot"></div><section class="asset-panel"><div class="panel-heading"><div><h2>IP 资产列表 </h2></div></div><div class="filters unified-filters ip-filters"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="ip-query" aria-label="搜索 IP 资产" placeholder="搜索名称、IP、备注、网站或关联域名"></label><div class="ip-filter-row" aria-label="IP 筛选条件"><input type="hidden" id="ip-version" value=""><input type="hidden" id="ip-status" value=""><div class="ip-filter-group" role="group" aria-label="地址类型"><span class="ip-filter-label">地址类型</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv4" data-color="tencent" aria-pressed="false">IPv4</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv6" data-color="violet" aria-pressed="false">IPv6</button></div><div class="ip-filter-group" role="group" aria-label="IP 状态"><span class="ip-filter-label">IP 状态</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="healthy" data-color="healthy" aria-pressed="false">IP 正常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unhealthy" data-color="unhealthy" aria-pressed="false">IP 异常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="stale" data-color="stale" aria-pressed="false">结果过时</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unchecked" aria-pressed="false">未检查</button></div></div></div><div class="table-wrap"><table id="ip-table"><thead><tr><th>名称与 IP</th><th>网站链接</th><th>用途与备注</th><th>关联域名</th><th>状态</th><th>检查时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载 IP 资产…</td></tr></tbody></table></div><div id="ip-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><strong>还没有 IP 资产</strong><p>点击“添加 IP 资产”，或检查域名以发现其解析地址。</p></div><div class="panel-caption"><span class="info-dot">i</span> 归属地查询会将 IP 发送给 ipwho.is，结果为近似位置并缓存在服务器；可手动重新查询。HTTP 检查不跟随重定向，结果与时间保存在服务器。</div></section>
+        </section>
+
+        <section id="view-prompts" class="inventory-page tab-view hidden" aria-labelledby="prompts-title">
+            <div class="page-head"><div><p class="eyebrow">PROMPT LIBRARY</p><h1 id="prompts-title">提示词库<span class="heading-dot">.</span> <span id="prompts-count" class="count-tag">加载中</span></h1><p class="muted">提示词即文档：内容来自项目 <code>prompts/</code> 目录的 Markdown 文件，直接编辑文件即可调整，页面只读展示与复制。</p></div></div>
+            <section class="asset-panel"><div class="panel-heading"><div><h2>提示词</h2></div></div><div id="prompts-list" class="prompt-list"><div class="table-loading"><span class="loading-ring"></span>正在加载提示词库…</div></div><p id="prompts-error" class="error-text hidden" role="alert"></p></section>
         </section>
 
         <section id="view-plans" class="inventory-page tab-view hidden" aria-labelledby="plans-title">

@@ -59,6 +59,39 @@ async function copyText(text, okMessage = '已复制到剪贴板') {
     }
 }
 
+/* ---------- 极简 Markdown 渲染：先整体转义再生成标签，杜绝注入 ----------
+   支持 ## 小节、**加粗**、`行内代码`、http(s) 链接（rel=noopener）、- / 1. 列表；供计划/提示词库等模块共用。 */
+function renderMarkdown(source) {
+    const inline = text => text
+        .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
+        .replace(/`([^`]+)`/g, '<code>$1</code>')
+        .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>');
+    const blocks = [];
+    let list = null;
+    const flushList = () => {
+        if (!list) return;
+        blocks.push(`<${list.tag}>${list.items.map(item => `<li>${inline(escapeHtml(item))}</li>`).join('')}</${list.tag}>`);
+        list = null;
+    };
+    for (const line of String(source || '').split(/\r?\n/)) {
+        if (line.trim() === '') { flushList(); continue; }
+        const heading = line.match(/^#{1,4}\s+(.*)$/);
+        if (heading) { flushList(); blocks.push(`<h${Math.min(heading[1].length + 2, 5)}>${inline(escapeHtml(heading[1]))}</h${Math.min(heading[1].length + 2, 5)}>`); continue; }
+        const unordered = line.match(/^\s*[-*]\s+(.*)$/);
+        const ordered = line.match(/^\s*\d+[.、]\s+(.*)$/);
+        if (unordered || ordered) {
+            const tag = unordered ? 'ul' : 'ol';
+            if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+            list.items.push((unordered || ordered)[1]);
+            continue;
+        }
+        flushList();
+        blocks.push(`<p>${inline(escapeHtml(line))}</p>`);
+    }
+    flushList();
+    return blocks.join('') || '<p class="muted">（空）</p>';
+}
+
 /* ---------- 对话框键盘与焦点：Esc 取消、Tab 圈闭、关闭后归还焦点 ---------- */
 function bindDialogFocus(overlay, close) {
     const previous = document.activeElement;
