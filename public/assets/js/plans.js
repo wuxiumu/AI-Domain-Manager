@@ -28,11 +28,41 @@ window.WorkspacePlans = (() => {
         } catch (failure) { if (visible()) error(failure.message); }
     }
 
+    /* 列表筛选：状态 tab（select 经 ChoiceTabs 变为选项卡）+ 搜索 + 客户端分页 */
+    let page = 1;
+    const PAGE_SIZE = 20;
+
+    function filteredItems() {
+        const status = $('#plan-status')?.value || '';
+        const query = ($('#plan-search')?.value || '').trim().toLowerCase();
+        return items.filter(item => (status === '' || item.status === status)
+            && (!query || [item.title, item.detail, item.review_note, item.result_note].join(' ').toLowerCase().includes(query)));
+    }
+
     function render() {
-        $('#plans-count').textContent = `${items.filter(i => i.status === 'proposed').length} 条待审核 · 共 ${items.length} 条`;
-        $('#plans-empty').classList.toggle('hidden', items.length > 0);
-        $('#plans-table tbody').innerHTML = items.length ? items.map(row).join('')
-            : '<tr><td colspan="6"><div class="hc-empty">暂无计划条目。</div></td></tr>';
+        const list = filteredItems();
+        const pages = Math.max(1, Math.ceil(list.length / PAGE_SIZE));
+        if (page > pages) page = pages;
+        const view = list.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+        const pending = items.filter(i => i.status === 'proposed').length;
+        $('#plans-count').textContent = `${pending} 条待审核 · 筛选到 ${list.length} / 共 ${items.length} 条`;
+        // 状态 tab 携带计数（ChoiceTabs 按签名自动重建按钮组）
+        const statusSelect = $('#plan-status');
+        if (statusSelect) {
+            const counts = {};
+            for (const item of items) counts[item.status] = (counts[item.status] || 0) + 1;
+            [...statusSelect.options].forEach(option => {
+                option.textContent = option.value === '' ? `全部 (${items.length})` : `${STATUS_LABELS[option.value]} (${counts[option.value] || 0})`;
+            });
+        }
+        $('#plans-empty').classList.toggle('hidden', list.length > 0);
+        $('#plans-table tbody').innerHTML = view.length ? view.map(row).join('')
+            : '<tr><td colspan="6"><div class="hc-empty">没有匹配的计划条目。</div></td></tr>';
+        const pagination = $('#plan-pagination');
+        pagination.classList.toggle('hidden', pages <= 1);
+        $('#plan-page-info').textContent = `第 ${page} / ${pages} 页 · 每页 ${PAGE_SIZE} 条`;
+        $('#plan-prev').disabled = page <= 1;
+        $('#plan-next').disabled = page >= pages;
     }
 
     function row(item) {
@@ -116,6 +146,15 @@ window.WorkspacePlans = (() => {
         result.classList.toggle('hidden', !item.result_note);
         const foot = overlay.querySelector('#plan-detail-actions');
         foot.insertAdjacentHTML('afterbegin', actions(item));
+        foot.insertAdjacentHTML('afterbegin', '<button type="button" class="btn btn-sm" data-plan-copy title="复制标题与 Markdown 全文，可直接粘贴给 AI">复制全文</button>');
+        overlay.querySelector('[data-plan-copy]').addEventListener('click', () => {
+            const lines = [`# ${item.title}`, '',
+                `状态：${STATUS_LABELS[item.status] || item.status} · 优先级：${PRIORITY_LABELS[item.priority] || item.priority} · 来源：${SOURCE_LABELS[item.source] || item.source}`,
+                ...(item.review_note ? [`审核意见：${item.review_note}`] : []),
+                ...(item.result_note ? [`执行结果：${item.result_note}`] : []),
+                '', item.detail || '（无详情）'];
+            copyText(lines.join('\n'), '计划全文已复制，可直接粘贴给 AI');
+        });
         foot.addEventListener('click', event => {
             const button = event.target.closest('[data-plan-action]');
             if (!button) return;
@@ -325,7 +364,13 @@ window.WorkspacePlans = (() => {
         await load();
     }
 
-    /* ---------- 列表交互：行内按钮 + 点击行打开详情 ---------- */
+    /* ---------- 列表交互：状态 tab / 搜索（防抖）/ 分页 + 行内按钮 + 点击行打开详情 ---------- */
+    const debounce = (fn, wait) => { let timer = null; return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), wait); }; };
+    $('#plan-status').addEventListener('change', () => { page = 1; render(); });
+    $('#plan-search').addEventListener('input', debounce(() => { page = 1; render(); }, 300));
+    $('#plan-prev').addEventListener('click', () => { if (page > 1) { page--; render(); } });
+    $('#plan-next').addEventListener('click', () => { page++; render(); });
+
     $('#plans-table').addEventListener('click', async event => {
         const button = event.target.closest('[data-plan-action]');
         const tr = event.target.closest('tr[data-plan-id]');

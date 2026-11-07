@@ -1317,3 +1317,9 @@ thead th:last-child, tbody td:last-child {
 /* 审核弹窗：单列紧凑布局，意见框不需要编辑表单的大高度 */
 .plan-review-modal .plan-form-fields textarea { min-height: 90px; }
 .plan-review-modal #plan-review-target { margin: 0 0 10px; }
+
+/* 计划列表：筛选行与分页 */
+.plans-filters { margin: 0 0 14px; }
+.plans-filters select { min-height: 34px; border: 1px solid var(--border); border-radius: 7px; background: #f8faf6; color: var(--text); font: inherit; font-size: 12px; padding: 6px 10px; }
+.plan-pagination { display: flex; align-items: center; justify-content: flex-end; gap: 12px; padding: 10px 4px 0; }
+.plan-pagination .muted { font-size: 12px; }

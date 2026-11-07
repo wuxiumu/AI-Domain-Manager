@@ -3,10 +3,16 @@
 /** 改进计划：功能点的提出、审核与执行跟踪（仅管理员会话）。 */
 class PlanController
 {
+    /** 计划列表：管理员会话全量；Bearer 密钥需 plans:read，支持 ?status= 按状态筛选（AI 直接读已通过计划）。 */
     public function index(): void
     {
-        Auth::requireSession();
-        json_out(['ok' => true, 'items' => (new PlanService())->list()['items'], 'ai' => (new PlanAiService())->meta()]);
+        $status = isset($_GET['status']) ? (string) $_GET['status'] : '';
+        try {
+            $items = (new PlanService())->list($status)['items'];
+        } catch (InvalidArgumentException $e) {
+            json_out(['ok' => false, 'error' => $e->getMessage()], 422);
+        }
+        json_out(['ok' => true, 'items' => $items, 'ai' => (new PlanAiService())->meta()]);
     }
 
     /** 新增条目（待审核）；source=admin 表示工作台手动提出。 */

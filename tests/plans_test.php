@@ -91,6 +91,14 @@ try {
     expect(in_array('第 201 条待审核', array_column($remaining, 'title'), true), 'pending items survive trimming');
     expect(!in_array('最早的已完成', array_column($remaining, 'title'), true), 'oldest done item trimmed first');
 
+    // 状态筛选：AI 只读已通过条目；非法状态拒绝
+    $aiItem = $service->add(['title' => 'AI 待执行条目', 'priority' => 'high'], 'agent');
+    $service->review($aiItem['id'], 'approve');
+    $approvedTitles = array_column($service->list('approved')['items'], 'title');
+    expect(in_array('AI 待执行条目', $approvedTitles, true) && count($approvedTitles) === 1, 'approved filter returns exactly the approved item');
+    expect(!in_array('AI 待执行条目', array_column($service->list('proposed')['items'], 'title'), true), 'approved item leaves the proposed list');
+    throwsClass(static fn () => $service->list('bogus'), InvalidArgumentException::class, 'invalid status filter rejected');
+
     // 损坏文件不写入（与资产数据同一保护哲学）
     $corrupt = $root . '-corrupt'; mkdir($corrupt);
     file_put_contents($corrupt . '/improvement_plan.json', '{broken');

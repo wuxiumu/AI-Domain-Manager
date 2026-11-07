@@ -317,7 +317,8 @@ TEXT;
             'status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected']],
             'review_note' => $string, 'result_note' => $string,
             'created_at' => $string, 'updated_at' => $string, 'reviewed_at' => ['type' => ['string', 'null']]]);
-        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序；附带 AI 建议可用性与可选模型（不含密钥）', null, null, [], 'session',
+        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序；?status= 按状态筛选（如 approved 供 AI 直接读取已通过条目执行）；附带 AI 建议可用性与可选模型（不含密钥）', 'plans:read',
+            null, ['status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected'], 'description' => '可选，按状态筛选；approved 即 AI 待执行清单']], 'api',
             self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => $planItem],
                 'ai' => self::object(['enabled' => $boolean, 'models' => ['type' => 'array', 'items' => $string], 'default' => $string])]));
         $add('POST', '/api/plans', 'createImprovementPlan', '新增改进计划条目（待审核）；同名待处理条目会返回 409', null,

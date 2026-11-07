@@ -4,7 +4,7 @@
 window.ChoiceTabs = (() => {
     const limit = 8;
     const entries = new Map();
-    const names = {'health-kind':'资产类型','health-status':'健康状态','rel-ip':'IP / 服务器','ip-version':'地址类型','ip-status':'健康状态','dm-provider':'服务商','rec-type':'记录类型','plan-form-priority':'优先级','plan-ai-model':'AI 模型'};
+    const names = {'health-kind':'资产类型','health-status':'健康状态','rel-ip':'IP / 服务器','ip-version':'地址类型','ip-status':'健康状态','dm-provider':'服务商','rec-type':'记录类型','plan-form-priority':'优先级','plan-ai-model':'AI 模型','plan-status':'状态'};
     const colorFor = value => ({healthy:'healthy',unhealthy:'unhealthy',stale:'stale',unchecked:'neutral',domain:'tencent',ip:'healthy',IPv4:'tencent',IPv6:'violet',A:'tencent',AAAA:'violet',CNAME:'stale',MX:'healthy',confirmed:'healthy',dns:'tencent',unlinked:'stale'})[value] || (value.startsWith('aliyun')?'aliyun':value.startsWith('tencent')?'tencent':value.startsWith('godaddy')?'godaddy':'neutral');
     function syncSelect(select) {
         if (!select.id) return;

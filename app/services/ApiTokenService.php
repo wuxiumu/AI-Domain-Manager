@@ -11,6 +11,7 @@ class ApiTokenService
         'checks:run' => '执行健康与访问检查',
         'sync:run' => '同步域名与测试云连接',
         'proposals:write' => '提交待审批的 DNS 变更提案（不直接写云端）',
+        'plans:read' => '读取改进计划（可按状态筛选，供 AI 接管已通过条目）',
     ];
     private PrivateJsonStore $store;
     private SettingsService $settings;

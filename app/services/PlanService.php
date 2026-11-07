@@ -30,8 +30,11 @@ class PlanService
         $this->clock = $clock ?? static function () { return time(); };
     }
 
-    public function list(): array
+    public function list(?string $status = null): array
     {
+        if ($status !== null && $status !== '' && !in_array($status, self::STATUSES, true)) {
+            throw new InvalidArgumentException('状态筛选无效：仅支持 proposed / approved / in_progress / done / rejected');
+        }
         $items = $this->read();
         // 待审核优先，其后按执行中 / 已通过 / 已完成 / 已驳回；同状态内高优先级、新条目靠前。
         $statusWeight = array_flip(['proposed', 'in_progress', 'approved', 'done', 'rejected']);
@@ -41,6 +44,9 @@ class PlanService
             return [$statusWeight[$a['status']] ?? 9, $priorityWeight[$a['priority']] ?? 9, (string) $b['created_at']]
                 <=> [$statusWeight[$b['status']] ?? 9, $priorityWeight[$b['priority']] ?? 9, (string) $a['created_at']];
         });
+        if ($status !== null && $status !== '') {
+            $items = array_values(array_filter($items, static function (array $item) use ($status) { return ($item['status'] ?? '') === $status; }));
+        }
         return ['ok' => true, 'items' => $items];
     }
 
