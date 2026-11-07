@@ -4,6 +4,7 @@
    列表行点击弹窗查看详情（标题 + Markdown 正文），弹窗内可直接进入编辑。 */
 window.WorkspacePlans = (() => {
     let items = [];
+    let aiMeta = { enabled: false, models: [], default: '' };
     const visible = () => !$('#view-plans').classList.contains('hidden');
 
     const STATUS_LABELS = { proposed: '待审核', approved: '已通过', in_progress: '执行中', done: '已完成', rejected: '已驳回' };
@@ -22,6 +23,7 @@ window.WorkspacePlans = (() => {
         try {
             const data = await api('/api/plans');
             items = data.items || [];
+            aiMeta = data.ai || { enabled: false, models: [], default: '' };
             render();
         } catch (failure) { if (visible()) error(failure.message); }
     }
@@ -188,12 +190,23 @@ window.WorkspacePlans = (() => {
         });
     }
 
-    /* ---------- AI 建议（智谱 GLM）：生成改写稿 → 当前/建议双栏对比 → 采用则回填，保存仍由管理员确认 ---------- */
+    /* ---------- AI 建议（智谱 GLM）：模型可选（记忆上次选择）→ 生成改写稿 → 双栏对比 → 采用则回填 ---------- */
     function wireAiSuggest(overlay) {
         const button = overlay.querySelector('#plan-ai-suggest');
         const panel = overlay.querySelector('#plan-ai-panel');
+        const modelSelect = overlay.querySelector('#plan-ai-model');
         const titleInput = overlay.querySelector('#plan-form-title-input');
         const detailInput = overlay.querySelector('#plan-form-detail');
+        if (!aiMeta.enabled) {
+            button.disabled = true;
+            button.title = '未配置 AI 服务：在 config/config.php 的 ai 节点填入 api_key';
+            modelSelect.disabled = true;
+        }
+        const models = aiMeta.models.length ? aiMeta.models : [aiMeta.default || 'glm-4-flash'];
+        const saved = localStorage.getItem('plans-ai-model');
+        const initial = models.includes(saved) ? saved : (aiMeta.default && models.includes(aiMeta.default) ? aiMeta.default : models[0]);
+        modelSelect.innerHTML = models.map(model => `<option value="${escapeHtml(model)}"${model === initial ? ' selected' : ''}>${escapeHtml(model)}</option>`).join('');
+        modelSelect.addEventListener('change', () => localStorage.setItem('plans-ai-model', modelSelect.value));
         const request = async () => {
             const title = titleInput.value.trim();
             if (!title) { showFormError(overlay, 'plan-form-error', '先填写标题，再让 AI 给建议'); titleInput.focus(); return; }
@@ -201,8 +214,8 @@ window.WorkspacePlans = (() => {
             button.textContent = 'AI 生成中…';
             showFormError(overlay, 'plan-form-error', '');
             try {
-                const data = await api('/api/plans/ai-suggest', { method: 'POST', body: JSON.stringify({ title, detail: detailInput.value }) });
-                overlay.querySelector('#plan-ai-model').textContent = `· ${data.model || 'GLM'}`;
+                const data = await api('/api/plans/ai-suggest', { method: 'POST', body: JSON.stringify({ title, detail: detailInput.value, model: modelSelect.value }) });
+                overlay.querySelector('#plan-ai-used-model').textContent = `· ${data.model || 'GLM'}`;
                 overlay.querySelector('#plan-ai-original').innerHTML = renderMarkdown(detailInput.value);
                 overlay.querySelector('#plan-ai-suggestion').innerHTML = renderMarkdown(data.suggestion || '');
                 overlay.querySelector('#plan-ai-adopt').dataset.suggestion = data.suggestion || '';

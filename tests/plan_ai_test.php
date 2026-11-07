@@ -46,6 +46,31 @@ try {
     expect(strpos($payload['messages'][1]['content'], '分页渲染') !== false, 'user message carries the plan title');
     expect(strpos($payload['messages'][0]['content'], '## 现状') !== false, 'system prompt requires the three-section structure');
 
+    // 模型白名单：不在 ai.models 列表内的请求被拒，允许的按请求透传
+    $multi = new PlanAiService(['api_key' => $key, 'model' => 'glm-4-flash', 'models' => ['glm-4-flash', 'glm-5.3']]);
+    throwsClass(static function () use ($multi) {
+        $multi->suggest(['title' => 'x', 'model' => 'glm-9.9']);
+    }, InvalidArgumentException::class, 'unknown model rejected against whitelist');
+    $picked = new PlanAiService(['api_key' => $key, 'model' => 'glm-4-flash', 'models' => ['glm-4-flash', 'glm-5.3']], static function (string $e, string $k, string $payload) {
+        return json_encode(['choices' => [['message' => ['content' => '建议']]]]);
+    });
+    $result = $picked->suggest(['title' => 'x', 'model' => 'glm-5.3']);
+    expect($result['model'] === 'glm-5.3', 'requested model echoed');
+    $payloadModel = null;
+    $picker = new PlanAiService(['api_key' => $key, 'model' => 'glm-4-flash', 'models' => ['glm-4-flash', 'glm-5.3']], static function (string $e, string $k, string $payload) use (&$payloadModel) {
+        $payloadModel = json_decode($payload, true)['model'];
+        return json_encode(['choices' => [['message' => ['content' => '建议']]]]);
+    });
+    $picker->suggest(['title' => 'x', 'model' => 'glm-5.3']);
+    expect($payloadModel === 'glm-5.3', 'requested model reaches GLM payload');
+
+    // meta：前端下拉数据源（不含密钥）
+    $meta = $multi->meta();
+    expect($meta['enabled'] === true && $meta['models'] === ['glm-4-flash', 'glm-5.3'] && $meta['default'] === 'glm-4-flash', 'meta exposes enabled/models/default');
+    expect(!isset($meta['api_key']) && !in_array($key, $meta['models'], true), 'meta never leaks the key');
+    $metaNoKey = (new PlanAiService(['api_key' => '', 'models' => ['glm-4-flash']]))->meta();
+    expect($metaNoKey['enabled'] === false, 'meta reports disabled without key');
+
     // 失败路径：全部转为可重试的通用错误，不暴露上游细节或密钥
     throwsClass(static function () use ($key) {
         $service = new PlanAiService(['api_key' => $key], static fn () => '{"error":{"message":"token invalid"}}');

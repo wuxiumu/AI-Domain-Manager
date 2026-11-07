@@ -6,7 +6,7 @@ class PlanController
     public function index(): void
     {
         Auth::requireSession();
-        json_out((new PlanService())->list());
+        json_out(['ok' => true, 'items' => (new PlanService())->list()['items'], 'ai' => (new PlanAiService())->meta()]);
     }
 
     /** 新增条目（待审核）；source=admin 表示工作台手动提出。 */

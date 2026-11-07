@@ -73,7 +73,8 @@ class Router
             json_out(['error' => '接口不存在'], 404);
         }
 
-        // 页面请求：渲染单页应用外壳
+        // 页面请求：渲染单页应用外壳；外壳必须重新验证，避免旧 HTML 配新 JS/CSS 串版本
+        header('Cache-Control: no-cache, must-revalidate');
         require PUBLIC_DIR . '/views/app.php';
     }
 

@@ -1267,6 +1267,7 @@ thead th:last-child, tbody td:last-child {
 .workspace-tabs > button:focus-visible { outline: 2px solid var(--primary); outline-offset: 2px; }
 
 /* ---------- 改进计划：行点击详情弹窗与 Markdown 正文 ---------- */
+.modal.plan-form-modal, .modal.plan-detail-modal { width: min(920px, calc(100vw - 40px)); }
 .plan-row { cursor: pointer; }
 .plan-row:hover td { background: #f7f9f5; }
 .plan-title-btn { padding: 0; border: 0; background: none; font: inherit; font-weight: 600; color: var(--text); cursor: pointer; text-align: left; display: block; }
@@ -1293,10 +1294,10 @@ thead th:last-child, tbody td:last-child {
     font-size: 13px; font-family: inherit; box-sizing: border-box;
 }
 .plan-form-fields input[type="text"] { height: 37px; }
-.plan-form-fields textarea { min-height: 220px; resize: vertical; line-height: 1.65; }
+.plan-form-fields textarea { min-height: 320px; resize: vertical; line-height: 1.65; }
 .plan-form-fields input:focus, .plan-form-fields select:focus, .plan-form-fields textarea:focus { border-color: #86a773; outline: none; }
 .plan-form-row { display: flex; align-items: flex-end; gap: 10px; margin-top: 12px; }
-.plan-form-row label { flex: 0 0 200px; }
+.plan-form-row label { flex: 0 0 180px; }
 .plan-form-row .btn { min-height: 37px; white-space: nowrap; }
 
 /* AI 建议对比面板 */

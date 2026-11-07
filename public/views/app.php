@@ -306,11 +306,12 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
                 <label for="plan-form-title-input">标题 <span class="required-dot">*</span><input id="plan-form-title-input" type="text" maxlength="120" required placeholder="一句话说清这个功能点"></label>
                 <div class="plan-form-row">
                     <label for="plan-form-priority">优先级 <select id="plan-form-priority"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select></label>
+                    <label for="plan-ai-model">AI 模型 <select id="plan-ai-model"></select></label>
                     <button type="button" id="plan-ai-suggest" class="btn" title="让 AI（智谱 GLM）改写详情，对比后决定是否采用"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>AI 建议</button>
                 </div>
                 <label for="plan-form-detail">详情（Markdown）<span class="muted">## 小节 · **加粗** · - 列表</span><textarea id="plan-form-detail" rows="10" maxlength="4000" placeholder="## 现状&#10;…&#10;&#10;## 方案&#10;…&#10;&#10;## 验收&#10;…"></textarea></label>
                 <div id="plan-ai-panel" class="plan-ai-panel hidden">
-                    <div class="plan-ai-head"><strong>AI 建议 <span class="muted" id="plan-ai-model"></span></strong><button type="button" class="btn btn-sm btn-link" id="plan-ai-close">关闭对比</button></div>
+                    <div class="plan-ai-head"><strong>AI 建议 <span class="muted" id="plan-ai-used-model"></span></strong><button type="button" class="btn btn-sm btn-link" id="plan-ai-close">关闭对比</button></div>
                     <div class="plan-ai-compare">
                         <div><h5>当前内容</h5><div class="plan-md" id="plan-ai-original"></div></div>
                         <div><h5>建议内容</h5><div class="plan-md" id="plan-ai-suggestion"></div></div>

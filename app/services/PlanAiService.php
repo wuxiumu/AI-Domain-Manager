@@ -26,6 +26,8 @@ TEXT;
     private ?array $config;
     private $http;
 
+    private const DEFAULT_MODEL = 'glm-4-flash';
+
     /** $config 显式传入用于离线测试；生产从 config() 读取。$http 可注入替代真实网络调用。 */
     public function __construct(?array $config = null, ?callable $http = null)
     {
@@ -33,23 +35,56 @@ TEXT;
         $this->http = $http;
     }
 
-    private function setting(string $key, string $fallback = ''): string
+    /** 读取 ai 配置项（可为标量或数组）；未配置返回 null。 */
+    private function setting(string $key)
     {
-        if ($this->config !== null) { return (string) ($this->config[$key] ?? $fallback); }
-        $value = config('ai.' . $key);
-        return is_string($value) ? $value : $fallback;
+        if ($this->config !== null) { return $this->config[$key] ?? null; }
+        return config('ai.' . $key);
+    }
+
+    private function apiKey(): string
+    {
+        $key = $this->setting('api_key');
+        return is_string($key) ? trim($key) : '';
+    }
+
+    private function allowedModels(): array
+    {
+        $models = $this->setting('models');
+        if (is_array($models)) {
+            $list = array_values(array_filter(array_map(static fn ($m) => is_string($m) ? trim($m) : '', $models), static fn ($m) => $m !== ''));
+        } else {
+            $list = [];
+        }
+        return $list ?: [self::DEFAULT_MODEL];
+    }
+
+    /** 供前端展示的 AI 元信息（不含密钥）：是否可用、可选模型与默认模型。 */
+    public function meta(): array
+    {
+        $models = $this->allowedModels();
+        $default = $this->setting('model');
+        $default = is_string($default) && $default !== '' ? $default : self::DEFAULT_MODEL;
+        if (!in_array($default, $models, true)) { array_unshift($models, $default); }
+        return ['enabled' => $this->apiKey() !== '', 'models' => array_values(array_unique($models)), 'default' => $default];
     }
 
     /** 生成优化建议；返回 {suggestion, model}。失败抛异常，由路由统一转 4xx/5xx。 */
     public function suggest(array $input): array
     {
-        $apiKey = $this->setting('api_key');
+        $apiKey = $this->apiKey();
         if ($apiKey === '') { throw new InvalidArgumentException('未配置 AI 服务：请在 config/config.php 的 ai 节点填入 api_key'); }
         $title = trim((string) ($input['title'] ?? ''));
         $detail = (string) ($input['detail'] ?? '');
         if ($title === '' || mb_strlen($title) > 120) { throw new InvalidArgumentException('请提供不超过 120 字的标题'); }
         if (mb_strlen($detail) > self::MAX_DETAIL) { throw new InvalidArgumentException('详情超过 4000 字，请先精简'); }
-        $model = $this->setting('model', 'glm-4-flash') ?: 'glm-4-flash';
+        $models = $this->allowedModels();
+        $requested = trim((string) ($input['model'] ?? ''));
+        $fallback = $this->setting('model');
+        $model = $requested !== '' ? $requested : (is_string($fallback) && $fallback !== '' ? $fallback : self::DEFAULT_MODEL);
+        if (!in_array($model, $models, true)) {
+            throw new InvalidArgumentException('不支持的模型：' . $model . '；可在 config/config.php 的 ai.models 列表中调整');
+        }
         $payload = json_encode([
             'model' => $model,
             'messages' => [

@@ -317,8 +317,9 @@ TEXT;
             'status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected']],
             'review_note' => $string, 'result_note' => $string,
             'created_at' => $string, 'updated_at' => $string, 'reviewed_at' => ['type' => ['string', 'null']]]);
-        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序', null, null, [], 'session',
-            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => $planItem]]));
+        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序；附带 AI 建议可用性与可选模型（不含密钥）', null, null, [], 'session',
+            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => $planItem],
+                'ai' => self::object(['enabled' => $boolean, 'models' => ['type' => 'array', 'items' => $string], 'default' => $string])]));
         $add('POST', '/api/plans', 'createImprovementPlan', '新增改进计划条目（待审核）；同名待处理条目会返回 409', null,
             self::object(['title' => $string, 'detail' => $string, 'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']]], ['title']), [], 'session',
             self::object(['ok' => $boolean, 'item' => $planItem]));
@@ -330,7 +331,8 @@ TEXT;
             self::object(['decision' => ['type' => 'string', 'enum' => ['approve', 'reject']], 'note' => ['type' => 'string', 'description' => '审核意见；驳回时必填']]), ['decision'], 'session',
             self::object(['ok' => $boolean, 'item' => $planItem]));
         $add('POST', '/api/plans/ai-suggest', 'suggestImprovementPlan', 'AI 优化建议：调用已配置的智谱 GLM（config/config.php 的 ai 节点）生成详情 Markdown 改写稿；仅返回建议文本不落盘，由管理员对比后决定是否采用', null,
-            self::object(['title' => $string, 'detail' => $string], ['title']), [], 'session',
+            self::object(['title' => $string, 'detail' => $string,
+                'model' => ['type' => 'string', 'description' => '可选，须在配置的 ai.models 列表内；缺省用 ai.model']], ['title']), [], 'session',
             self::object(['ok' => $boolean, 'suggestion' => $string, 'model' => $string]));
         $add('DELETE', '/api/plans/{id}', 'deleteImprovementPlan', '删除计划条目', null, null, [], 'session',
             self::object(['ok' => $boolean]));
