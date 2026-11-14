@@ -79,7 +79,24 @@ class SettingsController
         if (!is_string($body['current_password'] ?? null) || !settings_service()->verifyPassword($body['current_password'])) {
             json_out(['ok' => false, 'error' => '当前管理员密码不正确'], 422);
         }
-        json_out((new ApiTokenService(DATA_DIR, settings_service()))->create($body), 201);
+        $result = (new ApiTokenService(DATA_DIR, settings_service()))->create($body);
+        // 随明文一次性附上「AI 使用说明」：管理员复制整段即可交给任何 AI 完成接入。
+        $origin = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== '' ? 'https' : 'http') . '://' . (string) ($_SERVER['HTTP_HOST'] ?? 'localhost');
+        $result['ai_usage'] = [
+            'bootstrap_url' => $origin . '/api/ai/bootstrap.md',
+            'header' => 'Authorization: Bearer ' . $result['token'],
+            'examples' => [
+                '# 一次请求完成接入（使用说明 + 契约 + 护栏 + 双视图快照）',
+                'curl -s -H "Authorization: Bearer ' . $result['token'] . '" ' . $origin . '/api/ai/bootstrap.md',
+                '# 域名台账快照（JSON）',
+                'curl -s -H "Authorization: Bearer ' . $result['token'] . '" ' . $origin . '/api/domains/screen',
+                '# 提交 DNS 变更提案（proposals:write；管理员批准后执行）',
+                'curl -s -X POST -H "Authorization: Bearer ' . $result['token'] . '" -H "Content-Type: application/json" \\',
+                '  -d \'{"account":"<provider>","domain":"example.com","action":"update","record_id":"<record_id>","record":{"type":"A","name":"@","value":"192.0.2.10"},"rationale":"将 @ 指向新服务器"}\' \\',
+                '  ' . $origin . '/api/proposals',
+            ],
+        ];
+        json_out($result, 201);
     }
 
     public function revokeToken(string $id): void

@@ -27,6 +27,7 @@
 - [x] 代码干净度审计：零死类、路由↔契约 67:67 零漂移、零调试残留
 - [x] T1 孤儿数据清理：data/ 18M → 3.9M（健康栈删除后的运行时残渣）
 - [x] T3 AI Bootstrap 单文件接入：`GET /api/ai/bootstrap.md`（assets:read，一次请求 = 说明 + 契约 + 护栏 + 双视图快照）
+- [x] T4 密钥签发附 AI 接入材料：签发响应 `ai_usage` + /settings 弹窗「复制接入材料」按钮
 
 ---
 
@@ -59,7 +60,9 @@
 - **内容**：`POST /api/tokens` 响应（与 /settings 创建成功弹窗）追加现成可复制块：
   `Authorization: Bearer …` + bootstrap URL + 三条核心 curl 示例
 - **验收**：管理员复制粘贴即可把接入材料交给任何 AI
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:44）——签发响应新增 `ai_usage`（认证头 / bootstrap 地址 / 含注释的 curl 示例，
+  示例 IP 用 TEST-NET 占位）；/settings 弹窗新增「AI 接入材料」块与「复制接入材料」按钮；
+  浏览器已验证渲染与复制（真实签发链路需管理员密码，留人工验收：创建→复制→交给 AI→AI 完成读台账+提案）
 
 ### T5 · `workspace-api.py` 升级为语义化官方客户端
 - **内容**：新增 `bootstrap()` / `screen()` / `ips()` / `records()` / `propose()` / `report()` 语义方法

@@ -97,6 +97,13 @@ $assetVer = static function (string $path): string {
                     <code id="sp-token-value"></code>
                     <button type="button" class="ap-btn ap-btn-sm" id="sp-token-copy">复制密钥</button>
                     <button type="button" class="ap-btn ap-btn-sm" id="sp-token-dismiss">已保存，隐藏密钥</button>
+                    <div class="sp-token-usage">
+                        <div class="sp-token-usage-head">
+                            <span>AI 接入材料（复制整段交给 AI 即可开始使用）</span>
+                            <button type="button" class="ap-btn ap-btn-sm" id="sp-token-copy-usage">复制接入材料</button>
+                        </div>
+                        <pre id="sp-token-usage"></pre>
+                    </div>
                 </div>
             </section>
         </div>

@@ -130,6 +130,32 @@
     min-width: 200px;
 }
 
+/* 密钥签发后附带的「AI 接入材料」块：整段可复制 */
+.sp-token-usage { flex-basis: 100%; margin-top: 4px; }
+.sp-token-usage-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    color: var(--muted);
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+.sp-token-usage pre {
+    margin: 0;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 10px 12px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-break: break-all;
+    color: #9fd8f2;
+    max-height: 240px;
+    overflow-y: auto;
+}
+
 .sp-code {
     background: var(--bg-soft);
     border: 1px solid var(--line);

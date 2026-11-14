@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **密钥签发附带 AI 接入材料（T4）**：`POST /api/tokens` 响应新增 `ai_usage`（认证头、`/api/ai/bootstrap.md` 地址、三条含注释的 curl 示例，示例 IP 用 TEST-NET 占位）；/settings 创建密钥成功弹窗新增「AI 接入材料」整段预览与「复制接入材料」按钮，复制后可直接交给任何 AI 完成接入；OpenAPI 契约描述同步。
 - **AI 接入入口 `GET /api/ai/bootstrap.md`（T3）**：一次请求返回自包含 Markdown 接入包——使用说明（llms.txt）+ 能力清单 + 权限范围表 + 写护栏速查（409 / 202 未核实 / verified 语义 / 提案流）+ 域名与 IP 双视图当前快照（88KB 单文件，`assets:read`）；`llms.txt`、能力发现与 README 均已链接；三件事（路由 / scope / 契约）同步登记。
 - 运行数据清理（T1）：删除健康栈移除后遗留的孤儿文件——`data/cache/` 6 个非 DNS 快照缓存（8.4MB）、`data/history/` 旧域名同步历史（4.2MB）、`data/ratelimit.json`、`data/improvement_plan.json`（含锁文件）与 `scripts/__pycache__/`；数据目录 18M → 3.9M，在用存储不受影响。
 - 新增 **tasks.md 任务看板**：产品定位、已完成里程碑、P0–P2 路线图（AI 接入 bootstrap / MCP Server / 二开友好）、明确不做清单与维护规则，作为项目的持续任务清单；纳入 `/docs` 页面白名单（可在线预览与编辑），AGENTS 文档规则与 OpenAPI 契约描述同步。

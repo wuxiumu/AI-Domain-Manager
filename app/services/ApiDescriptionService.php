@@ -382,7 +382,7 @@ TEXT;
         $add('PUT', '/api/auth/credentials', 'updateAdminCredentials', '修改管理员账号和密码；会话和旧 API 密钥失效', null,
             self::object(['current_password' => $secret, 'user' => $string, 'password' => $secret], ['current_password', 'user', 'password']), [], 'session');
         $add('GET', '/api/tokens', 'listApiTokens', '列出密钥元数据和可授权范围', null, null, [], 'session');
-        $add('POST', '/api/tokens', 'createApiToken', '创建 API 密钥，仅此次返回明文', null,
+        $add('POST', '/api/tokens', 'createApiToken', '创建 API 密钥，仅此次返回明文；响应附带 ai_usage（认证头、bootstrap 地址与可直接复制的 curl 示例），可整段交给 AI 完成接入', null,
             self::object(['current_password' => $secret, 'name' => $string, 'scopes' => ['type' => 'array', 'minItems' => 1, 'items' => ['type' => 'string', 'enum' => array_keys(ApiTokenService::SCOPES)]],
                 'expires_in_days' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 365, 'default' => 90]], ['name', 'current_password']), [], 'session');
         $add('DELETE', '/api/tokens/{id}', 'revokeApiToken', '撤销 API 密钥，立即停止后续调用', null, null, [], 'session');

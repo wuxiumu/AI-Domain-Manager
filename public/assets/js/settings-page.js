@@ -186,6 +186,7 @@ function renderTokens(tokens) {
 
 function hideToken() {
     $('sp-token-value').textContent = '';
+    $('sp-token-usage').textContent = '';
     $('sp-token-once').classList.add('hidden');
     $('sp-token-password').value = '';
 }
@@ -276,6 +277,7 @@ $('sp-token-form').addEventListener('submit', function (event) {
         scopes: Array.prototype.map.call(form.querySelectorAll('[name="api_scope"]:checked'), function (input) { return input.value; }),
     } }).then(function (result) {
         $('sp-token-value').textContent = result.token;
+        $('sp-token-usage').textContent = formatTokenUsage(result.ai_usage || {});
         $('sp-token-once').classList.remove('hidden');
         api('/api/tokens').then(function (list) { renderTokens(list.tokens); });
         toast('API 密钥已创建，请保存本次显示的值');
@@ -283,8 +285,20 @@ $('sp-token-form').addEventListener('submit', function (event) {
       .finally(function () { button.disabled = false; $('sp-token-password').value = ''; });
 });
 
+/** 把签发响应的 ai_usage 组装成可整段复制的接入材料文本。 */
+function formatTokenUsage(usage) {
+    var lines = ['认证头：' + (usage.header || 'Authorization: Bearer <token>'),
+        '自包含接入文档（一次请求完成接入）：' + (usage.bootstrap_url || '/api/ai/bootstrap.md'),
+        '示例：'];
+    return lines.concat(usage.examples || []).join('\n');
+}
+
 $('sp-token-copy').addEventListener('click', function () {
     if ($('sp-token-value').textContent) { copyText($('sp-token-value').textContent, '密钥已复制'); }
+});
+$('sp-token-copy-usage').addEventListener('click', function () {
+    var text = $('sp-token-usage').textContent;
+    if (text) { copyText(text, 'AI 接入材料已复制，可直接发给任何 AI'); }
 });
 $('sp-token-dismiss').addEventListener('click', hideToken);
 
