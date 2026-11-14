@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **MCP Server（T6）**：新增 `scripts/mcp-server.py`（stdio 传输、零依赖，复用 workspace-api.py 客户端），六工具暴露给任意 MCP 客户端——`get_domain_screen` / `get_ip_screen` / `list_dns_records` / `get_daily_report` / `list_docs` 只读 + `propose_dns_change`（proposals:write；客户端预校验必填字段与 record_id 依赖，管理员批准后才执行）；配置经 `WORKSPACE_URL` / `WORKSPACE_API_TOKEN` 环境变量，scope 不足与未知工具均返回清晰错误；协议实现 initialize / tools/list / tools/call / ping（2025-03-26）。
 - **workspace-api.py 升级为语义化客户端（T5）**：新增 `bootstrap`（一键接入自检：bootstrap 文档五部分、OpenAPI 契约、能力发现、双视图快照逐项 ✓/✗）、`screen` / `ips` / `report` / `records --provider --domain` / `propose --json` 子命令，保持零依赖单文件；原始 `<METHOD> <path>` 模式保留兼容，过期的 `/api/health` 示例修正为 `/api/domains/screen`。
 - **密钥签发附带 AI 接入材料（T4）**：`POST /api/tokens` 响应新增 `ai_usage`（认证头、`/api/ai/bootstrap.md` 地址、三条含注释的 curl 示例，示例 IP 用 TEST-NET 占位）；/settings 创建密钥成功弹窗新增「AI 接入材料」整段预览与「复制接入材料」按钮，复制后可直接交给任何 AI 完成接入；OpenAPI 契约描述同步。
 - **AI 接入入口 `GET /api/ai/bootstrap.md`（T3）**：一次请求返回自包含 Markdown 接入包——使用说明（llms.txt）+ 能力清单 + 权限范围表 + 写护栏速查（409 / 202 未核实 / verified 语义 / 提案流）+ 域名与 IP 双视图当前快照（88KB 单文件，`assets:read`）；`llms.txt`、能力发现与 README 均已链接；三件事（路由 / scope / 契约）同步登记。

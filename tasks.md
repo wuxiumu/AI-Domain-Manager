@@ -29,6 +29,7 @@
 - [x] T3 AI Bootstrap 单文件接入：`GET /api/ai/bootstrap.md`（assets:read，一次请求 = 说明 + 契约 + 护栏 + 双视图快照）
 - [x] T4 密钥签发附 AI 接入材料：签发响应 `ai_usage` + /settings 弹窗「复制接入材料」按钮
 - [x] T5 workspace-api.py 语义化客户端：bootstrap/screen/ips/records/report/propose 子命令 + 一键接入自检
+- [x] T6 MCP Server：scripts/mcp-server.py（stdio 零依赖，六工具，护栏经 scope 校验）
 
 ---
 
@@ -82,7 +83,9 @@
   `get_domain_screen` / `get_ip_screen` / `list_dns_records` / `propose_dns_change` / `get_daily_report` / `list_docs`；
   配置经环境变量（服务地址 + token）
 - **验收**：任一 MCP 客户端配置即用；只读 tools 不携带写 scope 时拒绝写操作
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:55）——stdio JSON-RPC（initialize / tools/list / tools/call / ping，协议 2025-03-26）；
+  六工具真实链路验证（60 域名 / 25 IP / 21 条 DNS 记录 / 日报 Markdown / 文档表）；propose 客户端预校验
+  （缺 record_id 即拒绝，未触真实提案）；无 token 与未知工具均返回清晰 isError；临时 token 创建→验证→撤销净零
 
 ### T7 · 文档同步
 - **内容**：`llms.txt` 增 MCP 一节；README 新增「AI 接入」章节（bootstrap / token / 提案流 / MCP）；
