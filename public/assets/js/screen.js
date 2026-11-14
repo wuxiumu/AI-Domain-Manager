@@ -327,7 +327,7 @@ function applyModeUi() {
 function setMode(mode) {
     if (state.mode === mode) { return; }
     state.mode = mode;
-    closeModal(); // 视图切换时关闭打开的弹窗
+    ScreenBoard.closeModal(); // 视图切换时关闭打开的弹窗（closeModal 在 screen-modal.js）
     applyModeUi(); // URL hash 由 render → saveView → writeViewHash 带全量条件更新
     // 记忆每套视图的排序键；tab / 搜索词 / 分页保持上下文延续。
     var saved = null;
