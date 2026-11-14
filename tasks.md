@@ -139,7 +139,7 @@
 
 ## 🧹 持续优化（随手做，不排期）
 
-- [ ] screen.js ~1700 行：弹窗编辑/筛选可拆独立模块（等功能稳定后一次拆，避免碎片化）
+- [x] screen.js 模块化拆分（2026-11-14）：视图域 876 行 + `screen-modal.js` 弹窗模块 930 行（ScreenBoard 桥接共享 state 与工具）；顺带修复非 A 记录编辑后 `reload()` 未定义的隐藏 bug。
 - [ ] `data/cache` 单 zone 文件可达 4.7MB：DNS 缓存可剥离 raw 字段瘦身（改 provider 返回结构，需回归测试）
 - [ ] 大屏自动刷新周期与 SnapshotCache TTL 联动提示（刷新快于缓存时给出说明）
 - [ ] `AGENTS.md` 架构地图随 P0–P2 落地同步刷新

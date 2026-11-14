@@ -15,7 +15,7 @@
 | `app/services/` | 业务规则核心：`ScreenService`（域名大屏聚合）、`IpScreenService`（IP 大屏聚合）、`IpAssetService`（手工 IP 台账）、`DnsChangeService`（DNS 写入护栏，含暂停 / 恢复）、`SyncService`、`AiProposalService`（提案）、`CalendarService`、`ApiDescriptionService`（契约）等。 |
 | `app/providers/` | 阿里云 / 腾讯云 / GoDaddy 适配器，隔离云商差异。 |
 | `app/core/` | 路由、认证（会话 + Bearer 密钥 + CSRF）、HTTP、JSON 存储与缓存。 |
-| `public/views/` + `public/assets/` | 自包含独立页：`screen.php`（大屏，`screen.js/css` + `screen-ip.js`）、`settings.php`（`settings-page.js/css`）、`calendar.php`（`calendar-page.js/css`）、`docs.php`（`docs-page.js/css`，文档浏览与编辑）；共享 `admin-page.js/css` 基础层（统一头部 / Markdown 管线 / 统一退出）；`vendor/` 为本地自托管开源库（marked / DOMPurify / highlight.js / mermaid）。`app.php` 是仅含初始化与登录的壳，登录后跳 `/screen`。无构建步骤。 |
+| `public/views/` + `public/assets/` | 自包含独立页：`screen.php`（大屏，`screen.js/css` + `screen-modal.js` 弹窗模块 + `screen-ip.js`）、`settings.php`（`settings-page.js/css`）、`calendar.php`（`calendar-page.js/css`）、`docs.php`（`docs-page.js/css`，文档浏览与编辑）；共享 `admin-page.js/css` 基础层（统一头部 / Markdown 管线 / 统一退出）；`vendor/` 为本地自托管开源库（marked / DOMPurify / highlight.js / mermaid）。`app.php` 是仅含初始化与登录的壳，登录后跳 `/screen`。无构建步骤。 |
 | `scripts/` | 屏幕报告生成（cron）、文档迁移、打包与运维脚本。 |
 
 ## 必须遵守的约定

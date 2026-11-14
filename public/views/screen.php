@@ -156,6 +156,7 @@ window.__SCREEN__ = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG
 </script>
 <script src="<?= $assetVer('/assets/js/admin-page.js') ?>"></script>
 <script src="<?= $assetVer('/assets/js/screen.js') ?>"></script>
+<script src="<?= $assetVer('/assets/js/screen-modal.js') ?>"></script>
 <script src="<?= $assetVer('/assets/js/screen-ip.js') ?>"></script>
 </body>
 </html>
