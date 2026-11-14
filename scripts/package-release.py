@@ -15,11 +15,13 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 FOLDERS = {"app": {".php"}, "public": {".php", ".js", ".css", ".svg", ".png", ".ico", ".woff2"},
            "deploy": {".example"}}
-FILES = ["README.md", "CHANGELOG.md", "start.sh", "config/config.example.php",
-         "scripts/workspace-api.py", "scripts/reset-admin-password.php", "scripts/migrate-ip-assets.php",
-         "scripts/generate-screen-report.php",
+FILES = ["README.md", "AGENTS.md", "CHANGELOG.md", "tasks.md", "start.sh", "config/config.example.php",
+         "scripts/workspace-api.py", "scripts/mcp-server.py", "scripts/reset-admin-password.php",
+         "scripts/migrate-ip-assets.php", "scripts/generate-screen-report.php",
          "scripts/check-public-docs.py", "scripts/package-release.py"]
 REVIEWED_SCREENSHOTS = {"public/assets/screenshots/login.png", "public/assets/screenshots/dashboard.png", "public/assets/screenshots/domains.png"}
+# 运行时数据、真实凭据与本地工作区文件绝不进入发布包（白名单之外再兜底硬校验）。
+FORBIDDEN_PREFIXES = ("data/", ".local/", ".git/", "config/config.php", "config/setup.key")
 
 
 def release_files(root):
@@ -61,6 +63,9 @@ def build_release(root, output_dir):
     manifest = {"product": "Asset Workspace", "version": version, "created_at": datetime.now(timezone.utc).isoformat(),
                 "scope": "source-only; no runtime configuration, assets, credentials or Git history",
                 "files": {name: hashlib.sha256(path.read_bytes()).hexdigest() for name, path in sources}}
+    violations = sorted(name for name in manifest["files"] if name.startswith(FORBIDDEN_PREFIXES))
+    if violations:
+        raise ValueError("Release must not contain runtime data or secrets: " + ", ".join(violations))
     output.mkdir(parents=True, exist_ok=True)
     archive = output / ("asset-workspace-" + version + ".zip")
     checksum = archive.with_suffix(".zip.sha256")

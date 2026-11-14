@@ -32,6 +32,7 @@
 - [x] T6 MCP Server：scripts/mcp-server.py（stdio 零依赖，六工具，护栏经 scope 校验）
 - [x] T7 文档同步：llms.txt MCP 节、README「接入三步」+「MCP Server」小节
 - [x] T8 README「扩展开发」章节：云商适配器路径 + API 三件事
+- [x] T9 发布包补齐新交付物（mcp-server.py / AGENTS.md / tasks.md）+ FORBIDDEN_PREFIXES 硬校验
 
 ---
 
@@ -108,7 +109,10 @@
 
 ### T9 · `package-release.py --clean-data`
 - **内容**：发布包排除 `data/`、缓存与本地配置，交付物开箱即干净
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:56）——审计确认发布包本为显式白名单制（data/ 结构性排除），
+  无需 --clean-data 开关；落地为：FILES 补齐新增交付物（mcp-server.py / AGENTS.md / tasks.md）+
+  新增 `FORBIDDEN_PREFIXES` 硬校验（data/ / .local/ / .git/ / config 真实凭据出现即构建失败）+
+  实测构建 96 文件零违规、新文件齐全
 
 ### T10 · `scripts/check-api-contracts.py` 契约防漂移
 - **内容**：diff「index.php 路由 ↔ Auth scope ↔ ApiDescriptionService 契约」三方，不一致退出非零；
