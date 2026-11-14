@@ -132,6 +132,24 @@ flowchart TB
 | `config/`、`data/` | 实例配置、凭据、资产和运行数据，不应公开或提交。 |
 | `scripts/` | 屏幕报告生成、文档迁移、打包与运维脚本。 |
 
+## 扩展开发
+
+仓库的协作规范见 [AGENTS.md](AGENTS.md)；以下两条是二开最常见的路径。
+
+**新增一个云商适配器**（以 `app/providers/AliyunProvider.php` 为范例）：
+
+1. 在 `app/providers/` 新建类继承 `CloudProvider`，实现抽象方法：`testConnection` / `listDomains` / `listRecords` / `addRecord` / `updateRecord` / `deleteRecord`（返回结构须含 `id` / `name` / `type` / `value` / `ttl` / `priority` / `status` / `line` 字段，`raw` 保留原始响应）；需要暂停 / 恢复时覆写 `setRecordStatus`；
+2. 在 `app/bootstrap.php` 的 `provider_factory` 注册厂商映射，并在 `SettingsService::providerSchema()` 声明该厂商的凭据字段（设置页与 OpenAPI 的账号 schema 随之自动生成）；
+3. 记录读取一律走 `DnsRecordCache`（缓存优先），写操作交给 `DnsChangeService`（锁内核对版本 → 单次写入 → 回读核实），不要在适配器里自行重试写请求。
+
+**新增一个 API 路由**（三件事必须同步，缺一即漂移）：
+
+1. `public/index.php` 注册路由；
+2. `app/core/Auth.php::authorizeRoute` 声明 Bearer 权限范围（若允许密钥调用）；
+3. `app/services/ApiDescriptionService.php` 用 `$add(...)` 登记契约（路径 / 方法 / scope / body schema）。
+
+完成后运行静态检查（见下节），并同步 `CHANGELOG.md`、`tasks.md` 与本文件。面向 AI 的自包含文档 `/api/ai/bootstrap.md` 与 `llms.txt` 会自动携带新契约，无需单独维护。
+
 ## 安全、密码与网络
 
 - 登录使用图形验证码和限流。登录页的“记住密码”会把账号和密码**明文保存在当前浏览器本地存储**；取消勾选可删除，请勿在公用设备使用。
