@@ -31,6 +31,7 @@
 - [x] T5 workspace-api.py 语义化客户端：bootstrap/screen/ips/records/report/propose 子命令 + 一键接入自检
 - [x] T6 MCP Server：scripts/mcp-server.py（stdio 零依赖，六工具，护栏经 scope 校验）
 - [x] T7 文档同步：llms.txt MCP 节、README「接入三步」+「MCP Server」小节
+- [x] T8 README「扩展开发」章节：云商适配器路径 + API 三件事
 
 ---
 
@@ -102,7 +103,8 @@
 
 ### T8 · README「扩展」章节
 - **内容**：新增云商 / API 的标准三步（路由注册 / `authorizeRoute` scope / 契约登记），以 AliyunProvider 为范例
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:54）——README 新增「扩展开发」章节：云商适配器四步（CloudProvider 抽象方法
+  / provider_factory 注册 / providerSchema 凭据 / DnsRecordCache + DnsChangeService 纪律）+ API 三件事 + 文档联动说明
 
 ### T9 · `package-release.py --clean-data`
 - **内容**：发布包排除 `data/`、缓存与本地配置，交付物开箱即干净
