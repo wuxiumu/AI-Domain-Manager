@@ -14,7 +14,8 @@ class SnapshotCache
         $cached = is_file($path) ? json_decode((string) @file_get_contents($path), true) : null;
         if (is_array($cached) && ($cached['fingerprint'] ?? '') === $fingerprint
             && ($cached['valid_until'] ?? 0) > time() && is_array($cached['data'] ?? null)) {
-            $cached['data']['cache'] = ['hit' => true, 'saved_at' => $cached['saved_at'], 'source' => 'file'];
+            $cached['data']['cache'] = ['hit' => true, 'saved_at' => $cached['saved_at'], 'source' => 'file']
+                + self::ttlInfo($cached['valid_until'] ?? 0, isset($cached['ttl']) ? (int) $cached['ttl'] : null);
             return $cached['data'];
         }
         $data = $build();
@@ -22,10 +23,17 @@ class SnapshotCache
         // A source changed while rendering: never publish the mixed snapshot.
         if (self::fingerprint($sources) === $fingerprint) {
             JsonStore::write($path, ['fingerprint' => $fingerprint, 'valid_until' => $validUntil,
-                'saved_at' => $savedAt, 'data' => $data]);
+                'ttl' => max(0, $validUntil - time()), 'saved_at' => $savedAt, 'data' => $data]);
         }
-        $data['cache'] = ['hit' => false, 'saved_at' => $savedAt, 'source' => 'file'];
+        $data['cache'] = ['hit' => false, 'saved_at' => $savedAt, 'source' => 'file']
+            + self::ttlInfo($validUntil);
         return $data;
+    }
+
+    /** 有效期信息随快照透出：ttl 为配置时长（写入时固定，不随剩余秒数递减），前端据此提示联动关系。 */
+    private static function ttlInfo(int $validUntil, ?int $duration = null): array
+    {
+        return ['ttl' => $duration ?? max(0, $validUntil - time()), 'ttl_ends_at' => $validUntil];
     }
 
     private static function fingerprint(array $sources): string

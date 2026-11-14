@@ -224,7 +224,8 @@ class AliyunProvider extends CloudProvider
                 'priority' => (int) ($r['Priority'] ?? 0),
                 'status'   => (string) ($r['Status'] ?? ''),
                 'line'     => (string) ($r['Line'] ?? ''),
-                'raw'      => $r,
+                // raw 仅保留下游消费的字段（DnsChangeService 权重保留），全量响应会使缓存膨胀
+                'raw'      => array_intersect_key($r, ['Weight' => true]),
             ];
         }
         return $out;

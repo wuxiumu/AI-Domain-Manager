@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **DNS 缓存瘦身与快照 TTL 透出**：阿里云 / 腾讯云 `listRecords` 的 raw 字段收敛到唯一下游消费字段（Weight，权重保留链路实测通过），存量 79 个 DNS 缓存就地迁移 609KB → 281KB（raw 不参与 version 哈希，访问状态 revision 对齐不受影响）；SnapshotCache 有效期信息随快照透出（`cache.ttl` / `ttl_ends_at`，ttl 为写入时固定的配置时长），大屏缓存芯片在「自动刷新周期快于快照有效期」时显示说明（悬停见完整解释），避免"刷新了却没变化"的困惑。
 - **大屏前端模块化拆分**：screen.js（1759 行）按职责拆为视图域 876 行 + 新模块 `screen-modal.js`（930 行，解析管理弹窗全部逻辑——渲染 / 关键词与状态筛选 / 勾选与批量工具 / 批量添加 / 单条记录编辑 / 解析示例 / 非 A 记录 / 弹窗检查）。共享 state 与工具经 ScreenBoard 桥接传递（引用同一对象），模块回填 `openModal` / `modalItemFor` / `openOtherRecords` / `closeModal` 供视图域与 IP 视图调用。顺带修复一处隐藏 bug：非 A 记录编辑成功后调用了不存在的 `reload()`（实际保存成功但提示失败），改为强制重载快照。
 - **数据清点脚本（T11）**：新增 `scripts/cleanup-data.php`（只读报告，永不代删）——按代码引用白名单分类 `data/` 全部内容（存储 / 锁附属 / SnapshotCache 快照按 remember key 哈希归类 / dns-* 结构化缓存 / dns-locks 运行锁 / 未知目录），孤儿候选以 exit 1 报告；正负双向验证。顺带修正 T1 的一个误判：非 dns 缓存中 domain-screen-v1 / ip-screen-v1 是 SnapshotCache 在用快照（删除后自动重建）；确认 3 项真孤儿（`.write_test`、旧任务队列 `tasks.json` + 锁，日历待办已迁入 calendar.json），留管理员决定删除。
 - **契约防漂移脚本（T10）**：新增 `scripts/check-api-contracts.py`（路由 ↔ authorizeRoute scope ↔ OpenAPI 契约三方 diff，`$dnsPath` 变量展开与别名折叠，正反向检查），纳入 AGENTS.md 验证命令。**首跑即抓到并修复一处真实漂移**：`POST /api/ips/check` 与 `/api/ips/browser-check` 契约声明 `checks:run` 但鉴权未声明，Bearer 密钥调用被 403——现已对齐并用 checks:run 临时 token 实测通过（TEST-NET 地址按设计以 422 拒绝，不发起连接）。

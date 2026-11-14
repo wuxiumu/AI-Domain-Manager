@@ -140,6 +140,9 @@
 ## 🧹 持续优化（随手做，不排期）
 
 - [x] screen.js 模块化拆分（2026-11-14）：视图域 876 行 + `screen-modal.js` 弹窗模块 930 行（ScreenBoard 桥接共享 state 与工具）；顺带修复非 A 记录编辑后 `reload()` 未定义的隐藏 bug。
+- [x] DNS 缓存 raw 瘦身（2026-11-14）：阿里云 / 腾讯云 listRecords 的 raw 收敛到唯一消费字段（Weight，供 DnsChangeService 权重保留），存量 79 个缓存就地迁移 609KB → 281KB（raw 占比 64% → 极小）；raw 不参与 version 哈希，record_access revision 对齐不受影响，Weight 保留链路实测通过。
+- [x] 大屏自动刷新与快照 TTL 联动提示（2026-11-14）：SnapshotCache 透出固定时长 ttl（120s，写入时不随剩余秒数递减），前端缓存芯片在「自动刷新周期 < 快照有效期」时显示说明与悬停解释（刷新 300s 或关闭自动刷新时自动隐藏）。
+- [x] AGENTS.md 架构地图随 P0–P2 刷新（2026-11-14）：scripts 行补 AI 客户端 / MCP / 防漂移 / 数据清点，AI 接入点补 bootstrap.md 与客户端 / MCP 入口。
 - [ ] `data/cache` 单 zone 文件可达 4.7MB：DNS 缓存可剥离 raw 字段瘦身（改 provider 返回结构，需回归测试）
 - [ ] 大屏自动刷新周期与 SnapshotCache TTL 联动提示（刷新快于缓存时给出说明）
 - [ ] `AGENTS.md` 架构地图随 P0–P2 落地同步刷新

@@ -547,6 +547,15 @@ function renderCacheTime() {
     el.textContent = prefix + '于 ' + savedAt + rel;
     // 缓存超过 1 小时提示可能过时；手动更新指定账号可立刻刷新。
     el.classList.toggle('ap-stale', ageMin !== null && ageMin >= 60);
+    // 自动刷新周期快于快照缓存有效期时给出说明（避免“刷新了却没变化”的困惑）。
+    var ttl = data.cache && data.cache.ttl;
+    var refreshSec = state.autoRefresh.enabled ? state.autoRefresh.seconds : 0;
+    if (refreshSec && ttl != null && refreshSec < ttl) {
+        el.textContent += '（自动刷新 ' + refreshSec + 's 快于快照 ' + ttl + 's）';
+        el.title = '自动刷新周期小于快照缓存有效期（' + ttl + ' 秒）：相邻刷新可能复用同一份缓存，属正常现象；调大刷新周期或等待缓存过期即可看到新数据。';
+    } else {
+        el.removeAttribute('title');
+    }
 }
 
 function ageMinutes(savedAt) {
@@ -753,6 +762,7 @@ function bind() {
         var screen = s.screen || {};
         state.autoRefresh = { enabled: !!screen.auto_refresh, seconds: screen.refresh_seconds || 300 };
         applyPolling(state.autoRefresh.enabled ? state.autoRefresh.seconds : 0);
+        renderCacheTime(); // 设置异步就绪后补上刷新/缓存联动提示
     }).catch(function () {
         state.autoRefresh = { enabled: false, seconds: 0 };
     });

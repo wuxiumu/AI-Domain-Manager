@@ -16,7 +16,7 @@
 | `app/providers/` | 阿里云 / 腾讯云 / GoDaddy 适配器，隔离云商差异。 |
 | `app/core/` | 路由、认证（会话 + Bearer 密钥 + CSRF）、HTTP、JSON 存储与缓存。 |
 | `public/views/` + `public/assets/` | 自包含独立页：`screen.php`（大屏，`screen.js/css` + `screen-modal.js` 弹窗模块 + `screen-ip.js`）、`settings.php`（`settings-page.js/css`）、`calendar.php`（`calendar-page.js/css`）、`docs.php`（`docs-page.js/css`，文档浏览与编辑）；共享 `admin-page.js/css` 基础层（统一头部 / Markdown 管线 / 统一退出）；`vendor/` 为本地自托管开源库（marked / DOMPurify / highlight.js / mermaid）。`app.php` 是仅含初始化与登录的壳，登录后跳 `/screen`。无构建步骤。 |
-| `scripts/` | 屏幕报告生成（cron）、文档迁移、打包与运维脚本。 |
+| `scripts/` | AI 客户端与 MCP Server（`workspace-api.py` / `mcp-server.py`）、屏幕报告生成（cron）、契约防漂移与数据清点检查、密码重置 / 迁移 / 打包等运维脚本。 |
 
 ## 必须遵守的约定
 
@@ -51,7 +51,7 @@ python3 scripts/check-api-contracts.py
 
 ## 产品的 AI 接入点（供功能开发参考）
 
-实例对外提供 `/api/openapi.json`、`/.well-known/asset-workspace.json`、`/llms.txt` 与带权限范围和有效期的 API 密钥（`assets:read` / `assets:write` / `dns:read` / `dns:write` / `checks:run` / `sync:run` / `proposals:write`）。核心数据入口：
+实例对外提供 `/api/openapi.json`、`/.well-known/asset-workspace.json`、`/llms.txt`、**`/api/ai/bootstrap.md`（AI 一次请求完成接入的自包含文档：说明 + 能力清单 + 写护栏速查 + 双视图快照，`assets:read`）** 与带权限范围和有效期的 API 密钥（`assets:read` / `assets:write` / `dns:read` / `dns:write` / `checks:run` / `sync:run` / `proposals:write`）。核心数据入口：
 
 - `GET /api/domains/screen` 与 `GET /api/domains/screen.md`：域名大屏只读快照及其自包含 Markdown 文档（含可照做的 CRUD 指引）。
 - `GET /api/domains/screen/report`：每日异常报告（`?format=markdown` 直出正文；`php scripts/generate-screen-report.php` 供 cron）。
@@ -59,6 +59,7 @@ python3 scripts/check-api-contracts.py
 - `POST /api/ips` / `PUT|DELETE /api/ips/{id}`（`assets:write`）：手工登记公网 IP；`POST /api/ips/{ip}/location`（`checks:run`）显式刷新归属地（ipwho.is）。
 - `POST /api/domains/{provider}/{domain}/records/{recordId}/status`（`dns:write`，body `{paused, expected_version}`）：暂停 / 恢复单条解析记录；阿里云与腾讯云支持，GoDaddy 明确报错；暂停态在快照记录行以 `status` 字段透出。
 - `POST /api/proposals`（`proposals:write`）让 AI 提交 DNS 变更提案；管理员以会话调用 `POST /api/proposals/{id}/approve|reject`，批准后才经 `DnsChangeService` 执行（读云端最新版本 → 单次写入 → 回读核实）。
+- **官方客户端与 MCP**：`scripts/workspace-api.py`（零依赖 CLI：`bootstrap` 一键接入自检、`screen` / `ips` / `records` / `report` / `propose` 语义子命令）与 `scripts/mcp-server.py`（stdio MCP Server，六工具：双视图快照 / DNS 记录 / 日报 / 文档清单 / 提案提交）；配置经 `WORKSPACE_URL` / `WORKSPACE_API_TOKEN` 环境变量。
 - `POST /api/domains/{provider}/{domain}/records/access-check`（`checks:run`）检查访问状态；可选 `record_ids` 只探测指定记录。
 - `POST /api/accounts/{id}/sync`（`sync:run`，`refresh_dns:true`）刷新台账与解析缓存；DNS 读写走 `/api/domains/{provider}/{domain}/records`（`dns:read` / `dns:write`）。
 - 会话级只读：`GET /api/dns/changes`（DNS 变更留档）、`GET /api/audit`（操作审计）、`GET /api/docs` 与 `GET /api/docs/read?path=`（仓库文档白名单读取，越界 404）、`GET /api/stats`（代码规模与运行时内存）。
