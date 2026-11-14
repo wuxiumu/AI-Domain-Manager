@@ -25,6 +25,7 @@
 - [x] 独立 `/settings`、`/calendar`、`/docs` 页面；全站统一头部；文档在线预览编辑
 - [x] 本地自托管 vendor 管线（marked + DOMPurify + hljs + mermaid），运行时零外链
 - [x] 代码干净度审计：零死类、路由↔契约 67:67 零漂移、零调试残留
+- [x] T1 孤儿数据清理：data/ 18M → 3.9M（健康栈删除后的运行时残渣）
 
 ---
 
@@ -37,7 +38,7 @@
 - **注意**：`data/health.json`、`access_check.json` 保留至迁移脚本 `migrate-ip-assets.php` 确认不再需要后再删；
   删前逐项列出清单确认
 - **验收**：`data/` 只剩在用文件；`php -l` 全绿；大屏/设置/日历/文档四页走查正常
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:26）——删除 6 个非 dns- 缓存文件（8.4MB）+ history/（4.2MB）+ ratelimit/improvement_plan 及锁文件 + __pycache__；data/ 18M → 3.9M；四页 200、双快照 API 正常、lint 全绿
 
 ### T2 · Git 提交还原点（最高优先级）
 - **内容**：183 个文件未提交（整轮产品收敛 + 本周全部 UI/接口改动）。分批或一次提交均可，先落盘
