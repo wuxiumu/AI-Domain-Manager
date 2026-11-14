@@ -34,6 +34,9 @@
 - [x] T8 README「扩展开发」章节：云商适配器路径 + API 三件事
 - [x] T9 发布包补齐新交付物（mcp-server.py / AGENTS.md / tasks.md）+ FORBIDDEN_PREFIXES 硬校验
 - [x] T10 契约防漂移脚本 check-api-contracts.py（首跑修复 ips/check 真实 scope 漂移）+ 纳入 AGENTS 验证命令
+- [x] T11 数据清点脚本 cleanup-data.php（只读报告，正负双向验证；抓到 3 项真孤儿留管理员决定）
+
+**看板状态：T1–T11 全部完成（P0 / P1 / P2 清零）。**
 
 ---
 
@@ -126,7 +129,11 @@
 
 ### T11 · `scripts/cleanup-data.php --dry-run`
 - **内容**：按代码引用白名单清点 `data/`，报告孤儿文件；防下次删功能再留渣
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 23:10）——只读报告脚本（永不代删），分类覆盖锁附属文件 / SnapshotCache 快照
+  （按 remember key 哈希）/ dns-* 结构化缓存 / dns-locks 运行锁 / 未知目录；正负双向验证（fake 孤儿 → 报告并 exit 1）。
+  **两个额外发现**：① T1 判为孤儿的 6 个非 dns 缓存中有 2 个（domain-screen-v1 / ip-screen-v1）实为
+  SnapshotCache 在用缓存（删除后自动重建，无损失），脚本已正确归类；② 抓到 3 项真孤儿（`.write_test`、
+  `tasks.json` + 锁——旧任务队列存储，日历待办已迁入 calendar.json），均在 T1 白名单外，留管理员决定删除
 
 ---
 
