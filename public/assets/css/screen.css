@@ -1,0 +1,1063 @@
+/* 大屏展示（/screen）：深色、大字号、卡片网格；独立于 SPA 样式。 */
+
+:root {
+    --bg: #0b1220;
+    --bg-soft: #101a2e;
+    --card: #0f1830;
+    --card-border: #1e2a44;
+    --line: #22304e;
+    --text: #dbe4f5;
+    --muted: #8b97b3;
+    --accent: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --shadow: 0 8px 24px rgba(2, 6, 17, 0.55);
+    --radius: 14px;
+    --font-base: clamp(12px, 0.55vw + 9px, 15px);
+    --font-domain: clamp(16px, 0.9vw + 11px, 26px);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background:
+        radial-gradient(1200px 500px at 85% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+        radial-gradient(900px 420px at -10% 110%, rgba(52, 211, 153, 0.06), transparent 60%),
+        var(--bg);
+    color: var(--text);
+    font-size: var(--font-base);
+    line-height: 1.55;
+    display: flex;
+    flex-direction: column;
+    min-height: 100vh;
+}
+
+/* ---- 头部：结构统一在 admin-page.css（ap-head / ap-brand / ap-clock / ap-tools / ap-nav / ap-cache / ap-switch） ---- */
+
+.sb-sync { display: flex; gap: 8px; }
+
+select {
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 1em;
+    cursor: pointer;
+}
+select:focus { outline: none; border-color: var(--accent); }
+
+.sb-btn {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #04121f;
+    font-weight: 700;
+    border: none;
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 1em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sb-btn:hover { filter: brightness(1.12); }
+.sb-btn:disabled { opacity: 0.55; cursor: wait; }
+
+/* ---- 账号 Tab ---- */
+/* 注意：不要在此处使用 overflow-x:auto——滚动容器会让 flex 拉伸高度塌陷，账号多时换行即可 */
+.sb-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: clamp(10px, 1vw, 16px) clamp(16px, 2.2vw, 40px) 0;
+}
+
+.sb-tab {
+    background: var(--bg-soft);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 7px 16px;
+    font-size: 1em;
+    cursor: pointer;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: color 0.15s, border-color 0.15s;
+}
+.sb-tab:hover { color: var(--text); }
+.sb-tab.active {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: var(--accent);
+    color: var(--text);
+    font-weight: 600;
+}
+
+.sb-tab-count {
+    background: rgba(139, 151, 179, 0.16);
+    border-radius: 999px;
+    padding: 0 8px;
+    font-size: 0.85em;
+    font-variant-numeric: tabular-nums;
+}
+.sb-tab.active .sb-tab-count { background: rgba(56, 189, 248, 0.28); color: #bae6fd; }
+
+/* ---- 工具条 ---- */
+
+.sb-toolbar {
+    position: sticky;
+    top: var(--sb-head-h, 96px); /* 由 screen.js 动态测量头部实际高度写入 */
+    z-index: 15;
+    background: linear-gradient(var(--bg), var(--bg));
+    border-bottom: 1px solid var(--card-border);
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 1.2vw, 20px);
+    padding: clamp(10px, 1vw, 16px) clamp(16px, 2.2vw, 40px);
+    flex-wrap: wrap;
+}
+
+.sb-search input {
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 8px 18px;
+    font-size: 1.05em;
+    width: clamp(220px, 22vw, 420px);
+}
+.sb-search input:focus { outline: none; border-color: var(--accent); }
+.sb-search input::placeholder { color: var(--muted); }
+
+.sb-count { color: var(--muted); white-space: nowrap; }
+
+.sb-page { display: flex; align-items: center; gap: 8px; margin-left: auto; white-space: nowrap; }
+.sb-page button {
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    width: 32px;
+    height: 32px;
+    font-size: 16px;
+    cursor: pointer;
+}
+.sb-page button:hover:not(:disabled) { border-color: var(--accent); }
+.sb-page button:disabled { opacity: 0.35; cursor: default; }
+#sb-page-info { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* ---- 卡片网格 ---- */
+
+.sb-grid {
+    flex: 1;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(clamp(300px, 24vw, 430px), 1fr));
+    gap: clamp(10px, 1vw, 18px);
+    padding: 0 clamp(16px, 2.2vw, 40px) clamp(12px, 1.2vw, 20px);
+    align-content: start;
+}
+
+/* 海报式卡片：顶部色带按到期紧急度着色，重点数字大号加色 */
+.sb-card {
+    position: relative;
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: clamp(12px, 1vw, 18px) clamp(10px, 0.9vw, 18px);
+    box-shadow: var(--shadow);
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    min-width: 0;
+}
+.sb-card::before {
+    content: '';
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 4px;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--u, var(--line));
+}
+.u-red { --u: linear-gradient(90deg, var(--red), rgba(248, 113, 113, 0.05)); }
+.u-amber { --u: linear-gradient(90deg, var(--amber), rgba(251, 191, 36, 0.05)); }
+.u-green { --u: linear-gradient(90deg, var(--green), rgba(52, 211, 153, 0.05)); }
+.u-gray { --u: linear-gradient(90deg, var(--muted), rgba(139, 151, 179, 0.05)); }
+
+.sb-card-head { display: flex; align-items: center; gap: 10px; }
+
+.sb-dot { width: 12px; height: 12px; border-radius: 50%; flex-shrink: 0; }
+.sb-dot-ok { background: var(--green); box-shadow: 0 0 10px rgba(52, 211, 153, 0.75); }
+.sb-dot-fail { background: var(--red); box-shadow: 0 0 10px rgba(248, 113, 113, 0.75); }
+.sb-dot-none { background: transparent; border: 2px solid var(--muted); opacity: 0.55; }
+
+.sb-domain {
+    font-size: var(--font-domain);
+    font-weight: 700;
+    letter-spacing: 0.01em;
+    word-break: break-all;
+    flex: 1;
+    min-width: 0;
+    color: inherit;
+    text-decoration: none;
+}
+.sb-domain:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 4px; }
+
+.sb-stat-row { display: flex; align-items: stretch; border-top: 1px dashed var(--line); }
+.sb-stat {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1px;
+    padding: clamp(6px, 0.6vw, 10px) 4px 2px;
+}
+.sb-stat + .sb-stat { border-left: 1px dashed var(--line); }
+.sb-stat-num {
+    font-size: clamp(20px, 1.5vw + 10px, 36px);
+    font-weight: 800;
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+}
+.sb-stat span { color: var(--muted); font-size: clamp(11px, 0.4vw + 8px, 13px); }
+.c-red { color: var(--red); }
+.c-amber { color: var(--amber); }
+.c-green { color: var(--green); }
+.c-cyan { color: var(--accent); }
+.c-violet { color: #a78bfa; }
+.c-gray { color: var(--muted); }
+
+.sb-badge {
+    border-radius: 999px;
+    padding: 3px 12px;
+    font-size: 0.9em;
+    font-weight: 600;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+.sb-badge.sb-green { background: rgba(52, 211, 153, 0.14); color: var(--green); }
+.sb-badge.sb-amber { background: rgba(251, 191, 36, 0.14); color: var(--amber); }
+.sb-badge.sb-red { background: rgba(248, 113, 113, 0.16); color: var(--red); }
+.sb-badge.sb-gray { background: rgba(139, 151, 179, 0.14); color: var(--muted); }
+
+.sb-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+
+.sb-chip {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 9px;
+    color: var(--muted);
+    font-size: 0.92em;
+    white-space: nowrap;
+}
+.sb-chip.sb-dim { opacity: 0.8; }
+.sb-chip.sb-warn { color: var(--amber); border-color: rgba(251, 191, 36, 0.4); }
+
+/* 子域名单行标签：默认只显示一行，放不下的内容点击后在弹窗查看 */
+.sb-tags {
+    position: relative;
+    display: flex;
+    flex-wrap: nowrap;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    min-height: 32px;
+    padding: 7px 0 1px;
+    border: none;
+    border-top: 1px dashed var(--line);
+    background: none;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    overflow: hidden;
+    white-space: nowrap;
+    cursor: pointer;
+}
+.sb-tags::after {
+    content: '';
+    position: absolute;
+    right: 0;
+    top: 7px;
+    bottom: 0;
+    width: 30px;
+    background: linear-gradient(90deg, transparent, var(--card) 75%);
+    pointer-events: none;
+}
+.sb-tag {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.92em;
+    line-height: 1.5;
+}
+.sb-tag-name { color: var(--text); font-weight: 600; }
+.sb-tag-ip { color: var(--accent); font-variant-numeric: tabular-nums; }
+.sb-tag-more { color: var(--muted); border-style: dashed; background: none; }
+button.sb-tag-more { cursor: pointer; font-family: inherit; }
+button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 「共 N 个域名」弹窗：该 IP 下的全部关联域名清单 */
+.sb-ipdom-hint { color: var(--muted); font-size: 0.9em; margin-bottom: 10px; }
+.sb-ipdom-list { max-height: 56vh; overflow-y: auto; }
+.sb-ipdom-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 7px 2px;
+    border-bottom: 1px solid rgba(34, 48, 78, 0.45);
+    font-variant-numeric: tabular-nums;
+}
+.sb-ipdom-row:last-child { border-bottom: none; }
+.sb-ipdom-row:hover { background: rgba(56, 189, 248, 0.05); }
+.sb-ipdom-name {
+    flex: 1;
+    min-width: 0;
+    background: none;
+    border: none;
+    color: var(--text);
+    font-weight: 600;
+    font-size: 1em;
+    font-family: inherit;
+    text-align: left;
+    padding: 0;
+    cursor: pointer;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.sb-ipdom-name:hover { color: var(--accent); }
+.sb-ipdom-row .sb-chip { flex-shrink: 0; }
+.sb-ipdom-row .sb-tag-open { flex-shrink: 0; }
+
+/* IP 视图：域名标签可点开管理弹窗；↗ 在新页面打开网站 */
+.sb-tag-manage { cursor: pointer; transition: border-color 0.15s; }
+.sb-tag-manage:hover { border-color: var(--accent); }
+.sb-tag-open {
+    color: var(--muted);
+    text-decoration: none;
+    font-size: 0.9em;
+    line-height: 1;
+    padding: 0 1px;
+}
+.sb-tag-open:hover { color: var(--accent); }
+
+.sb-hosts-empty { color: var(--muted); border-top: 1px dashed var(--line); padding: 10px 2px 4px; }
+
+/* ---- 子域名详情弹窗 ---- */
+
+.sb-modal { position: fixed; inset: 0; z-index: 400; display: flex; align-items: center; justify-content: center; }
+.sb-modal-mask { position: absolute; inset: 0; background: rgba(3, 8, 18, 0.72); }
+
+.sb-modal-box {
+    position: relative;
+    width: min(960px, 94vw);
+    max-height: 88vh;
+    display: flex;
+    flex-direction: column;
+    background: var(--bg-soft);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+}
+
+.sb-modal-head {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px 18px 12px;
+    border-bottom: 1px solid var(--line);
+}
+.sb-modal-head-main { min-width: 0; }
+
+.sb-modal-domain {
+    font-size: clamp(17px, 1vw + 12px, 24px);
+    font-weight: 700;
+    word-break: break-all;
+    color: inherit;
+    text-decoration: none;
+}
+.sb-modal-domain:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 4px; }
+
+.sb-modal-meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; align-items: center; }
+
+.sb-modal-close {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 8px;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
+    cursor: pointer;
+    flex-shrink: 0;
+}
+.sb-modal-close:hover { color: var(--text); border-color: var(--accent); }
+
+.sb-modal-body { padding: 6px 18px 16px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* ---- 弹窗工具区：多选 / 批量修改删除 / 访问检查 ---- */
+
+.sb-modal-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 10px 18px;
+    border-bottom: 1px solid var(--line);
+}
+.sb-modal-tools.hidden { display: none; }
+
+.sb-pickall {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sb-pickall input, .sb-host input[type="checkbox"] { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+.sb-mini {
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 0.95em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sb-mini:hover:not(:disabled) { border-color: var(--accent); }
+.sb-mini:disabled { opacity: 0.45; cursor: default; }
+.sb-mini-primary { background: rgba(56, 189, 248, 0.14); border-color: rgba(56, 189, 248, 0.5); color: var(--accent); }
+.sb-mini-danger { background: rgba(248, 113, 113, 0.12); border-color: rgba(248, 113, 113, 0.5); color: var(--red); }
+
+.sb-tool-sep { width: 1px; height: 20px; background: var(--line); }
+
+.sb-tool-hint { color: var(--muted); font-size: 0.85em; flex-basis: 100%; }
+.sb-tool-hint:not(:empty) { margin-top: 2px; }
+
+.sb-inline-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    margin: 0 18px;
+    padding: 10px 14px;
+    border: 1px dashed var(--accent);
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    background: rgba(56, 189, 248, 0.06);
+}
+.sb-inline-bar.hidden { display: none; }
+.sb-inline-bar label { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); }
+.sb-inline-bar input {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 12px;
+    font-size: 1em;
+    width: 200px;
+}
+.sb-inline-bar input:focus { outline: none; border-color: var(--accent); }
+.sb-inline-danger { border-color: rgba(248, 113, 113, 0.55); background: rgba(248, 113, 113, 0.06); color: var(--text); }
+.sb-inline-add { border-color: rgba(52, 211, 153, 0.55); background: rgba(52, 211, 153, 0.05); flex-direction: column; align-items: stretch; }
+.sb-inline-add textarea {
+    width: 100%;
+    min-height: 96px;
+    resize: vertical;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 0.95em;
+    line-height: 1.6;
+}
+.sb-inline-add textarea:focus { outline: none; border-color: var(--accent); }
+.sb-addbar-foot { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.sb-addbar-foot .sb-tool-hint { flex: 1; min-width: 220px; }
+.sb-addbar-btns { display: flex; gap: 8px; }
+
+.sb-access {
+    flex-shrink: 0;
+    border-radius: 999px;
+    padding: 1px 9px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.sb-access-ok { background: rgba(52, 211, 153, 0.14); color: var(--green); }
+.sb-access-fail { background: rgba(248, 113, 113, 0.14); color: var(--red); }
+.sb-access-none { background: rgba(139, 151, 179, 0.12); color: var(--muted); }
+
+/* 解析管理弹窗表格化行：勾选 | 主机记录 | 访问状态 | TTL | 解析记录，固定列对齐 + 行分割线 + 悬停高亮 */
+.sb-host, .sb-host-head {
+    display: grid;
+    grid-template-columns: auto minmax(150px, 1.1fr) auto auto minmax(0, 1.4fr);
+    gap: 10px;
+    align-items: center;
+}
+.sb-host {
+    padding: 7px 8px;
+    border-bottom: 1px solid rgba(34, 48, 78, 0.6);
+    font-variant-numeric: tabular-nums;
+    border-radius: 6px;
+    font-size: 13px;
+}
+.sb-host:last-child { border-bottom: none; }
+.sb-host:hover { background: rgba(56, 189, 248, 0.08); }
+.sb-host input[type="checkbox"] { flex-shrink: 0; margin: 0; }
+.sb-host a { text-decoration: none; }
+.sb-host-head {
+    padding: 2px 8px 8px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 11.5px;
+    letter-spacing: 0.04em;
+}
+.sb-host-badges { display: inline-flex; align-items: center; gap: 6px; }
+
+/* 来源高亮：从 IP 卡片进入弹窗时，标注指向来源 IP 的记录与被点击的域名 */
+.sb-host-hit { background: rgba(52, 211, 153, 0.07); box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.55); }
+.sb-host-clicked { background: rgba(56, 189, 248, 0.1); box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.65); }
+.sb-host-hit:hover, .sb-host-clicked:hover { filter: brightness(1.15); }
+.sb-ip-hit { color: var(--green); font-weight: 700; }
+.sb-hitmark {
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--green);
+    border: 1px solid rgba(52, 211, 153, 0.45);
+    border-radius: 999px;
+    padding: 1px 8px;
+    white-space: nowrap;
+}
+.sb-host-clicked .sb-hitmark:first-of-type { color: var(--accent); border-color: rgba(56, 189, 248, 0.5); }
+.sb-chip-source { color: var(--green); border-color: rgba(52, 211, 153, 0.45); }
+.sb-hostname:hover { color: var(--accent); }
+.sb-ip { color: var(--accent); }
+.sb-ip:hover { text-decoration: underline; }
+.sb-ip-paused { text-decoration: line-through; }
+
+/* 列内容：主机名一行省略；解析记录每条一行，超出省略不影响整体预览 */
+.sb-hostname {
+    color: var(--text);
+    font-weight: 600;
+    font-size: 13px;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+}
+.sb-host-ttl { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+.sb-ips { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sb-rec { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.sb-rec-main {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    color: var(--accent);
+}
+.sb-rec-main .sb-ip { flex-shrink: 0; font-size: 13px; }
+.sb-rec-main .sb-ip-geo, .sb-rec-main .sb-ms { font-size: 11.5px; }
+.sb-rec-main .sb-ip-geo { overflow: hidden; text-overflow: ellipsis; }
+.sb-rec-main .sb-ms, .sb-rec-main .sb-pausedmark, .sb-rec-main .sb-hitmark { flex-shrink: 0; }
+
+.sb-empty {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--muted);
+    font-size: clamp(15px, 1vw + 8px, 22px);
+    padding: 40px;
+    text-align: center;
+}
+
+/* ---- 页脚与提示 ---- */
+
+.sb-foot {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    padding: clamp(8px, 0.8vw, 14px) clamp(16px, 2.2vw, 40px) clamp(12px, 1.2vw, 18px);
+    color: var(--muted);
+    font-size: clamp(11px, 0.4vw + 8px, 13px);
+    border-top: 1px solid var(--line);
+}
+.sb-foot span:last-child { margin-left: auto; }
+
+.sb-toast {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    max-width: min(520px, 80vw);
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 1em;
+    opacity: 0;
+    transform: translateY(12px);
+    transition: opacity 0.2s, transform 0.2s;
+    pointer-events: none;
+    z-index: 300;
+}
+.sb-toast.show { opacity: 1; transform: none; }
+.sb-toast-ok { border-color: rgba(52, 211, 153, 0.55); color: var(--green); }
+.sb-toast-info { border-color: rgba(56, 189, 248, 0.55); color: var(--accent); }
+.sb-toast-error { border-color: rgba(248, 113, 113, 0.55); color: var(--red); }
+
+.hidden { display: none !important; }
+
+/* 窄屏（应急查看）降级：单列、工具换行 */
+@media (max-width: 720px) {
+    .ap-tools { margin-left: 0; }
+    .sb-page { margin-left: 0; }
+    .sb-grid { grid-template-columns: 1fr; }
+}
+
+/* ---- 视图模式切换（域名 / IP） ---- */
+
+.sb-mode {
+    display: inline-flex;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    overflow: hidden;
+    background: var(--bg-soft);
+}
+
+.sb-mode-btn {
+    background: none;
+    color: var(--muted);
+    border: none;
+    padding: 7px 18px;
+    font-size: 1em;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+}
+.sb-mode-btn:hover { color: var(--text); }
+.sb-mode-btn.active {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #04121f;
+}
+
+/* ---- IP 卡片 ---- */
+
+.sb-ipcard .sb-ip-addr {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: clamp(15px, 0.8vw + 10px, 22px);
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--text);
+}
+
+.sb-ip-name {
+    margin-left: auto;
+    color: var(--muted);
+    font-size: 0.9em;
+    max-width: 45%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.sb-ip-loc {
+    color: var(--muted);
+    font-size: 0.92em;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    margin-top: 2px;
+}
+
+.sb-ip-isp {
+    color: var(--muted);
+    opacity: 0.85;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    max-width: 100%;
+}
+
+.sb-ip-noloc { color: var(--amber); opacity: 0.85; }
+
+.sb-chip-manual { color: var(--green); border-color: rgba(52, 211, 153, 0.45); }
+
+.sb-ip-domains {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+}
+
+.sb-ipmark {
+    display: inline-block;
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    margin-right: 5px;
+    vertical-align: 1px;
+}
+.sb-ipmark.ok { background: var(--green); }
+.sb-ipmark.fail { background: var(--red); }
+
+.sb-ip-note {
+    color: var(--muted);
+    font-size: 0.9em;
+    border-top: 1px dashed var(--line);
+    padding: 8px 2px 0;
+    margin-top: 8px;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.sb-ip-actions {
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding-top: 10px; /* 富余空间由 sb-ip-domains-wrap 吸收，按钮紧跟域名区 */
+}
+
+/* ---- IP 弹窗（添加 / 编辑 / 确认） ---- */
+
+.sb-ipov {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 17, 0.72);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 9vh 16px 16px;
+    z-index: 500;
+    overflow-y: auto;
+}
+
+.sb-ipbox {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: min(520px, 100%);
+    padding: 18px 20px;
+}
+.sb-ipbox h3 { font-size: 1.1em; margin-bottom: 10px; }
+.sb-ipbox p { color: var(--muted); font-size: 0.95em; }
+.sb-ipbox-foot {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 14px;
+}
+
+.sb-ipform label { display: block; color: var(--muted); font-size: 0.9em; margin-bottom: 10px; }
+.sb-ipform input, .sb-ipform textarea {
+    width: 100%;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 1em;
+    font-family: inherit;
+}
+.sb-ipform input:focus, .sb-ipform textarea:focus { outline: none; border-color: var(--accent); }
+.sb-ipform textarea { resize: vertical; }
+.sb-ipform-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.sb-ipform-hint { color: var(--muted); font-size: 0.85em; margin: 0 0 10px; }
+.sb-ipform-err { color: var(--red); font-size: 0.9em; margin: 4px 0; }
+.sb-ipform-err.hidden { display: none; }
+
+/* ---- IP 关联域名弹窗：批量操作工具栏与暂停态 ---- */
+
+.sb-ipdom-tools {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex-wrap: wrap;
+    padding: 8px 0;
+    border-top: 1px dashed var(--line);
+    border-bottom: 1px dashed var(--line);
+    margin-bottom: 10px;
+}
+
+.sb-ipdom-pickall {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    font-size: 0.9em;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sb-ipdom-pickall input { accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+.sb-ipdom-row .sb-ipdom-check { flex-shrink: 0; accent-color: var(--accent); width: 14px; height: 14px; cursor: pointer; }
+
+.sb-ip-paused { color: var(--muted); text-decoration: line-through; }
+
+.sb-pausedmark {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 1px 8px;
+    white-space: nowrap;
+}
+
+.sb-ipcard .sb-tag-name.is-paused { color: var(--muted); text-decoration: line-through; }
+
+.sb-ipcard .sb-paused-mini {
+    display: inline-block;
+    margin-left: 4px;
+    font-size: 0.8em;
+    color: var(--muted);
+}
+
+/* IP 标题操作：复制 / 新页面打开 */
+.sb-ip-ops { display: inline-flex; gap: 4px; margin-left: 8px; }
+.sb-ip-act {
+    background: var(--bg-soft);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.78em;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+.sb-ip-act:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 弹窗记录行展示访问耗时 */
+.sb-ms { color: var(--muted); font-size: 11.5px; font-variant-numeric: tabular-nums; }
+
+/* 卡片域名标签区固定 3 行空间（域名视图）；IP 视图由 sb-ip-domains-wrap 自动扩展 */
+.sb-tags { max-height: 96px; overflow: hidden; }
+.sb-tags .sb-tag { height: 26px; box-sizing: border-box; }
+.sb-ip-domains .sb-tag { height: 26px; box-sizing: border-box; }
+
+/* 卡片 stat：数字保持正常大字，「文字标签」为可点按钮（两视图统一） */
+.sb-stat-btn {
+    background: none;
+    color: var(--muted);
+    border: none;
+    padding: 0;
+    font-size: clamp(11px, 0.4vw + 8px, 13px);
+    font-family: inherit;
+    cursor: pointer;
+    text-decoration: none;
+    transition: color 0.15s;
+}
+.sb-stat-btn:hover { color: var(--accent); }
+.sb-stat span { white-space: nowrap; }
+.sb-tag a { color: inherit; text-decoration: none; }
+.sb-tag:hover { border-color: var(--accent); }
+
+/* 域名卡片：主域名复制按钮 */
+.sb-copy-btn {
+    background: var(--bg-soft);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 8px;
+    font-size: 0.78em;
+    font-family: inherit;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+.sb-copy-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 解析示例 / 非 A 记录弹窗 */
+.sb-demobox { width: min(640px, 100%); }
+.sb-demo-note { color: var(--muted); font-size: 0.92em; margin: 6px 0 10px; }
+.sb-demo-label { display: flex; align-items: center; gap: 8px; margin: 12px 0 6px; font-weight: 600; }
+.sb-demo-line { display: flex; align-items: center; gap: 8px; margin: 5px 0; }
+.sb-demo-line code {
+    flex: 1;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12.5px;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 4px 9px;
+    color: #9fd8f2;
+    overflow-x: auto;
+    white-space: nowrap;
+}
+.sb-demo-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+.sb-other-list { max-height: 56vh; overflow-y: auto; }
+.sb-other-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.sb-other-table th { text-align: left; color: var(--muted); padding: 6px 8px; border-bottom: 1px solid var(--card-border); }
+.sb-other-table td { padding: 6px 8px; border-bottom: 1px solid rgba(34, 48, 78, 0.45); color: var(--text); vertical-align: top; }
+.sb-other-value { word-break: break-all; }
+
+/* 访问状态 stat：大字小一号（「未检查」等 3 字防换行） */
+.sb-stat-num-sm { font-size: clamp(15px, 1vw + 8px, 24px); }
+
+/* 域名卡子域名区：固定 2 行，超出可下拉滚动 */
+.sb-tags { max-height: 62px; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.sb-tags::-webkit-scrollbar { width: 5px; }
+.sb-tags::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* IP 卡域名区：默认 3 行高度起，同行卡片有富余空间时自动扩展显示更多（超出滚动），「更多」按钮固定右下；
+   flex-basis 0 使该区不把卡片撑高，高度只来自网格行分配的富余空间 */
+.sb-ip-domains-wrap {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 0;
+    min-height: 90px;
+    min-width: 0;
+    border-top: 1px dashed var(--line);
+    padding-top: 10px;
+    margin-top: 4px;
+    position: relative;
+}
+.sb-ip-domains { flex: 1 1 auto; min-height: 0; align-content: flex-start; overflow-y: auto; overflow-x: hidden; scrollbar-width: thin; }
+.sb-ip-domains::-webkit-scrollbar { width: 5px; }
+.sb-ip-domains::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+
+/* 域名卡子域名行的 IP：可点按钮样式（点击打开解析管理并定位） */
+button.sb-tag-ip {
+    background: var(--bg);
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 0 6px;
+    font-size: 0.95em;
+    font-family: inherit;
+    cursor: pointer;
+    font-variant-numeric: tabular-nums;
+    transition: color 0.15s, border-color 0.15s;
+}
+button.sb-tag-ip:hover { color: var(--text); border-color: var(--accent); }
+
+/* 解析管理弹窗：定位高亮（点击卡片 IP 进入） */
+.sb-host-locate { background: rgba(56, 189, 248, 0.12); box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.7); }
+
+/* 解析管理弹窗：单条记录行内编辑（修改按钮 + 输入框 + 保存 / 取消） */
+.sb-rec-edit-btn {
+    flex-shrink: 0;
+    background: none;
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 5px;
+    padding: 1px 8px;
+    font-size: 11.5px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.sb-rec-edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+/* 解析管理弹窗：记录行 IP 归属地（来自全局缓存） */
+.sb-ip-geo { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
+
+/* 解析管理弹窗：筛选行（关键词搜索 + 访问状态 tab） */
+.sb-modal-filter { display: flex; align-items: center; gap: 10px; padding: 10px 18px 0; }
+.sb-modal-filter input[type="search"] {
+    flex: 1;
+    min-width: 0;
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 5px 10px;
+    font-size: 0.92em;
+    font-family: inherit;
+    outline: none;
+}
+.sb-modal-filter input[type="search"]:focus { border-color: var(--accent); }
+.sb-status-tabs { display: flex; flex-shrink: 0; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
+.sb-status-tab {
+    background: none;
+    border: none;
+    border-right: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 0.85em;
+    padding: 5px 11px;
+    cursor: pointer;
+    font-family: inherit;
+    white-space: nowrap;
+    transition: color 0.15s, background 0.15s;
+}
+.sb-status-tab:last-child { border-right: none; }
+.sb-status-tab:hover { color: var(--text); }
+.sb-status-tab.is-active { background: rgba(56, 189, 248, 0.15); color: var(--accent); font-weight: 600; }
+.sb-filter-count { color: var(--muted); font-size: 0.85em; flex-shrink: 0; white-space: nowrap; }
+
+/* 「未检查」等状态大字再小一号 */
+.sb-stat-num-sm { font-size: clamp(13px, 0.8vw + 6px, 19px); }
+
+/* 非 A 记录弹窗：工具栏与编辑表单 */
+.sb-other-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    padding: 8px 0 10px;
+    border-bottom: 1px solid var(--card-border);
+    margin-bottom: 10px;
+}
+.sb-other-tools .sb-check { accent-color: var(--accent); cursor: pointer; }
+.sb-other-tools label.sb-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    color: var(--muted);
+    font-size: 12.5px;
+    cursor: pointer;
+}
+.ap-form.dc-form label { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+.ap-form.dc-form input, .ap-form.dc-form select, .ap-form.dc-form textarea {
+    width: 100%;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13px;
+    font-family: inherit;
+}
+.ap-form.dc-form input:focus, .ap-form.dc-form select:focus, .ap-form.dc-form textarea:focus { outline: none; border-color: var(--accent); }
+.ap-form.dc-form .ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* IP 卡域名区右下角「更多」悬浮按钮：渐变底衬保证可读 */
+.sb-dom-more {
+    position: absolute;
+    right: 4px;
+    bottom: 4px;
+    background: linear-gradient(180deg, rgba(15, 24, 48, 0.2), var(--card) 55%);
+    color: var(--accent);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.sb-dom-more:hover { color: var(--text); border-color: var(--accent); }

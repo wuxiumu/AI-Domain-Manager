@@ -2,16 +2,55 @@
 
 ## 未发布
 
-- 首页新增「问题中心」：把检查异常（P0）、HTTPS 未确认与结果过时（P1）、30 天内到期（P2）聚合为一份分级清单，按类型筛选、一键批量检查、行内直达详情；检查通过后自动移出。新增与页面同源的只读接口 `GET /api/issues`（`assets:read`），每条问题带稳定 ID、证据摘要、解析 IP、DNS 读取路径与建议动作——AI 按清单定位问题、以备注或提案记录结论（引用问题 ID）、处理后复查确认消失。
+- 新增 **tasks.md 任务看板**：产品定位、已完成里程碑、P0–P2 路线图（AI 接入 bootstrap / MCP Server / 二开友好）、明确不做清单与维护规则，作为项目的持续任务清单；纳入 `/docs` 页面白名单（可在线预览与编辑），AGENTS 文档规则与 OpenAPI 契约描述同步。
+- 解析管理弹窗记录列表**表格化重排**：固定五列（勾选 / 主机记录 / 访问状态 / TTL / 解析记录）并新增表头，每行有清晰分割线，鼠标悬停整行高亮；主机名与每条解析记录（IP + 归属地 + 耗时 + 标记）均单行展示、超出省略（悬停见全称），不再因长内容换行导致视觉混乱；行内字号统一（主机名 / IP 13px，徽标 / 归属地 / 耗时 / 按钮 11–11.5px）。
+- **每个 IP 都可编辑**：IP 视图所有卡片（含 DNS 自动发现）都有「编辑」按钮。已登记的 IP 直接编辑名称 / 备注 / 端口；自动发现未登记的 IP 走「登记手工 IP」模式（IP 预填），保存后卡片立即标注「手工登记」并显示维护的信息——修复此前编辑按钮点击无反应的问题（快照行数据缺少登记 id）。删除仍仅对已登记 IP 提供（自动发现的 IP 由 DNS 数据决定，不受影响）。
+- 解析管理弹窗记录行展示 **IP 归属地**：每条解析记录的 IP 旁直接显示国旗 + 国家 · 城市（悬停查看 ISP 与缓存时间），数据来自 `/api/ips/screen` 的服务端归属地缓存（ip_locations.json），打开弹窗时一次性读取、全程不发探测请求；未刷新归属地的 IP 不显示。
+- IP 卡片域名区**自动扩展**：默认 3 行高度起，同行卡片有富余空间时域名列表自动扩展显示更多（超出区域内滚动），消除域名与底部操作按钮之间的大片空白；「更多」按钮固定在域名区右下角始终可见；手工备注仍显示在域名区与操作按钮之间。
+- 解析管理弹窗新增**筛选行**：关键词搜索（匹配主机名 / IP，输入即过滤）与访问状态 tab（全部 / 通过 / 异常 / 未检查），可组合使用并显示匹配计数；筛选条件在弹窗会话内保留（检查、写入后刷新不丢），关闭弹窗即重置。工具栏新增「反选」按钮（可见行勾选状态互换），与全选 / 修改 / 删除 / 检查按钮在写入期间一并禁用。
+- 域名管理弹窗支持**单条记录完整编辑（弹窗表单）**：每条解析记录旁「修改」打开编辑弹窗，可修改主机记录、记录类型（A / AAAA / CNAME / MX / TXT / NS / SRV / CAA）、记录值、TTL、线路与优先级，不再局限于只改 IP。表单先读取云端记录缓存预填全部字段；留空 TTL / 线路 / 优先级则保持云端当前值；A / AAAA 记录值前端校验 IP 格式。提交仍走同一套护栏：`PUT` 单条记录 + `expected_version` 版本核对 + 回读核实 + 全程留档，版本冲突返回 409 并提示刷新。GoDaddy 记录的类型与主机名在表单中禁用（云端不支持），提示通过删除后重新添加变更。
+- 大屏解析管理弹窗加大：宽度 680px → 960px（上限 94vw），高度上限 88vh，记录行 IP 列固定最小宽度，宽屏下一屏可见更多子域名。
+- IP 视图新增访问状态检查：工具栏「前端检查 / 后端检查」探测当前列表全部 IP，卡片底部亦可单卡手动检查（前端走浏览器直连，后端走服务端探测 `http://IP/` 不跟随跳转）。结果缓存于 `data/ip_access.json`（新端点 `POST /api/ips/check` 与 `POST /api/ips/browser-check`），展示各 IP 响应时间（ms）；状态取「任一站点可达即正常」的最优结果，前端失败而后端通过时正常显示。
+- 大屏卡片与弹窗展示响应时间：域名弹窗每条解析记录旁显示该记录最近探测耗时（ms，随检查缓存），IP 卡片与主域名同样展示。访问状态标签缩短为「检查」，避免换行。
+- 视图状态写入 URL hash：`/screen#mode=ip`、`#mode=domain` 与账号 / 访问状态筛选随刷新恢复，不再丢参数。
+- 卡片域名区固定 3 行：IP 视图与域名视图的关联域名区高度固定（约 3 行），内容少时正常预览、超出部分鼠标悬停卡片后滚动查看。
+- 设置页新增「通用设置 · 大屏自动刷新」：开关 + 轮询周期（60–3600 秒），新会话接口 `GET/PUT /api/settings/screen`；设置页「系统概况」展示代码规模与运行时内存（`GET /api/stats`，仅管理员会话）。
+- DNS 新增「暂停 / 恢复解析」：新端点 `POST /api/domains/{provider}/{domain}/records/{recordId}/status`（`dns:write`，body `{paused, expected_version}`）。与既有写入同一套护栏：锁内读取云端最新记录、核对版本、单次调用、回读核实状态变化且兄弟记录未被波及，全程留档；重复操作返回 unchanged。阿里云（`SetDomainRecordStatus`）与腾讯云（`ModifyRecordStatus`）支持；GoDaddy 无记录状态概念，调用明确报错。界面：域名管理弹窗记录行显示「已暂停」标记（IP 划线），IP 卡片标签加 ⏸；「IP · 关联域名」弹窗新增批量工具栏（全选 / 多选、修改 IP、删除、暂停 / 恢复、前端 / 后端检查），跨域名、跨云账号逐 zone 读取最新版本后逐条执行，首个失败或待核实即停止后续提交。
+- 访问检查支持勾选范围：`POST .../records/access-check` 新增可选 `record_ids` 参数只探测指定记录；域名管理弹窗勾选主机后前端 / 后端检查只测选中项（主域名与子域名一视同仁），未勾选检查全部。
+- 域名管理弹窗空态可添加：「该域名暂无 A 记录」时批量添加不再隐藏，可直接创建第一条解析。
+- 「IP · 关联域名」弹窗：「共 N 个域名」标签可点击，新弹窗展示该 IP 下全部关联域名（卡片仅展示前 6 个），每行可进入解析管理或新页面打开网站；从 IP 卡片进入的弹窗高亮「指向本 IP」记录与所选域名，标注视角差异（卡片 = IP 视角，弹窗 = 域名全量记录视角）。
+- Markdown 展示升级为开源库管线：引入 **marked**（解析）+ **DOMPurify**（XSS 清洗）+ **highlight.js**（代码高亮，github-dark 主题）+ **mermaid**（图表渲染），全部下载到 `public/assets/vendor/` 本地自托管，运行时不外链；设置页与文档页的 Markdown（含 CHANGELOG 与 docs 文档）获得 GFM 表格、代码高亮与 mermaid 图表渲染，替代此前的手写正则渲染与高亮。`AdminPage.renderMarkdown` 保持 vendor 缺失时的极简回退。
+- 移除离线测试目录（tests/）与历史文档树（docs/），CI 的文档工作流一并移除；核心文档保留并按当前形态重写（README / AGENTS / CHANGELOG），仓库文档的浏览与编辑统一走 `/docs` 页面（README / AGENTS / CHANGELOG / docs/ 内 Markdown，写操作白名单校验并进入审计）。
+- 全站头部统一：`/screen`、`/settings`、`/calendar` 共用同一套头部结构与样式（`admin-page.css` 的 `ap-head`），大屏的渐变标题、时钟与 ghost 导航成为全站基准。
+- 设置页新增「修改记录与文档」面板：DNS 变更记录（最近 50 条前后值与回读结果）、操作审计（最近 100 条）、产品 CHANGELOG 原文与仓库文档库（README / AGENTS / docs/，白名单读取）直接在页面展示；新增会话级只读接口 `GET /api/dns/changes`、`GET /api/audit`、`GET /api/docs`、`GET /api/docs/read`（路径白名单校验，越界 404）。
 
-- 看板默认展示「近 30 天检查趋势」图：每日检查数、正常 / 异常分布与平均延迟，内联 SVG 渲染、无外部依赖，附每日明细表；数据来自新的只读接口 `GET /api/trends`（`assets:read`）。
-- 监控平台对接：`GET /api/metrics`（`assets:read`）以 Prometheus 文本格式输出 `asset_workspace_*` 指标（资产分布、HTTPS 未确认数、30 天检查与延迟、AI 提案状态、最近检查时间戳），可接入现有告警与大盘，实现人看图表、AI 执行操作、监控读数的共同治理。
+## 1.3.0 — 2026-11-14
 
-- AI 接管闭环：新增 `GET /api/handover` 交接简报（当前统计、持有权限、下一步动作与操作序列，`assets:read`）与 DNS 变更提案队列。AI 密钥以新权限 `proposals:write` 提交提案（含理由与依据，重复待审批提案返回 409，待审批上限 50 条）；提案不写云端，管理员在「数据与交付 → AI 变更提案」批准或拒绝，批准时读取云端最新版本后按既有护栏单次写入并回读核实，目标消失或账号不可用时提案标记 failed 并保留原因。
+产品形态收缩为「大屏 + 独立管理页 + AI API」，删除健康看板/分析等未投入使用方向的全部代码，并新增 IP 大屏视图。
 
-- 新增 AI 协同健康报告：`GET /api/health/report` 把缓存检查证据编译成一份带解读指引的 Markdown 报告（检查异常域名、HTTPS 未确认域名、异常 IP、30 天内到期），`?format=markdown` 直接返回 `text/markdown`；Bearer 密钥使用 `assets:read` 权限，生成过程只读、不触发检查。健康看板新增「AI 分析」按钮：一键「复制提示词 + 报告」把报告与完整分析要求（P0/P1/P2 建议、证据不足处理、数据边界）一起复制给任意 AI 助手，也可只复制报告或下载 `.md`；单表最多列出 50 行以防撑爆上下文。命令行 `php scripts/generate-health-report.php` 输出同一份报告（`--prompt` 输出完整提示词），便于 cron 邮件或脚本管道。
-- 补齐检查日历 7 个接口的 OpenAPI 契约（打卡、待办、检查统计，均为管理员会话专用），修复路由注册与接口文档不一致的问题。
-- 新增仓库级 `AGENTS.md`，为 AI 编码助手提供架构地图、代码约定与验证命令。
+### 新增
+
+- 大屏新增 **IP 视图**：从 DNS 解析缓存自动发现公网 IP，与手工登记 IP 按 IP 合并展示——归属地（ipwhois.io 缓存）、ISP、关联域名 chips（含 HTTP 状态标记）、访问状态点、多账号来源；顶部「域名 / IP」视图切换，账号 Tab / 搜索 / 排序 / 分页与域名视图同套交互。
+- 新增手工 IP 台账：`POST /api/ips`、`PUT/DELETE /api/ips/{id}`（`assets:write`，仅公网地址校验，存储 `data/ip_assets.json`，0600）与归属地刷新 `POST /api/ips/{ip}/location`（`checks:run`，ipwhois.io）；`GET /api/ips/screen`、`GET /api/ips/screen.md`（`assets:read`）为 AI 提供 IP 视图快照与 Markdown 文档。迁移脚本 `php scripts/migrate-ip-assets.php` 一次性迁移历史手工 IP（幂等）。
+- 新增独立**设置页** `/settings`：云账号增删改与连接测试、按账号同步、API 密钥签发/撤销（含权限范围与一次性明文展示）、HTTP 代理/超时、管理员密码修改；自包含页面，不再依赖工作台壳。
+- 新增独立**日历页** `/calendar`：月历打卡（心情 + 一句话）、待办任务、完整检查运行记录（含手动记录入口）；`GET /api/calendar` 不再合并资产健康概况。
+- 大屏头部新增日历 / 设置 / 退出登录入口；`/` 登录壳精简为「初始化 + 登录 → 跳转 /screen」。
+
+### 变更
+
+- API 收缩为「大屏 + 台账 + DNS + 提案 + 同步 + 账号/密钥」共 42 条路径，OpenAPI 3.1 契约与 `llms.txt` 按新形态重写；权限范围移除 `plans:read`。
+- 登录成功后直接进入大屏；`/screen` 支持 IP/域名模式与排序偏好记忆（本地存储）。
+
+### 移除
+
+- 健康检查与分析栈：健康看板、问题中心、HTTPS 跟进、检查趋势、Prometheus 指标、AI 健康报告、交接简报及其接口（`/api/health*`、`/api/issues`、`/api/trends`、`/api/metrics`、`/api/https-review`、`/api/handover`、`/api/operations`、`/api/access-check`）。
+- 管理工作台 SPA（看板 / 域名 / IP / 关系 / 日历 / 计划 / 提示词库 / 设置标签页）及改进计划、提示词库、后台任务队列、备份恢复、数据清理、DNS 变更历史查询等页面与接口（`/api/plans*`、`/api/prompts`、`/api/tasks`、`/api/maintenance*`、`/api/dns/changes`）。
+- 上述功能的控制器、服务、脚本、离线测试与登录页宣传海报轮播。`WorkspaceData` 核心文件范围收缩为 `domains.json` / `record_access.json` / `meta.json`。
+
+### 兼容性
+
+- 旧健康类接口调用方需迁移到大屏快照接口（`/api/domains/screen.md`、`/api/ips/screen.md`）；手工 IP 历史数据需运行迁移脚本（`health.json` 原文件保留在数据目录，不自动删除）。
+- `data/` 内 `health.json`、`access_check.json`、`ip_locations.json`、`calendar.json`、`tasks.json`、`improvement_plan.json`、`history/` 等运行数据本次一律保留不删；除 `ip_locations.json`（IP 大屏归属地缓存，继续使用）与 `calendar.json`（日历页，继续使用）外已成为孤儿文件，可自行评估清理。
 
 ## 1.2.0 — 2026-10-27
 

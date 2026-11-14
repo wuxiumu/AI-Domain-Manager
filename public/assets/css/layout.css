@@ -252,6 +252,9 @@
     letter-spacing: .2px;
 }
 
+/* 侧栏中的站内跳转链接（如 /screen 大屏页）与按钮同款外观 */
+a.tab-btn { text-decoration: none; }
+
 .tab-btn .icon {
     width: 18px;
     height: 18px;

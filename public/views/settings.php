@@ -1,76 +1,207 @@
-<section id="view-settings" class="tab-view hidden" aria-labelledby="settings-title">
-    <div class="page-head"><div><p class="eyebrow">PRODUCT SETTINGS</p><h1 id="settings-title">产品设置<span class="heading-dot">.</span></h1><p class="muted">管理登录、云账号、网络、API 权限、资产备份与交付自检。</p></div><a class="btn" href="/api/openapi.json" target="_blank" rel="noopener">查看 OpenAPI</a></div>
-    <div class="settings-tabs domain-filter-tabs" role="tablist" aria-label="产品设置分类"><button class="domain-filter-tab" role="tab" data-settings-tab="general" aria-selected="true">工作台配置</button><button class="domain-filter-tab" role="tab" data-settings-tab="accounts" aria-selected="false">云账号</button><button class="domain-filter-tab" role="tab" data-settings-tab="api" aria-selected="false" data-color="tencent">AI API</button><button class="domain-filter-tab" role="tab" data-settings-tab="cleanup" aria-selected="false">数据清理</button><button class="domain-filter-tab" role="tab" data-settings-tab="maintenance" aria-selected="false">数据与交付</button></div>
-    <p id="settings-error" class="error-text hidden" role="alert"></p>
-    <div data-settings-panel="general" class="settings-grid">
-        <section class="panel settings-card"><div class="panel-title"><h2>网络与云接口</h2><span class="badge">HTTP</span></div><p class="muted">用于云账号连接与域名同步。健康探测保留各自的超时策略。</p>
-            <form id="settings-http-form" class="settings-form">
-                <label>代理地址<input id="settings-proxy" type="password" autocomplete="new-password" placeholder="留空保留现有配置，支持 http / https / socks5"></label><p id="settings-proxy-state" class="form-help"></p>
-                <label class="settings-checkbox"><input id="settings-clear-proxy" type="checkbox">清除现有代理，改为直接连接</label>
-                <div class="settings-form-row"><label>请求超时（秒）<input id="settings-timeout" type="number" min="5" max="120" value="25" required></label><label>连接超时（秒）<input id="settings-connect-timeout" type="number" min="1" max="30" value="10" required></label></div>
-                <p class="error-text hidden" role="alert"></p><button class="btn btn-primary" type="submit">保存网络配置</button>
-            </form>
-        </section>
-        <section class="panel settings-card"><div class="panel-title"><h2>登录账号与密码</h2><span id="settings-admin" class="badge"></span></div><p class="muted">更新后需重新登录，其他会话和旧 API 密钥也会失效。</p>
-            <form id="settings-auth-form" class="settings-form" autocomplete="off">
-                <label>当前密码<input id="settings-current-password" type="password" required autocomplete="current-password"></label>
-                <label>管理员账号<input id="settings-user" required minlength="3" maxlength="64" autocomplete="username"></label>
-                <label>新密码<input id="settings-new-password" type="password" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="12–72 字节"></label>
-                <label>确认新密码<input id="settings-confirm-password" type="password" required autocomplete="new-password"></label>
-                <p class="error-text hidden" role="alert"></p><button class="btn btn-primary" type="submit">更新登录信息</button>
-            </form>
-        </section>
+<?php
+/**
+ * 独立设置页（/settings）：云账号、API 密钥、通用设置。
+ * 自包含页面：不加载 SPA 的 CSS/JS；由 SettingsController::page() 引入，需登录会话。
+ *
+ * @var array|null $settingsBootstrap
+ */
+$boot = is_array($settingsBootstrap ?? null) ? $settingsBootstrap : [];
+$assetVer = static function (string $path): string {
+    return htmlspecialchars($path) . '?v=' . filemtime(PUBLIC_DIR . $path);
+};
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>产品设置 · 资产大屏</title>
+<link rel="stylesheet" href="<?= $assetVer('/assets/css/admin-page.css') ?>">
+<link rel="stylesheet" href="<?= $assetVer('/assets/vendor/hljs-github-dark.min.css') ?>">
+<link rel="stylesheet" href="<?= $assetVer('/assets/css/settings-page.css') ?>">
+</head>
+<body>
+<header class="ap-head">
+    <div class="ap-brand">
+        <h1>产品设置</h1>
+        <span class="ap-sub">云账号 · API 密钥 · 通用配置</span>
     </div>
-    <div data-settings-panel="accounts" class="hidden">
-        <div class="page-head"><div><p class="eyebrow">CLOUD CONNECTIONS</p><h2>云账号</h2><p class="muted">随时接入和维护云账号，密钥保存后仅显示配置状态。</p></div><div class="head-actions"><button id="test-all-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg>测试全部连接</button><button id="account-add" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加云账号</button></div></div>
-        <div class="product-note"><strong>配置一次，持续使用。</strong><span>支持阿里云 / 腾讯云 / GoDaddy 多账号。保存配置后可测试连接，再显式同步域名；已有资产和文件缓存会继续保留。</span></div>
-        <div id="accounts-grid" class="grid"></div>
-        <section id="result-section" class="hidden"><div class="section-heading"><h2>连接测试记录</h2><span class="muted">当前会话</span></div><div id="result-list"></div></section>
+    <nav class="ap-nav">
+        <a href="/screen">首页</a>
+        <a href="/calendar">日历</a>
+        <a class="is-current" href="/settings">设置</a>
+        <a href="/docs">文档</a>
+        <button type="button" id="ap-logout" title="退出登录">退出</button>
+    </nav>
+</header>
+
+<main class="ap-main ap-wide">
+    <div class="ap-tabs" role="tablist" aria-label="设置分类">
+        <button type="button" data-sp-tab="accounts" aria-selected="true">云账号</button>
+        <button type="button" data-sp-tab="api" aria-selected="false">AI API</button>
+        <button type="button" data-sp-tab="records" aria-selected="false">修改记录与文档</button>
+        <button type="button" data-sp-tab="general" aria-selected="false">通用设置</button>
     </div>
-    <div data-settings-panel="cleanup" class="hidden">
-        <section class="panel settings-card"><div class="panel-title"><h2>账号不可用的记录</h2><span class="muted" id="cleanup-orphans-meta">尚未加载</span></div>
-            <p class="form-help">云账号被删除或停用后，其域名台账、DNS 缓存、健康检查数据与遗留检测记录会残留在本地。可整组删除，或转为手工资产保留域名资料；删除不可恢复，建议先在「数据与交付」创建备份。</p>
-            <p id="cleanup-error" class="error-text hidden" role="alert"></p>
-            <div id="cleanup-orphans"><p class="muted">正在加载…</p></div>
-        </section>
-        <section class="panel settings-card"><div class="panel-title"><h2>日志清理</h2><span class="muted">按维度删除 · 不可恢复</span></div>
-            <p class="form-help">检查历史支持按域名或时间删除，保留各资产最近一次健康状态；DNS 变更按域名；操作记录按时间；同步日志按类型或时间。勾选“清空全部”将删除该类日志的全部条目。</p>
-            <div id="cleanup-logs"><p class="muted">正在加载…</p></div>
-            <p id="cleanup-message" class="form-help" role="status" aria-live="polite"></p>
-        </section>
-    </div>
-    <div data-settings-panel="api" class="hidden">
-        <section class="panel api-intro"><div><p class="eyebrow">AI READY</p><h2>让 AI 读懂资产，也能按权限操作。</h2><p class="muted">支持标准 OpenAPI、能力发现和 Bearer Token。密码与云密钥不会通过查询接口返回。</p></div><div class="api-entry-links"><a class="btn btn-sm" href="/api/openapi.json" target="_blank" rel="noopener">OpenAPI 3.1</a><a class="btn btn-sm" href="/.well-known/asset-workspace.json" target="_blank" rel="noopener">能力发现</a><a class="btn btn-sm" href="/llms.txt" target="_blank" rel="noopener">AI 使用说明</a></div></section>
-        <div class="settings-grid">
-            <section class="panel settings-card"><div class="panel-title"><h2>创建 API 密钥</h2><span class="badge">BEARER</span></div><form id="settings-token-form" class="settings-form" autocomplete="off">
-                <div class="settings-form-row"><label>用途名称<input id="api-token-name" required maxlength="100" placeholder="如：AI 资产巡检"></label><label>有效天数<input id="api-token-days" type="number" min="1" max="365" value="90" required></label></div>
-                <fieldset class="api-scopes"><legend>授权范围</legend><div id="api-token-scopes"></div></fieldset>
-                <label>当前管理员密码<input id="api-token-password" type="password" required autocomplete="current-password"></label>
-                <p class="error-text hidden" role="alert"></p><button class="btn btn-primary" type="submit">创建密钥</button>
-            </form></section>
-            <section class="panel settings-card"><div class="panel-title"><h2>调用方式</h2><span class="badge">JSON API</span></div><p class="muted">将接口描述导入支持 OpenAPI 的 AI 工具，认证方式选 Bearer Token。密码登录 API 需要图形验证码；无人值守接入使用 API 密钥。</p><pre class="api-code" id="api-curl-example"></pre><p class="form-help">查询资产使用 <code>GET /api/health</code>；解析记录用云账号 ID 和域名定位。DNS 修改、健康检查、同步有独立权限。</p><div id="api-token-once" class="api-token-once hidden" role="status"><strong>请保存新密钥，离开后无法再次查看。</strong><code id="api-token-value"></code><button id="api-token-copy" type="button" class="btn btn-sm">复制密钥</button><button id="api-token-dismiss" type="button" class="btn btn-sm">已保存，隐藏密钥</button></div></section>
+
+    <!-- 云账号 -->
+    <section data-sp-panel="accounts" style="display:flex;flex-direction:column;gap:14px">
+        <div class="sp-section-head">
+            <h2>云账号</h2>
+            <span class="ap-muted">密钥保存后仅显示配置状态；保存后可测试连接，再到大屏显式同步。</span>
+            <div class="ap-actions">
+                <button type="button" class="ap-btn" id="sp-test-all">测试全部连接</button>
+                <button type="button" class="ap-btn ap-btn-primary" id="sp-account-add">添加云账号</button>
+            </div>
         </div>
-        <section class="panel settings-card"><div class="panel-title"><h2>已授权的 API 密钥</h2><span class="muted">可随时撤销</span></div><div id="api-token-list"></div></section>
-    </div>
-    <div data-settings-panel="maintenance" class="hidden">
-        <section class="panel settings-card maintenance-assets">
-            <div class="panel-title"><h2>资产备份与迁移</h2><span id="maintenance-version" class="badge"></span></div>
-            <p class="muted">JSON 保留域名、手工 IP、备注、网站链接与人工关联，可预览后恢复；CSV 用于交接。文件不含云凭据、管理员密码或 API 密钥，但包含私有资产资料，请妥善保存。</p>
-            <div class="maintenance-actions"><button class="btn btn-primary" id="maintenance-backup">创建服务器备份</button><button class="btn" data-asset-export="json">导出 JSON</button><button class="btn" data-asset-export="csv">导出 CSV</button><button class="btn" id="maintenance-refresh">刷新</button></div>
-            <p id="maintenance-message" class="form-help" role="status" aria-live="polite"></p>
-            <p id="maintenance-error" class="error-text hidden" role="alert"></p>
-            <div class="table-wrap maintenance-table"><table><thead><tr><th>备份时间</th><th>域名</th><th>手工 IP</th><th>关联</th><th>大小</th><th>操作</th></tr></thead><tbody id="maintenance-backups"><tr><td colspan="6">尚未加载</td></tr></tbody></table></div>
-            <div class="maintenance-import"><label for="maintenance-file">从 JSON 文件恢复 <span class="muted">最大 5 MB</span></label><input id="maintenance-file" type="file" accept=".json,application/json"><button class="btn" id="maintenance-file-preview">预览文件</button></div>
-            <p class="form-help">服务器最多保存 30 份备份；恢复前会自动留底一份。换机后未配置的云账号来源会转为手工资产，云凭据需重新配置。恢复会清空检查结果，需要重新检查。</p>
-            <section id="maintenance-preview" class="maintenance-preview hidden" aria-labelledby="maintenance-preview-title" tabindex="-1">
-                <h3 id="maintenance-preview-title">恢复预览</h3><div id="maintenance-preview-summary"></div><p id="maintenance-preview-warning" class="error-text"></p>
-                <p class="form-help" id="maintenance-preview-hash"></p>
-                <form id="maintenance-restore-form" class="settings-form" autocomplete="off"><div class="settings-form-row"><label>当前管理员密码<input id="maintenance-password" type="password" required autocomplete="current-password"></label><label>输入“恢复资产”确认<input id="maintenance-confirmation" required autocomplete="off" placeholder="恢复资产"></label></div><p class="error-text hidden" role="alert"></p><div class="maintenance-actions"><button class="btn btn-danger" type="submit">替换当前资产并恢复</button><button class="btn" type="button" id="maintenance-cancel">取消预览</button></div></form>
-            </section>
+        <div class="sp-accounts" id="sp-accounts"></div>
+        <section id="sp-result-section" hidden>
+            <div class="sp-section-head"><h2 style="font-size:14px">连接测试记录</h2><span class="ap-muted">当前会话</span></div>
+            <div class="sp-results" id="sp-result-list"></div>
         </section>
-        <section class="panel settings-card maintenance-delivery"><div class="panel-title"><h2>交付自检</h2><div class="maintenance-actions"><strong id="maintenance-check-count"></strong><button class="btn btn-sm" id="maintenance-report">导出交付摘要</button></div></div><div id="maintenance-checks" class="maintenance-checks"></div><p class="form-help">自检核对当前环境；实际交付还需在隔离实例完成恢复演练，并确认云账号权限、生产访问与授权范围。</p></section>
-        <section class="panel settings-card maintenance-proposals"><div class="panel-title"><h2>AI 变更提案</h2><span class="muted">AI 密钥提交 · 管理员批准后才执行</span></div><p class="form-help">持有 proposals:write 权限的 AI 密钥在此提交 DNS 变更建议；批准时会先读取云端最新版本，再按既有护栏写入并回读核实。拒绝与批准都会记录在案；AI 无法绕过此页面直接修改云端。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>提交时间</th><th>变更内容</th><th>理由</th><th>状态</th><th>审批</th></tr></thead><tbody id="maintenance-proposals"><tr><td colspan="5">尚未加载</td></tr></tbody></table></div></section>
-        <section class="panel settings-card maintenance-dns"><div class="panel-title"><h2>DNS 变更记录</h2><span class="muted">最近 50 条 · 服务器保留 200 条</span><div class="maintenance-actions"><button class="btn btn-sm" id="maintenance-dns-copy">复制全部</button></div></div><p class="form-help">可展开核对原值、拟提交值和云端回读值；点击行内“复制”可把单条差异粘贴给 AI 排查。待核实表示结果未确认，请先刷新云端记录，避免重复提交。记录包含私有 DNS 数据，仅管理员会话可读。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>发起时间</th><th>目标</th><th>操作与结果</th><th>前后值</th><th>操作</th></tr></thead><tbody id="maintenance-dns-changes"><tr><td colspan="5">尚未加载</td></tr></tbody></table></div></section>
-        <section class="panel settings-card maintenance-audit"><div class="panel-title"><h2>操作记录</h2><span class="muted">最近 100 条 · 服务器保留 1,000 条</span></div><p class="form-help">记录已通过登录与权限校验的写入请求。处理中表示没有完成记录，需要核实实际结果；基础记录不含请求正文或密钥，DNS 前后值请查看上方专用记录。</p><div class="table-wrap maintenance-table"><table><thead><tr><th>发起时间</th><th>操作者</th><th>操作</th><th>结果</th></tr></thead><tbody id="maintenance-audit"><tr><td colspan="4">尚未加载</td></tr></tbody></table></div></section>
-    </div>
-</section>
+    </section>
+
+    <!-- AI API -->
+    <section data-sp-panel="api" hidden style="display:flex;flex-direction:column;gap:14px">
+        <div class="sp-intro">
+            <div>
+                <h2>让 AI 读懂资产，也能按权限操作。</h2>
+                <p class="ap-muted">支持标准 OpenAPI、能力发现和 Bearer Token。密码与云密钥不会通过查询接口返回。</p>
+            </div>
+            <div class="ap-actions">
+                <a class="ap-btn ap-btn-sm" href="/api/openapi.json" target="_blank" rel="noopener">OpenAPI 3.1</a>
+                <a class="ap-btn ap-btn-sm" href="/.well-known/asset-workspace.json" target="_blank" rel="noopener">能力发现</a>
+                <a class="ap-btn ap-btn-sm" href="/llms.txt" target="_blank" rel="noopener">AI 使用说明</a>
+            </div>
+        </div>
+        <div class="sp-grid">
+            <section class="ap-panel">
+                <div class="ap-panel-head"><h2>创建 API 密钥</h2><span class="ap-badge">BEARER</span></div>
+                <form id="sp-token-form" class="ap-form" autocomplete="off">
+                    <div class="ap-row">
+                        <label>用途名称<input id="sp-token-name" required maxlength="100" placeholder="如：AI 资产巡检"></label>
+                        <label>有效天数<input id="sp-token-days" type="number" min="1" max="365" value="90" required></label>
+                    </div>
+                    <fieldset class="sp-scopes"><legend>授权范围</legend><div id="sp-scopes"></div></fieldset>
+                    <label>当前管理员密码<input id="sp-token-password" type="password" required autocomplete="current-password"></label>
+                    <p class="ap-error hidden" role="alert"></p>
+                    <button class="ap-btn ap-btn-primary" type="submit">创建密钥</button>
+                </form>
+            </section>
+            <section class="ap-panel">
+                <div class="ap-panel-head"><h2>调用方式</h2><span class="ap-badge">JSON API</span></div>
+                <p class="ap-muted">将接口描述导入支持 OpenAPI 的 AI 工具，认证方式选 Bearer Token。密码登录 API 需要图形验证码；无人值守接入使用 API 密钥。</p>
+                <pre class="sp-code" id="sp-curl-example"></pre>
+                <p class="ap-help">读取大屏快照用 <code>GET /api/domains/screen</code>；AI 可读文档用 <code>/api/domains/screen.md</code>；DNS 修改、同步有独立权限。</p>
+                <div id="sp-token-once" class="sp-token-once hidden" role="status">
+                    <strong>请保存新密钥，离开后无法再次查看。</strong>
+                    <code id="sp-token-value"></code>
+                    <button type="button" class="ap-btn ap-btn-sm" id="sp-token-copy">复制密钥</button>
+                    <button type="button" class="ap-btn ap-btn-sm" id="sp-token-dismiss">已保存，隐藏密钥</button>
+                </div>
+            </section>
+        </div>
+        <section class="ap-panel">
+            <div class="ap-panel-head"><h2>已授权的 API 密钥</h2><span class="ap-muted">可随时撤销</span></div>
+            <div class="sp-token-list" id="sp-token-list"></div>
+        </section>
+    </section>
+
+    <!-- 修改记录与文档：内部子标签吸顶切换 -->
+    <section data-sp-panel="records" hidden style="display:flex;flex-direction:column;gap:14px">
+        <div class="sp-subtabs" role="tablist" aria-label="记录分类">
+            <button type="button" data-sp-sub="overview" aria-selected="true">系统概况</button>
+            <button type="button" data-sp-sub="changelog" aria-selected="false">产品修改记录</button>
+            <button type="button" data-sp-sub="dns" aria-selected="false">DNS 变更记录</button>
+            <button type="button" data-sp-sub="audit" aria-selected="false">操作记录</button>
+        </div>
+
+        <section data-sp-subpanel="overview">
+            <div class="ap-panel">
+                <div class="ap-panel-head"><h2>系统概况</h2><span class="ap-badge">CODE &amp; MEMORY</span></div>
+                <p class="ap-muted">当前部署实例的代码规模与运行时内存；数据保存在服务器 data/ 目录（0600 私有存储）。</p>
+                <div id="sp-stats" class="sp-stats"><p class="ap-muted">正在读取…</p></div>
+            </div>
+        </section>
+
+        <section data-sp-subpanel="changelog" hidden>
+            <div class="ap-panel">
+                <div class="ap-panel-head"><h2>产品修改记录</h2><span class="ap-badge">CHANGELOG</span></div>
+                <p class="ap-muted">每一个版本的变更如实记录在仓库 CHANGELOG.md，页面直接展示原文。</p>
+                <div class="sp-md" id="sp-changelog"><p class="ap-muted">正在读取…</p></div>
+            </div>
+        </section>
+
+        <section data-sp-subpanel="dns" hidden>
+            <div class="ap-panel">
+                <div class="ap-panel-head"><h2>DNS 变更记录</h2><span class="ap-muted">最近 50 条 · 服务器保留 200 条</span></div>
+                <p class="ap-muted">每一次 DNS 写入（含 AI 提案批准与暂停 / 恢复）的前后值与回读核实结果。待核实表示结果未确认，请先刷新云端记录，避免重复提交。</p>
+                <div class="sp-table-wrap"><table class="sp-table"><thead><tr><th>发起时间</th><th>目标</th><th>操作</th><th>操作者</th><th>前后值</th></tr></thead><tbody id="sp-dns-changes"><tr><td colspan="5" class="ap-muted">尚未加载</td></tr></tbody></table></div>
+            </div>
+        </section>
+
+        <section data-sp-subpanel="audit" hidden>
+            <div class="ap-panel">
+                <div class="ap-panel-head"><h2>操作记录</h2><span class="ap-muted">最近 100 条 · 服务器保留 1,000 条</span></div>
+                <p class="ap-muted">记录已通过登录与权限校验的写入请求；不含请求正文与任何秘密。</p>
+                <div class="sp-table-wrap"><table class="sp-table"><thead><tr><th>发起时间</th><th>操作者</th><th>操作</th><th>结果</th></tr></thead><tbody id="sp-audit"><tr><td colspan="4" class="ap-muted">尚未加载</td></tr></tbody></table></div>
+            </div>
+        </section>
+    </section>
+
+    <!-- 通用设置 -->
+    <section data-sp-panel="general" hidden class="sp-grid">
+        <section class="ap-panel">
+            <div class="ap-panel-head"><h2>网络与云接口</h2><span class="ap-badge">HTTP</span></div>
+            <p class="ap-muted">用于云账号连接与域名同步。</p>
+            <form id="sp-http-form" class="ap-form">
+                <label>代理地址<input id="sp-proxy" type="password" autocomplete="new-password" placeholder="留空保留现有配置，支持 http / https / socks5"></label>
+                <p id="sp-proxy-state" class="ap-help"></p>
+                <label class="ap-check"><input id="sp-clear-proxy" type="checkbox"> 清除现有代理，改为直接连接</label>
+                <div class="ap-row">
+                    <label>请求超时（秒）<input id="sp-timeout" type="number" min="5" max="120" value="25" required></label>
+                    <label>连接超时（秒）<input id="sp-connect-timeout" type="number" min="1" max="30" value="10" required></label>
+                </div>
+                <p class="ap-error hidden" role="alert"></p>
+                <button class="ap-btn ap-btn-primary" type="submit">保存网络配置</button>
+            </form>
+        </section>
+        <section class="ap-panel">
+            <div class="ap-panel-head"><h2>大屏自动刷新</h2><span class="ap-badge">SCREEN</span></div>
+            <p class="ap-muted">默认手动：大屏点「刷新」重新读取缓存快照，点「更新数据」拉取云端。开启后按周期自动轮询快照。</p>
+            <form id="sp-screen-form" class="ap-form">
+                <label class="ap-check"><input id="sp-screen-auto" type="checkbox"> 开启大屏自动刷新</label>
+                <label>刷新周期（秒）<input id="sp-screen-seconds" type="number" min="60" max="3600" value="300" required></label>
+                <p class="ap-help">范围 60–3600 秒；弹窗打开或批量操作期间自动暂停轮询。</p>
+                <p class="ap-error hidden" role="alert"></p>
+                <button class="ap-btn ap-btn-primary" type="submit">保存刷新配置</button>
+            </form>
+        </section>
+        <section class="ap-panel">
+            <div class="ap-panel-head"><h2>登录账号与密码</h2><span id="sp-admin" class="ap-badge"></span></div>
+            <p class="ap-muted">更新后需重新登录，其他会话和旧 API 密钥也会失效。</p>
+            <form id="sp-auth-form" class="ap-form" autocomplete="off">
+                <label>当前密码<input id="sp-current-password" type="password" required autocomplete="current-password"></label>
+                <label>管理员账号<input id="sp-user" required minlength="3" maxlength="64" autocomplete="username"></label>
+                <label>新密码<input id="sp-new-password" type="password" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="12–72 字节"></label>
+                <label>确认新密码<input id="sp-confirm-password" type="password" required autocomplete="new-password"></label>
+                <p class="ap-error hidden" role="alert"></p>
+                <button class="ap-btn ap-btn-primary" type="submit">更新登录信息</button>
+            </form>
+        </section>
+    </section>
+</main>
+
+<footer class="ap-foot">资产大屏 · 产品设置</footer>
+<div class="ap-toast" id="ap-toast" role="status"></div>
+
+<script>
+window.__ADMIN__ = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+</script>
+<script src="<?= $assetVer('/assets/vendor/marked.min.js') ?>"></script>
+<script src="<?= $assetVer('/assets/vendor/purify.min.js') ?>"></script>
+<script src="<?= $assetVer('/assets/vendor/highlight.min.js') ?>"></script>
+<script src="<?= $assetVer('/assets/vendor/mermaid.min.js') ?>"></script>
+<script src="<?= $assetVer('/assets/js/admin-page.js') ?>"></script>
+<script src="<?= $assetVer('/assets/js/settings-page.js') ?>"></script>
+</body>
+</html>

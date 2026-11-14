@@ -29,7 +29,7 @@ class RecordController
         }
     }
 
-    /** 检测该域名全部解析记录的可访问性 */
+    /** 检测该域名全部解析记录的可访问性；body.record_ids 可选，只探测指定记录（弹窗按勾选范围检查） */
     public function accessCheck(string $provider, string $domain): void
     {
         Auth::requireLogin();
@@ -38,6 +38,14 @@ class RecordController
             $acc = self::account($provider);
             $snapshot = DnsRecordCache::read(DATA_DIR, $provider, $domain, static function () use ($acc, $domain) { return provider_factory($acc)->listRecords($domain); }, true);
             $records = $snapshot['records'];
+            $recordIds = body_json()['record_ids'] ?? null;
+            if (is_array($recordIds) && $recordIds) {
+                $wanted = array_flip(array_map('strval', $recordIds));
+                $records = array_values(array_filter($records, static function (array $r) use ($wanted): bool {
+                    return isset($wanted[(string) ($r['id'] ?? '')]);
+                }));
+                if (!$records) { json_out(['ok' => false, 'error' => '勾选的记录在云端已不存在，请刷新解析后重试'], 422); }
+            }
             json_out(['ok' => true] + RecordAccessService::runCheck($provider, $domain, $records));
         } catch (Throwable $e) {
             json_out(['ok' => false, 'error' => 'DNS 访问检查未完成，请检查账号权限与网络后重试', 'code' => 'dns_check_failed'], 502);
@@ -59,12 +67,41 @@ class RecordController
         $this->change($provider, $domain, 'delete', $recordId);
     }
 
+    /** DNS 变更记录（最近 50 条）：原值、拟提交值、回读值与结果，供设置页展示 */
     public function changes(): void
     {
         Auth::requireSession();
-        $this->releaseSession();
         header('Cache-Control: no-store');
         json_out(['ok' => true, 'changes' => DnsChangeService::recent(DATA_DIR)]);
+    }
+
+    /** 暂停 / 恢复单条解析记录（body: {paused: bool, expected_version}） */
+    public function status(string $provider, string $domain, string $recordId): void
+    {
+        Auth::requireLogin();
+        $this->releaseSession();
+        header('Cache-Control: no-store');
+        $account = self::account($provider);
+        $body = body_json();
+        $paused = $body['paused'] ?? null;
+        if (!is_bool($paused)) { json_out(['ok' => false, 'error' => 'paused 必须为布尔值'], 422); }
+        $service = new DnsChangeService(DATA_DIR, provider_factory($account));
+        $result = $service->applyStatus($provider, $domain, $recordId, $paused, $body,
+            ['user' => Auth::user(), 'via' => Auth::isBearer() ? 'api' : 'browser']);
+        json_out($result, $result['verified'] ? 200 : 202);
+    }
+
+    /** 大屏前端检查结果上报（body: {revision, results: {fqdn: {ok}}}），与解析快照版本对齐后全局缓存 */
+    public function browserCheck(string $provider, string $domain): void
+    {
+        Auth::requireLogin();
+        header('Cache-Control: no-store');
+        $body = body_json();
+        $revision = (string) ($body['revision'] ?? '');
+        $results = $body['results'] ?? null;
+        if (!preg_match('/^[a-f0-9]{64}$/D', $revision)) { json_out(['ok' => false, 'error' => 'revision 缺失或无效'], 422); }
+        if (!is_array($results)) { json_out(['ok' => false, 'error' => 'results 必须为对象'], 422); }
+        json_out(RecordAccessService::mergeBrowser($provider, $domain, $revision, $results));
     }
 
     private function change(string $provider, string $domain, string $action, ?string $recordId): void
@@ -77,9 +114,7 @@ class RecordController
         if ($action === 'add' && (!isset($body['line']) || $body['line'] === '')) {
             $body['line'] = $account['provider'] === 'aliyun' ? 'default' : ($account['provider'] === 'tencent' ? '默认' : '');
         }
-        $service = new DnsChangeService(DATA_DIR, provider_factory($account), static function () use ($provider, $domain): void {
-            (new HealthService())->invalidateDnsHealth($provider, $domain);
-        });
+        $service = new DnsChangeService(DATA_DIR, provider_factory($account));
         $result = $service->apply($provider, $domain, $action, $recordId, $body,
             ['user' => Auth::user(), 'via' => Auth::isBearer() ? 'api' : 'browser']);
         json_out($result, $result['verified'] ? 200 : 202);

@@ -4,7 +4,9 @@
 class WorkspaceData
 {
     private static array $locks = [];
-    public const FILES = ['domains.json', 'health.json', 'access_check.json', 'record_access.json', 'meta.json'];
+    public const FILES = ['domains.json', 'record_access.json', 'meta.json'];
+    /** 历史版本曾被纳入恢复范围的核心文件；仅用于回滚旧恢复日志的兼容校验。 */
+    private const LEGACY_FILES = ['health.json', 'access_check.json'];
 
     public static function acquire(string $dir): void
     {
@@ -99,7 +101,7 @@ class WorkspaceData
         $before = $journal['before'] ?? null;
         if (!is_array($before)) { throw new RuntimeException('恢复日志损坏，需要人工检查'); }
         foreach ($before as $name => $raw) {
-            if (!in_array($name, array_merge(self::FILES, ['workspace-epoch.json']), true) || (!is_string($raw) && $raw !== null)) {
+            if (!in_array($name, array_merge(self::FILES, self::LEGACY_FILES, ['workspace-epoch.json']), true) || (!is_string($raw) && $raw !== null)) {
                 throw new RuntimeException('恢复日志格式无效');
             }
         }

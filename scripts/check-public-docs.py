@@ -124,12 +124,12 @@ def heading_ids(content: str) -> set[str]:
 
 def check(root: Path) -> list[tuple[str, int, str]]:
     root = root.resolve()
-    docs = root / "docs"
+    docs = root / "docs" if (root / "docs").is_dir() else None  # 历史文档树已移除时仅核心文档参与检查
     errors: list[tuple[str, int, str]] = []
-    if not (docs / "00-目录.md").is_file():
+    if docs is not None and not (docs / "00-目录.md").is_file():
         errors.append(("docs", 0, "missing_document_index"))
     files = [root / "README.md"]
-    for path in sorted(docs.rglob("*")):
+    for path in sorted(docs.rglob("*")) if docs else []:
         relative = path.relative_to(root).as_posix()
         if path.is_symlink():
             errors.append((relative, 0, "symlink_not_allowed"))

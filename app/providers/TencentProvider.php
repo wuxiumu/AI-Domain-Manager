@@ -210,4 +210,10 @@ class TencentProvider extends CloudProvider
         $this->dns('DeleteRecord', ['Domain' => $domain, 'RecordId' => (int) $recordId]);
         return true;
     }
+
+    public function setRecordStatus(string $domain, string $recordId, bool $paused): bool
+    {
+        $this->dns('ModifyRecordStatus', ['Domain' => $domain, 'RecordId' => (int) $recordId, 'Status' => $paused ? 'DISABLE' : 'ENABLE']);
+        return true;
+    }
 }

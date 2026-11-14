@@ -6,7 +6,7 @@ class DomainController
     public function index(): void
     {
         Auth::requireLogin();
-        // 台账与筛选条件都未变化时直接 304，跳过健康快照重建与全量列表传输。
+        // 台账与筛选条件都未变化时直接 304，跳过快照重建与全量列表传输。
         conditional_get(asset_etag((string) ($_SERVER['QUERY_STRING'] ?? '')));
 
         $domains = JsonStore::read(DATA_DIR . '/domains.json', []);
@@ -20,28 +20,10 @@ class DomainController
         $valid    = $validRaw === '' ? null : ($validRaw === '1');
         $sort     = (string) ($_GET['sort'] ?? 'expire');
         $expiring = (string) ($_GET['expiring'] ?? '');
-        $access   = (string) ($_GET['access'] ?? ''); // healthy | unhealthy | stale | unchecked
-        $access = ['ok' => 'healthy', 'fail' => 'unhealthy'][$access] ?? $access;
-
-        $accessMap = JsonStore::read(DATA_DIR . '/access_check.json', [])['results'] ?? [];
-        if (!is_array($accessMap)) {
-            $accessMap = [];
-        }
-        $healthMap = [];
-        foreach ((new HealthService())->dashboard()['assets'] as $asset) {
-            if ($asset['kind'] === 'domain') {
-                $healthMap[$asset['provider'] . '|' . $asset['name']] = $asset['health'];
-            }
-        }
-        $healthKey = static function (array $domain): string {
-            return ($domain['provider'] ?? 'manual') . '|' . strtolower(rtrim(trim((string) ($domain['domain'] ?? '')), '.'));
-        };
-        $unchecked = ['status' => 'unchecked', 'last_status' => null, 'checked_at' => null,
-            'latency_ms' => null, 'message' => '尚未检测', 'checks' => [], 'resolved_ips' => []];
 
         $today = strtotime(date('Y-m-d'));
 
-        $filtered = array_values(array_filter($domains, function ($d) use ($provider, $q, $valid, $expiring, $access, $healthMap, $healthKey, $today) {
+        $filtered = array_values(array_filter($domains, function ($d) use ($provider, $q, $valid, $expiring, $today) {
             if ($provider !== '' && ($d['provider'] ?? '') !== $provider) {
                 return false;
             }
@@ -71,29 +53,8 @@ class DomainController
                     }
                 }
             }
-            if ($access !== '') {
-                $st = $healthMap[$healthKey($d)]['status'] ?? 'unchecked';
-                if ($st !== $access) {
-                    return false;
-                }
-            }
             return true;
         }));
-
-        // 工作台与域名列表共享健康状态；旧 access 字段保留兼容。
-        array_walk($filtered, function (&$d) use ($accessMap, $healthMap, $healthKey, $unchecked) {
-            $d['health'] = $healthMap[$healthKey($d)] ?? $unchecked;
-            $key = ($d['provider'] ?? '') . '|' . ($d['domain'] ?? '');
-            $a   = $accessMap[$key] ?? null;
-            $d['access'] = $a ? [
-                'status'    => $a['status'],
-                'http_code' => $a['http_code'],
-                'ms'        => $a['ms'],
-                'scheme'    => $a['scheme'],
-                'error'     => $a['error'],
-                'checked_at' => $a['checked_at'],
-            ] : null;
-        });
 
         usort($filtered, function ($a, $b) use ($sort) {
             if ($sort === 'domain') {

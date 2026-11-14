@@ -82,17 +82,14 @@ class Auth
             return;
         }
         $scope = null;
-        if ($method === 'POST' && ($route === '/api/health/check' || $route === '/api/health/ips/{id}/location' || $route === '/api/access-check'
+        if ($method === 'POST' && ($route === '/api/ips/{ip}/location'
             || substr($route, -13) === '/access-check')) { $scope = 'checks:run'; }
-        elseif ($route === '/api/sync' || $route === '/api/test-all' || $route === '/api/accounts/{id}/test') { $scope = 'sync:run'; }
+        elseif ($route === '/api/sync' || $route === '/api/test-all' || $route === '/api/accounts/{id}/test' || $route === '/api/accounts/{id}/sync') { $scope = 'sync:run'; }
         elseif ($route === '/api/proposals/{id}/approve' || $route === '/api/proposals/{id}/reject') { $scope = null; } // 仅管理员会话：批准会执行 DNS 写入
         elseif ($route === '/api/proposals') { $scope = 'proposals:write'; }
-        elseif ($route === '/api/handover' && $method === 'GET') { $scope = 'assets:read'; }
-        elseif (in_array($route, ['/api/trends', '/api/metrics', '/api/issues', '/api/https-review'], true) && $method === 'GET') { $scope = 'assets:read'; }
-        elseif ($route === '/api/plans' && $method === 'GET') { $scope = 'plans:read'; }
         elseif (strpos($route, '/records') !== false) { $scope = $method === 'GET' ? 'dns:read' : 'dns:write'; }
-        elseif (in_array($route, ['/api/health', '/api/health/history', '/api/health/report', '/api/operations', '/api/accounts', '/api/domains', '/api/domains/stats', '/api/sync/logs', '/api/access-check'], true) && $method === 'GET') { $scope = 'assets:read'; }
-        elseif (in_array($route, ['/api/domains', '/api/health/ips', '/api/health/ips/{id}', '/api/health/domains/{id}/bindings'], true) && $method !== 'GET') { $scope = 'assets:write'; }
+        elseif (in_array($route, ['/api/accounts', '/api/domains', '/api/domains/screen', '/api/domains/screen.md', '/api/domains/screen/report', '/api/domains/stats', '/api/sync/logs', '/api/ips/screen', '/api/ips/screen.md'], true) && $method === 'GET') { $scope = 'assets:read'; }
+        elseif (in_array($route, ['/api/domains', '/api/ips', '/api/ips/{id}'], true) && $method !== 'GET') { $scope = 'assets:write'; }
         if ($scope === null || !in_array($scope, self::bearer()['scopes'] ?? [], true)) {
             json_out(['ok' => false, 'error' => $scope ? 'API 密钥缺少权限：' . $scope : '此接口仅供管理员会话使用', 'code' => 'insufficient_scope', 'required_scope' => $scope], 403);
         }

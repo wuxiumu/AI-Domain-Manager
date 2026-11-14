@@ -32,7 +32,7 @@ window.WorkspaceCache = (() => {
         const started = revision;
         const request = fetcher().then(value => {
             if (started === revision) {
-                const freshness = path.startsWith('/api/health') || path.startsWith('/api/domains/stats') ? 60000 : 30 * 60 * 1000;
+                const freshness = path.startsWith('/api/domains/screen') || path.startsWith('/api/domains/stats') ? 60000 : 30 * 60 * 1000;
                 const entry = {value, expires: now + freshness};
                 memory.set(key, entry);
                 try { sessionStorage.setItem(key, JSON.stringify(entry)); } catch {}

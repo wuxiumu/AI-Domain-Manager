@@ -98,7 +98,32 @@ class SettingsService
             'accounts' => $this->publicAccounts(), 'providers' => self::providerSchema(),
             'http' => ['proxy_configured' => $proxy !== '', 'proxy_label' => $proxyLabel,
                 'timeout' => $http['timeout'] ?? 25, 'connect_timeout' => $http['connect_timeout'] ?? 10],
+            'screen' => $this->screenConfig(),
             'api' => ['openapi' => '/api/openapi.json', 'discovery' => '/.well-known/asset-workspace.json', 'guide' => '/llms.txt']];
+    }
+
+    /** 大屏刷新配置（auto_refresh 开关 + 轮询周期秒）；未配置时默认手动。 */
+    public function screenConfig(): array
+    {
+        $screen = $this->all()['screen'] ?? [];
+        return [
+            'auto_refresh' => (bool) ($screen['auto_refresh'] ?? false),
+            'refresh_seconds' => max(60, min(3600, (int) ($screen['refresh_seconds'] ?? 300))),
+        ];
+    }
+
+    /** 更新大屏刷新配置。 */
+    public function updateScreen(array $body): void
+    {
+        if (isset($body['auto_refresh']) && !is_bool($body['auto_refresh'])) { throw new InvalidArgumentException('auto_refresh 必须为布尔值'); }
+        $this->change(static function (array $all) use ($body): array {
+            $screen = $all['screen'] ?? [];
+            if (isset($body['auto_refresh'])) { $screen['auto_refresh'] = (bool) $body['auto_refresh']; }
+            if (isset($body['refresh_seconds'])) {
+                $screen['refresh_seconds'] = self::integer($body['refresh_seconds'], 60, 3600, '刷新周期');
+            }
+            return ['screen' => $screen];
+        });
     }
 
     private function change(callable $work): void

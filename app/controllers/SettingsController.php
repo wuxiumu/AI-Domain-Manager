@@ -2,6 +2,18 @@
 
 class SettingsController
 {
+    /** 独立设置页（/settings）：管理员会话；自包含视图，$settingsBootstrap 携带 CSRF。 */
+    public function page(): void
+    {
+        Auth::requireSession();
+        header('Cache-Control: no-store');
+        $settingsBootstrap = [
+            'csrf' => Auth::csrfToken(),
+            'user' => (string) Auth::user(),
+        ];
+        require PUBLIC_DIR . '/views/settings.php';
+    }
+
     public function status(): void
     {
         header('Cache-Control: no-store');
@@ -33,6 +45,14 @@ class SettingsController
         Auth::requireSession();
         settings_service()->updateHttp(body_json());
         json_out(['ok' => true, 'http' => settings_service()->summary()['http']]);
+    }
+
+    /** 大屏刷新配置（是否自动 + 周期） */
+    public function screen(): void
+    {
+        Auth::requireSession();
+        settings_service()->updateScreen(body_json());
+        json_out(['ok' => true, 'screen' => settings_service()->screenConfig()]);
     }
 
     public function credentials(): void

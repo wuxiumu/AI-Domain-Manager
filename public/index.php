@@ -31,6 +31,13 @@ $router->get('/llms.txt', [ApiDescriptionController::class, 'instructions']);
 
 // 鉴权
 $router->get('/api/dns/changes', [RecordController::class, 'changes']);
+$router->get('/api/audit', [DocsController::class, 'audit']);
+$router->get('/api/docs', [DocsController::class, 'index']);
+$router->get('/api/docs/read', [DocsController::class, 'read']);
+$router->get('/api/stats', [DocsController::class, 'stats']);
+$router->post('/api/docs', [DocsController::class, 'create']);
+$router->put('/api/docs', [DocsController::class, 'save']);
+$router->delete('/api/docs', [DocsController::class, 'remove']);
 $router->get('/api/login/captcha', [AuthController::class, 'captcha']);
 $router->post('/api/login',  [AuthController::class, 'login']);
 $router->post('/api/logout', [AuthController::class, 'logout']);
@@ -39,39 +46,19 @@ $router->get('/api/setup/status', [SettingsController::class, 'status']);
 $router->post('/api/setup', [SettingsController::class, 'setup']);
 $router->get('/api/settings', [SettingsController::class, 'index']);
 $router->put('/api/settings/http', [SettingsController::class, 'http']);
+$router->put('/api/settings/screen', [SettingsController::class, 'screen']);
 $router->put('/api/auth/credentials', [SettingsController::class, 'credentials']);
 $router->get('/api/tokens', [SettingsController::class, 'tokens']);
 $router->post('/api/tokens', [SettingsController::class, 'createToken']);
 $router->delete('/api/tokens/{id}', [SettingsController::class, 'revokeToken']);
 
-// Private delivery tools: administrator session + CSRF for writes.
-$router->get('/api/maintenance', [MaintenanceController::class, 'index']);
-$router->post('/api/maintenance/backups', [MaintenanceController::class, 'backup']);
-$router->get('/api/maintenance/backups/{id}', [MaintenanceController::class, 'download']);
-$router->delete('/api/maintenance/backups/{id}', [MaintenanceController::class, 'deleteBackup']);
-$router->get('/api/maintenance/export', [MaintenanceController::class, 'export']);
-$router->post('/api/maintenance/preview', [MaintenanceController::class, 'preview']);
-$router->post('/api/maintenance/restore', [MaintenanceController::class, 'restore']);
-$router->get('/api/maintenance/cleanup', [CleanupController::class, 'overview']);
-$router->post('/api/maintenance/cleanup/orphans', [CleanupController::class, 'orphans']);
-$router->post('/api/maintenance/cleanup/logs', [CleanupController::class, 'logs']);
+// AI DNS 变更提案：AI 密钥提交，管理员批准后才经 DnsChangeService 执行。
+$router->get('/api/proposals', [ProposalController::class, 'index']);
+$router->post('/api/proposals', [ProposalController::class, 'create']);
+$router->post('/api/proposals/{id}/approve', [ProposalController::class, 'approve']);
+$router->post('/api/proposals/{id}/reject', [ProposalController::class, 'reject']);
 
-// 后台任务队列（仅管理员会话；执行由 scripts/task-worker.php 在 cron 中认领）
-$router->get('/api/tasks', [TaskController::class, 'index']);
-$router->post('/api/tasks', [TaskController::class, 'create']);
-
-// 改进计划（仅管理员会话）：功能点提出、审核与执行跟踪
-$router->get('/api/plans', [PlanController::class, 'index']);
-$router->post('/api/plans', [PlanController::class, 'create']);
-$router->put('/api/plans/{id}', [PlanController::class, 'update']);
-$router->post('/api/plans/{id}/review', [PlanController::class, 'review']);
-$router->post('/api/plans/ai-suggest', [PlanController::class, 'aiSuggest']);
-$router->delete('/api/plans/{id}', [PlanController::class, 'remove']);
-
-// 提示词库（仅管理员会话）：prompts/*.md 只读展示，内容即文件
-$router->get('/api/prompts', [PromptController::class, 'index']);
-
-// 域名与 IP 健康看板（只读快照、手工 IP、分批检查）
+// 日历：打卡、待办与完整检查运行记录（独立 /calendar 页）。
 $router->get('/api/calendar', [CalendarController::class, 'index']);
 $router->put('/api/calendar/checkins/{date}', [CalendarController::class, 'saveCheckin']);
 $router->delete('/api/calendar/checkins/{date}', [CalendarController::class, 'deleteCheckin']);
@@ -79,26 +66,6 @@ $router->post('/api/calendar/tasks', [CalendarController::class, 'createTask']);
 $router->put('/api/calendar/tasks/{id}', [CalendarController::class, 'updateTask']);
 $router->delete('/api/calendar/tasks/{id}', [CalendarController::class, 'deleteTask']);
 $router->post('/api/calendar/runs', [CalendarController::class, 'addRun']);
-$router->get('/api/health', [HealthController::class, 'index']);
-$router->get('/api/health/history', [HealthController::class, 'history']);
-$router->get('/api/operations', [HealthController::class, 'operations']);
-$router->get('/api/health/report', [HealthController::class, 'report']);
-$router->get('/api/handover', [HandoverController::class, 'index']);
-$router->get('/api/trends', [AnalyticsController::class, 'trends']);
-$router->get('/api/metrics', [AnalyticsController::class, 'metrics']);
-$router->get('/api/issues', [AnalyticsController::class, 'issues']);
-$router->get('/api/https-review', [AnalyticsController::class, 'httpsReview']);
-$router->get('/api/proposals', [ProposalController::class, 'index']);
-$router->post('/api/proposals', [ProposalController::class, 'create']);
-$router->post('/api/proposals/{id}/approve', [ProposalController::class, 'approve']);
-$router->post('/api/proposals/{id}/reject', [ProposalController::class, 'reject']);
-$router->post('/api/health/check', [HealthController::class, 'check']);
-$router->post('/api/health/ips', [HealthController::class, 'addIp']);
-$router->post('/api/health/ips/{id}/location', [HealthController::class, 'refreshLocation']);
-$router->post('/api/health/ips/{id}/browser-probe', [HealthController::class, 'browserProbe']);
-$router->delete('/api/health/ips/{id}', [HealthController::class, 'deleteIp']);
-$router->put('/api/health/ips/{id}', [HealthController::class, 'updateIp']);
-$router->put('/api/health/domains/{id}/bindings', [HealthController::class, 'bindings']);
 
 // 账号与密钥测试
 $router->get('/api/accounts',            [AccountController::class, 'index']);
@@ -106,31 +73,51 @@ $router->post('/api/accounts',           [AccountController::class, 'create']);
 $router->put('/api/accounts/{id}',       [AccountController::class, 'update']);
 $router->delete('/api/accounts/{id}',    [AccountController::class, 'delete']);
 $router->post('/api/accounts/{id}/test', [AccountController::class, 'test']);
+$router->post('/api/accounts/{id}/sync', [AccountController::class, 'sync']);
 $router->post('/api/test-all',           [AccountController::class, 'testAll']);
 
 // 域名同步与查询
 $router->post('/api/sync',         [SyncController::class, 'sync']);
 $router->get('/api/sync/logs',     [SyncController::class, 'logs']);
 $router->get('/api/domains',       [DomainController::class, 'index']);
+$router->get('/api/domains/screen',[ScreenController::class, 'index']);
+$router->get('/api/domains/screen.md', [ScreenController::class, 'markdown']);
+$router->get('/api/domains/screen/report', [ScreenController::class, 'report']);
 $router->get('/api/domains/stats', [DomainController::class, 'stats']);
 $router->post('/api/domains',      [DomainController::class, 'create']);
 $router->put('/api/domains',       [DomainController::class, 'update']);
 $router->delete('/api/domains',    [DomainController::class, 'delete']);
+
+// IP 资产（大屏 IP 视图）：快照、手工登记 CRUD 与归属地刷新。
+$router->get('/api/ips/screen',         [IpController::class, 'screen']);
+$router->get('/api/ips/screen.md',      [IpController::class, 'markdown']);
+$router->post('/api/ips',               [IpController::class, 'create']);
+$router->put('/api/ips/{id}',           [IpController::class, 'update']);
+$router->delete('/api/ips/{id}',        [IpController::class, 'delete']);
+$router->post('/api/ips/{ip}/location', [IpController::class, 'refreshLocation']);
+$router->post('/api/ips/check', [IpController::class, 'check']);
+$router->post('/api/ips/browser-check', [IpController::class, 'browserCheck']);
 
 // DNS 解析记录
 $router->get('/api/domains/{provider}/{domain}/records',             [RecordController::class, 'list']);
 $router->post('/api/domains/{provider}/{domain}/records',            [RecordController::class, 'add']);
 $router->put('/api/domains/{provider}/{domain}/records/{recordId}',  [RecordController::class, 'update']);
 $router->delete('/api/domains/{provider}/{domain}/records/{recordId}', [RecordController::class, 'delete']);
+$router->post('/api/domains/{provider}/{domain}/records/{recordId}/status', [RecordController::class, 'status']);
 $router->post('/api/domains/{provider}/{domain}/records/access-check', [RecordController::class, 'accessCheck']);
-
-// 访问检测
-$router->get('/api/access-check',  [AccessCheckController::class, 'index']);
-$router->post('/api/access-check', [AccessCheckController::class, 'check']);
+$router->post('/api/domains/{provider}/{domain}/records/browser-check', [RecordController::class, 'browserCheck']);
 
 // 初始化后仅管理员会话可读取环境诊断。
 $router->get('/env-check',     [EnvCheckController::class, 'page']);
 $router->get('/api/env-check', [EnvCheckController::class, 'index']);
+
+// 大屏展示（独立页面）：未过期域名与子域名 A 记录，数据走只读快照缓存。
+$router->get('/screen', [ScreenController::class, 'page']);
+
+// 独立管理页：设置（云账号 / API 密钥 / 通用）、日历（打卡 / 待办）与文档库（浏览 / 编辑）。
+$router->get('/settings', [SettingsController::class, 'page']);
+$router->get('/calendar', [CalendarController::class, 'page']);
+$router->get('/docs', [DocsController::class, 'page']);
 
 $path = $reqPath;
 $router->dispatch($_SERVER['REQUEST_METHOD'], $path);

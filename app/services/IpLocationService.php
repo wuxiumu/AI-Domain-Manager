@@ -12,16 +12,12 @@ class IpLocationService
         $this->request = $request ?: static function (string $url): array { return HttpClient::get($url); };
     }
 
-    public function refresh(string $id): array
+    /** 按公网 IP 显式刷新归属地（大屏 IP 视图的自动发现与手工登记 IP 通用）。 */
+    public function refresh(string $ip): array
     {
+        if (filter_var($ip, FILTER_VALIDATE_IP) !== false) { $ip = inet_ntop(inet_pton($ip)); }
+        if (!PublicHttpProbe::isPublicIp($ip)) { throw new InvalidArgumentException('只支持查询公网 IP'); }
         $epoch = WorkspaceData::locked($this->dir, function () { return WorkspaceData::epoch($this->dir); });
-        $asset = null;
-        foreach ((new HealthService($this->dir))->dashboard()['assets'] as $candidate) {
-            if ($candidate['id'] === $id && $candidate['kind'] === 'ip') { $asset = $candidate; break; }
-        }
-        if (!$asset) { throw new OutOfBoundsException('IP 资产不存在，请刷新后重试'); }
-        $ip = $asset['ip'];
-        if (!HealthService::isPublicIp($ip)) { throw new InvalidArgumentException('只支持查询公网 IP'); }
         try { $response = call_user_func($this->request, 'https://ipwho.is/' . rawurlencode($ip)); }
         catch (Throwable $e) { throw new RuntimeException('归属地服务连接失败，请稍后重试'); }
         if (($response['status'] ?? 0) === 429) { throw new RuntimeException('归属地服务已限流，请稍后重试'); }

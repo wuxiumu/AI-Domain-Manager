@@ -4,14 +4,13 @@
 class ApiTokenService
 {
     public const SCOPES = [
-        'assets:read' => '读取域名、IP、关系与统计',
-        'assets:write' => '维护本地资产与绑定',
+        'assets:read' => '读取域名与 IP 资产快照和台账',
+        'assets:write' => '维护本地台账与手工登记 IP',
         'dns:read' => '读取并缓存 DNS 记录',
         'dns:write' => '修改云端 DNS 解析',
-        'checks:run' => '执行健康与访问检查',
+        'checks:run' => '执行访问检查与归属地刷新',
         'sync:run' => '同步域名与测试云连接',
         'proposals:write' => '提交待审批的 DNS 变更提案（不直接写云端）',
-        'plans:read' => '读取改进计划（可按状态筛选，供 AI 接管已通过条目）',
     ];
     private PrivateJsonStore $store;
     private SettingsService $settings;

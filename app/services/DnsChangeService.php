@@ -139,6 +139,88 @@ class DnsChangeService
         return DnsRecordCache::read($this->dir, $account, $domain, function () use ($domain) { return $this->cloud->listRecords($domain); }, true);
     }
 
+    /**
+     * 暂停 / 恢复单条解析记录（记录保留，仅停止或恢复解析）。
+     * 与 apply 相同的护栏：锁内读取云端最新记录、核对版本、单次调用、回读核实状态变化。
+     * GoDaddy 无记录状态概念，在调用前明确拒绝。
+     */
+    public function applyStatus(string $account, string $domain, string $recordId, bool $paused, array $body, array $actor): array
+    {
+        if ($this->cloud instanceof GoDaddyProvider) {
+            throw new InvalidArgumentException('GoDaddy 不支持暂停 / 恢复解析记录，请在 GoDaddy 控制台调整记录');
+        }
+        if (!is_string($body['expected_version'] ?? null) || !preg_match('/^[a-f0-9]{64}$/D', $body['expected_version'])) {
+            throw new InvalidArgumentException('请先读取最新 DNS 记录，并提交 expected_version 以防操作过期状态');
+        }
+        return DnsRecordCache::locked($this->dir, $account, $domain, function () use ($account, $domain, $recordId, $paused, $body, $actor): array {
+            $fresh = $this->fetch($account, $domain);
+            $before = null;
+            foreach ($fresh['records'] as $record) {
+                if ((string) ($record['id'] ?? '') === $recordId) { $before = $record; break; }
+            }
+            if ($before === null) { throw new DomainException('记录已被删除或标识已改变，请刷新 DNS 后重新确认'); }
+            if (!hash_equals((string) $before['version'], $body['expected_version'])) {
+                throw new DomainException('DNS 记录已发生变化，本次未操作；请刷新后重新确认状态');
+            }
+            $currentPaused = strtoupper((string) ($before['status'] ?? '')) === 'DISABLE';
+            $event = ['id' => bin2hex(random_bytes(16)), 'started_at' => date('c'), 'finished_at' => null,
+                'account' => $account, 'domain' => $domain, 'action' => $paused ? 'pause' : 'resume', 'record_id' => $recordId,
+                'actor' => mb_substr((string) ($actor['user'] ?? ''), 0, 128), 'via' => ($actor['via'] ?? '') === 'api' ? 'api' : 'browser',
+                'before' => self::clean($before), 'requested' => ['paused' => $paused], 'after' => null, 'outcome' => 'pending'];
+            $this->save($event);
+            $result = ['ok' => true, 'verified' => false, 'status' => 'unconfirmed', 'change_id' => $event['id'], 'domain' => $domain, 'record' => null,
+                'message' => '云端结果尚未确认，请刷新云端记录核实后再操作；不要直接重复提交'];
+            if ($currentPaused === $paused) {
+                $event['after'] = self::clean($before);
+                $result = array_replace($result, ['verified' => true, 'status' => 'unchanged', 'message' => $paused ? '记录已是暂停状态' : '记录已是启用状态']);
+                $result['record'] = self::clean($before) + ['version' => $before['version']];
+                $result['revision'] = $fresh['revision'];
+            } else {
+                try {
+                    DnsRecordCache::invalidate($this->dir, $account, $domain);
+                    if (!$this->cloud->setRecordStatus($domain, $recordId, $paused)) { throw new RuntimeException('Cloud did not confirm status change'); }
+                    $afterSnapshot = $this->fetch($account, $domain);
+                    $after = $afterSnapshot['records'];
+                    $target = null;
+                    foreach ($after as $record) {
+                        if ((string) ($record['id'] ?? '') === $recordId) { $target = $record; break; }
+                    }
+                    $verified = $target !== null
+                        && (strtoupper((string) ($target['status'] ?? '')) === 'DISABLE') === $paused;
+                    // 兄弟记录不得被本次状态操作改变（recordVersion 只比内容字段，version 键不参与）。
+                    if ($verified) {
+                        $beforeById = [];
+                        foreach ($fresh['records'] as $record) { $beforeById[(string) ($record['id'] ?? '')] = $record; }
+                        foreach ($after as $record) {
+                            $id = (string) ($record['id'] ?? '');
+                            if ($id === $recordId || $id === '') { continue; }
+                            $previous = $beforeById[$id] ?? null;
+                            if ($previous === null || DnsRecordCache::recordVersion($record) !== DnsRecordCache::recordVersion($previous)) {
+                                $verified = false; break;
+                            }
+                        }
+                    }
+                    $event['after'] = self::clean($target);
+                    if ($verified) {
+                        $result = array_replace($result, ['verified' => true, 'status' => 'verified',
+                            'message' => $paused ? '记录已暂停解析（云端已回读核实）' : '记录已恢复解析（云端已回读核实）']);
+                        $result['record'] = self::clean($target) + ['version' => DnsRecordCache::recordVersion($target)];
+                        $result['revision'] = $afterSnapshot['revision'] ?? null;
+                    }
+                } catch (Throwable $failure) {
+                    $event['failure_kind'] = 'cloud_or_cache_unconfirmed';
+                }
+            }
+            $event['outcome'] = $result['status']; $event['finished_at'] = date('c');
+            try { $this->save($event); }
+            catch (Throwable $failure) {
+                $result['status'] = 'unconfirmed'; $result['verified'] = false;
+                $result['message'] = '云端请求已结束，但操作记录未完成，请根据变更编号核实后再操作';
+            }
+            return $result;
+        });
+    }
+
     private function save(array $event): void
     {
         (new PrivateJsonStore($this->dir . '/dns_changes.json'))->update(static function (array $state) use ($event): array {

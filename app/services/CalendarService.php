@@ -24,12 +24,10 @@ class CalendarService
     {
         if (!preg_match('/^\d{4}-(0[1-9]|1[0-2])$/D', $month)) { throw new InvalidArgumentException('月份格式应为 YYYY-MM'); }
         $data = $this->store->read();
-        $health = WorkspaceData::locked($this->dir, function () { return WorkspaceData::read($this->dir . '/health.json'); });
         return ['ok' => true, 'month' => $month,
             'tasks' => array_values(array_filter($data['tasks'] ?? [], static function ($task) use ($month) { return substr($task['date'], 0, 7) === $month; })),
             'checkins' => array_values(array_filter($data['checkins'] ?? [], static function ($item) use ($month) { return substr($item['date'], 0, 7) === $month; })),
-            'runs' => array_values(array_filter($data['runs'] ?? [], static function ($run) use ($month) { return substr($run['date'], 0, 7) === $month; })),
-            'events' => array_values(array_filter($health['check_events'] ?? [], static function ($event) use ($month) { return substr($event['checked_at'] ?? '', 0, 7) === $month; }))];
+            'runs' => array_values(array_filter($data['runs'] ?? [], static function ($run) use ($month) { return substr($run['date'], 0, 7) === $month; }))];
     }
     public function saveCheckin(string $date, array $body): array
     {

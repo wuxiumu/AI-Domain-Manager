@@ -14,10 +14,10 @@ import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 FOLDERS = {"app": {".php"}, "public": {".php", ".js", ".css", ".svg", ".png", ".ico", ".woff2"},
-           "docs": {".md"}, "deploy": {".example"}}
+           "deploy": {".example"}}
 FILES = ["README.md", "CHANGELOG.md", "start.sh", "config/config.example.php",
-         "scripts/workspace-api.py", "scripts/cache-dns.php", "scripts/reset-admin-password.php",
-         "scripts/check-domain-operations.php", "scripts/generate-health-report.php",
+         "scripts/workspace-api.py", "scripts/reset-admin-password.php", "scripts/migrate-ip-assets.php",
+         "scripts/generate-screen-report.php",
          "scripts/check-public-docs.py", "scripts/package-release.py"]
 REVIEWED_SCREENSHOTS = {"public/assets/screenshots/login.png", "public/assets/screenshots/dashboard.png", "public/assets/screenshots/domains.png"}
 
@@ -52,7 +52,7 @@ def build_release(root, output_dir):
     if output == public or public in output.parents:
         raise ValueError("Release archives must be stored outside public/")
     subprocess.run([sys.executable, str(root / "scripts/check-public-docs.py")], cwd=root, check=True, capture_output=True)
-    version_source = (root / "app/services/AssetSnapshot.php").read_text()
+    version_source = (root / "app/services/ApiDescriptionService.php").read_text()
     match = re.search(r"public const VERSION = '([0-9]+\.[0-9]+\.[0-9]+)'", version_source)
     if not match:
         raise ValueError("Release version is missing")

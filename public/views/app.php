@@ -1,11 +1,13 @@
 <?php
-// Version each independent asset so deployments cannot mix old and new modules.
+/**
+ * 登录壳（/ 与所有未匹配页面）：首次初始化 + 登录，成功后跳转 /screen。
+ * 管理能力在独立页面（/screen 大屏、/settings 设置、/calendar 日历），本壳只负责进入。
+ */
 $assetUrl = static function (string $path): string {
     return $path . '?v=' . filemtime(PUBLIC_DIR . $path);
 };
-$styles = ['app', 'components', 'layout', 'health', 'domains', 'relations', 'filters', 'settings', 'desktop'];
-$scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard', 'domains', 'dns-changes', 'records', 'dns-history', 'accounts',
-    'asset-links', 'health', 'trends', 'relationship-graph', 'relations', 'domain-details', 'workspace-ui', 'settings', 'maintenance', 'cleanup', 'plans', 'prompts', 'setup', 'login-promo', 'calendar', 'login', 'app'];
+$styles = ['app', 'components', 'layout'];
+$scripts = ['ui', 'cache', 'core', 'setup', 'login', 'app'];
 ?>
 <!DOCTYPE html>
 <html lang="zh-CN">
@@ -13,7 +15,7 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#f5f6f2">
-    <title>资产工作台 · Asset Workspace</title>
+    <title>资产大屏 · 登录</title>
 <?php foreach ($styles as $style): ?>
     <link rel="stylesheet" href="<?= $assetUrl('/assets/css/' . $style . '.css') ?>">
 <?php endforeach; ?>
@@ -21,47 +23,19 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
 <body>
 <svg class="icon-library" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
     <symbol id="icon-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1.7"/><rect x="14" y="3" width="7" height="7" rx="1.7"/><rect x="3" y="14" width="7" height="7" rx="1.7"/><rect x="14" y="14" width="7" height="7" rx="1.7"/></symbol>
-    <symbol id="icon-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><ellipse cx="12" cy="12" rx="4" ry="9"/><path d="M3 12h18M5 6.5h14M5 17.5h14"/></symbol>
-    <symbol id="icon-server" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="7" rx="2"/><rect x="3" y="14" width="18" height="7" rx="2"/><path d="M7 6.5h.01M7 17.5h.01M12 6.5h5M12 17.5h5"/></symbol>
-    <symbol id="icon-link" viewBox="0 0 24 24"><path d="m10 13 4-4M8.5 15.5l-1 1a4.25 4.25 0 0 1-6-6l4-4a4.25 4.25 0 0 1 6 0m1 2 1-1a4.25 4.25 0 0 1 6 6l-4 4a4.25 4.25 0 0 1-6 0" transform="translate(1 0)"/></symbol>
-    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M5.6 7a7.5 7.5 0 0 1 12.7-2L20 7M4 17l1.7 2A7.5 7.5 0 0 0 18.4 17"/></symbol>
-    <symbol id="icon-pulse" viewBox="0 0 24 24"><path d="M2 12h5l3-8 4 16 3-8h5"/></symbol>
-    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/></symbol>
     <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5"/></symbol>
-    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
-    <symbol id="icon-alert" viewBox="0 0 24 24"><path d="M12 3.5 2.8 19.5h18.4L12 3.5Z"/><path d="M12 10v4.5m0 3h.01"/></symbol>
-    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M4 20v-7m5 7V4m5 16v-10m5 10V8"/><path d="M2.5 20h19"/></symbol>
-    <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="5" y="11" width="14" height="9" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4m-4 4v2"/></symbol>
 </svg>
 <?php require __DIR__ . '/setup.php'; ?>
 
 <div id="login-view" class="view hidden">
     <div class="login-cosmos" aria-hidden="true"><div class="login-stars"></div><div class="login-orbit login-orbit-one"></div><div class="login-orbit login-orbit-two"></div><div class="login-beam"></div></div>
     <main class="login-shell">
-    <section class="login-promo" aria-label="产品介绍">
-        <div class="promo-brand"><img src="/assets/img/asset-workspace-logo.svg" alt=""><span>资产工作台<small>ASSET WORKSPACE</small></span></div>
-        <div class="promo-slides" id="promo-slides">
-            <article class="promo-slide promo-slide-overview" data-promo-slide="0">
-                <div class="promo-copy"><p class="promo-kicker"><span>01 / 03</span> YOUR DIGITAL ASSETS, IN VIEW</p><h2>让每一份资产<br><em>都清晰可见。</em></h2><p>域名、IP、解析与运行状态，在同一个工作空间里，从容掌握。</p><div class="promo-tags"><span>域名管理</span><span>IP 台账</span><span>状态检查</span></div></div>
-                <div class="promo-art promo-art-orbit" aria-hidden="true"><div class="art-halo"></div><div class="art-ring ring-one"></div><div class="art-ring ring-two"></div><div class="art-core"><img src="/assets/img/asset-workspace-logo.svg" alt=""></div><div class="art-node node-one"><b>DOMAIN</b><span>域名资产</span></div><div class="art-node node-two"><b>IP ASSET</b><span>网络资产</span></div><div class="art-node node-three"><b>DNS</b><span>解析记录</span></div><i class="art-dot dot-one"></i><i class="art-dot dot-two"></i></div>
-            </article>
-            <article class="promo-slide promo-slide-relations" data-promo-slide="1" hidden>
-                <div class="promo-copy"><p class="promo-kicker"><span>02 / 03</span> CONNECTIONS THAT MAKE SENSE</p><h2>从资产到关系，<br><em>一眼看懂。</em></h2><p>连接域名、IP 与网站信息，让分散的线索汇成完整的资产视图。</p><div class="promo-tags"><span>关系图谱</span><span>用途备注</span><span>快速检索</span></div></div>
-                <div class="promo-art promo-art-map" aria-hidden="true"><svg viewBox="0 0 500 360" fill="none"><path d="M250 180 95 85M250 180 405 87M250 180 84 281M250 180 411 276M95 85 405 87M84 281 411 276" stroke="#66dfdd" stroke-opacity=".35" stroke-width="1.5" stroke-dasharray="5 8"/><circle cx="250" cy="180" r="78" stroke="#76e8db" stroke-opacity=".18"/><circle cx="250" cy="180" r="51" fill="#123a4e" stroke="#7be2d4" stroke-opacity=".7"/><circle cx="250" cy="180" r="8" fill="#9ff6e5"/><circle cx="95" cy="85" r="8" fill="#77dcd3"/><circle cx="405" cy="87" r="8" fill="#849dff"/><circle cx="84" cy="281" r="8" fill="#849dff"/><circle cx="411" cy="276" r="8" fill="#77dcd3"/></svg><div class="map-label map-a">DOMAIN <strong>域名</strong></div><div class="map-label map-b">IP ASSET <strong>IP 资产</strong></div><div class="map-label map-c">WEBSITE <strong>网站</strong></div><div class="map-label map-d">DNS <strong>解析</strong></div></div>
-            </article>
-            <article class="promo-slide promo-slide-health" data-promo-slide="2" hidden>
-                <div class="promo-copy"><p class="promo-kicker"><span>03 / 03</span> CLARITY FOR EVERY CHECK</p><h2>状态有迹可循，<br><em>决策更有底气。</em></h2><p>按需检查域名与 IP，留存结果与时间，让每一次维护更有依据。</p><div class="promo-tags"><span>按需检查</span><span>结果留存</span><span>集中查看</span></div></div>
-                <div class="promo-art promo-art-health" aria-hidden="true"><div class="health-grid"></div><div class="health-card"><div class="health-card-head"><span>ASSET HEALTH</span><span class="health-live">● CHECK</span></div><div class="health-number">清晰<span> / 可追溯</span></div><svg viewBox="0 0 320 100" fill="none"><path d="M0 72H58L78 52 99 70 130 29 154 60 181 45 204 54 238 18 264 35 320 12" stroke="#88f0df" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M0 72H58L78 52 99 70 130 29 154 60 181 45 204 54 238 18 264 35 320 12V100H0Z" fill="#70e6d7" fill-opacity=".09"/></svg><div class="health-card-foot"><span>DOMAIN</span><span>IP</span><span>DNS</span></div></div></div>
-            </article>
-        </div>
-        <div class="promo-bottom"><div class="promo-selector" role="group" aria-label="切换宣传海报"><button type="button" data-promo-select="0" aria-pressed="true"><span>01</span> 资产总览</button><button type="button" data-promo-select="1" aria-pressed="false"><span>02</span> 资产关系</button><button type="button" data-promo-select="2" aria-pressed="false"><span>03</span> 状态检查</button></div><span class="promo-caption">DESIGNED FOR CLARITY <i>✳</i></span></div>
-    </section>
     <div class="login-card">
         <div class="login-card-top"><span>SECURE ACCESS</span><span class="login-status"><i></i> SYSTEM ONLINE</span></div>
         <div class="login-logo"><img src="/assets/img/asset-workspace-logo.svg" alt=""></div>
         <p class="eyebrow">ASSET WORKSPACE</p>
-        <h1>资产工作台</h1>
-        <p class="login-sub">把域名、IP 与运行状态放在一起。</p>
+        <h1>资产大屏</h1>
+        <p class="login-sub">域名与 IP 资产，一屏掌握。</p>
         <form id="login-form" autocomplete="on">
             <label for="login-user">账号</label>
             <input type="text" id="login-user" autocomplete="username" required autofocus placeholder="输入管理账号">
@@ -83,284 +57,8 @@ $scripts = ['ui', 'cache', 'core', 'asset-view-stats', 'filter-tabs', 'dashboard
     </main>
 </div>
 
-<div id="app-view" class="view hidden">
-    <aside class="sidebar" id="workspace-sidebar">
-        <a class="brand" href="/" aria-label="资产工作台首页">
-            <span class="brand-mark"><img src="/assets/img/asset-workspace-logo.svg" alt=""></span>
-            <span>资产工作台<small>ASSET WORKSPACE</small></span>
-        </a>
-        <p class="nav-caption">工作空间</p>
-        <nav class="nav-tabs" id="nav-tabs" aria-label="主导航">
-            <button class="tab-btn active" data-tab="dashboard"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>健康看板</span></button>
-            <button class="tab-btn" data-tab="domains"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><span>域名管理</span></button>
-            <button class="tab-btn" data-tab="ips"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><span>IP 资产</span></button>
-            <button class="tab-btn" data-tab="plans"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg><span>改进计划</span></button>
-            <button class="tab-btn" data-tab="prompts"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg><span>提示词库</span></button>
-            <button class="tab-btn" data-tab="settings"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><span>产品设置</span></button>
-        </nav>
-        <p class="nav-caption">更多视图</p>
-        <p class="nav-hint muted">问题中心、趋势、关系图与云账号<br>从看板卡片与资产行内跳转进入</p>
-        <div class="sidebar-note"><span class="sidebar-note-line"></span><strong>看清资产，也看清状态。</strong><p>域名与 IP 统一归档<br>每一次检查都有迹可循</p></div>
-        <div class="sidebar-foot"><span class="workspace-dot"></span> 统一资产管理 <span id="dev-mode-badge" class="badge b-amber hidden" title="开发免登录模式：仅回环生效，删除 config/dev-unlock.flag 恢复登录">DEV</span> <span class="version-tag">V1</span></div>
-    </aside>
-    <header class="topbar">
-        <div class="topbar-inner">
-            <div class="topbar-start"><button id="sidebar-toggle" class="btn btn-icon shell-toggle" type="button" aria-label="收起侧栏" aria-expanded="true" aria-controls="workspace-sidebar" title="收起侧栏"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M9 4v16m7-11-3 3 3 3"/></svg></button><div class="breadcrumb">工作空间 <span>/</span> <strong id="page-title">健康看板</strong></div></div>
-            <div class="topbar-right"><button type="button" id="bg-tasks-pill" class="btn btn-ghost btn-sm hidden" title="在服务器后台执行，关闭浏览器也会继续"></button><button type="button" id="calendar-clock" class="calendar-clock" title="打开检查日历" aria-label="打开检查日历"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M7 3v4m10-4v4M3 10h18"/></svg><time id="calendar-clock-time"></time></button><div class="display-density" role="group" aria-label="显示密度"><button type="button" data-density="comfortable" aria-pressed="true">舒适</button><button type="button" data-density="compact" aria-pressed="false">紧凑</button></div><span class="user-avatar" aria-hidden="true">A</span><span id="current-user" class="muted">管理账号</span><button id="logout-btn" class="btn btn-ghost btn-sm">退出</button></div>
-        </div>
-    </header>
-
-    <main class="container" id="main-content">
-        <section id="view-dashboard" class="inventory-page tab-view" aria-labelledby="dashboard-title">
-            <div class="page-head dashboard-head">
-                <div><p class="eyebrow">WORKSPACE OVERVIEW</p><h1 id="dashboard-title">健康看板<span class="heading-dot">.</span> <span id="health-count" class="count-tag">加载中</span></h1><p class="muted" id="dash-sub">正在获取资产与检查状态…</p></div>
-                <div class="head-actions">
-                    <button class="btn" data-open-health-stats>统计概况</button><button id="health-report" class="btn" title="生成可交给 AI 分析的健康报告">AI 分析</button><button id="health-refresh" class="btn btn-icon" aria-label="刷新看板" title="刷新看板"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button>
-                    <button id="sync-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg>同步域名</button>
-                    <button id="health-check-domains-all" class="btn">检查所有域名（含子域名）</button><button id="health-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查主域名与 IP</button><button id="health-background-btn" class="btn" title="在服务器后台执行全量检查（不含子域名），关闭页面也会继续，完成后自动刷新">转后台执行</button>
-                </div>
-            </div>
-            <div id="dash-problem-strip" class="dash-problem-strip hidden" role="region" aria-label="待处理问题"></div>
-            <div class="dashboard-links">
-                <button type="button" class="dash-link-card" data-goto-tab="issues" aria-label="进入问题中心">
-                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-alert"/></svg>问题中心<em class="dash-link-arrow" aria-hidden="true">→</em></span>
-                    <strong id="dash-issues-count">加载中</strong>
-                    <span class="muted" id="dash-issues-sub">正在汇总待处理问题…</span>
-                </button>
-                <button type="button" class="dash-link-card" data-goto-tab="trends" aria-label="进入检查趋势">
-                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-chart"/></svg>近 30 天检查趋势<em class="dash-link-arrow" aria-hidden="true">→</em></span>
-                    <strong id="dash-trend-checks">—</strong>
-                    <span class="muted" id="dash-trend-summary">正在加载趋势…</span>
-                </button>
-                <button type="button" class="dash-link-card" data-goto-tab="https" aria-label="进入 HTTPS 跟进">
-                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-lock"/></svg>HTTPS 跟进<em class="dash-link-arrow" aria-hidden="true">→</em></span>
-                    <strong id="dash-https-count">—</strong>
-                    <span class="muted" id="dash-https-sub">证书与 HTTPS 可达性专项</span>
-                </button>
-                <button type="button" class="dash-link-card" data-goto-tab="relations" aria-label="进入资产关系">
-                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-link"/></svg>资产关系<em class="dash-link-arrow" aria-hidden="true">→</em></span>
-                    <strong>域名 ↔ IP</strong>
-                    <span class="muted">承载关系与影响范围</span>
-                </button>
-                <button type="button" class="dash-link-card" data-goto-tab="settings" data-goto-panel="accounts" aria-label="进入云账号配置">
-                    <span class="dash-link-head"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg>云账号<em class="dash-link-arrow" aria-hidden="true">→</em></span>
-                    <strong id="dash-accounts-count">—</strong>
-                    <span class="muted">在产品设置中维护连接</span>
-                </button>
-            </div>
-            <div class="asset-type-tabs" role="group" aria-label="健康看板资产类型"><button type="button" data-health-type="domain" aria-pressed="true">主域名 <b id="health-type-domain-count">0</b></button><button type="button" data-health-type="ip" aria-pressed="false">IP / 服务器 <b id="health-type-ip-count">0</b></button></div><div id="health-overview" class="asset-progress" aria-label="所选资产检查统计"></div><div id="health-progress-slot"></div><div id="health-progress" class="health-progress hidden" role="status" aria-live="polite"><div><span class="running-dot"></span><strong id="health-progress-text">正在检查资产…</strong></div><div class="health-progress-track"><div id="health-progress-fill"></div></div></div>
-            <div id="health-list-panel" role="region" aria-label="资产列表" data-panel-group="health">
-            <section class="asset-panel" aria-labelledby="asset-list-title">
-                <div class="panel-heading"><div><h2 id="asset-list-title">资产健康状态 </h2><p class="muted">从一个入口查看域名与 IP，快速定位需要关注的资产。</p></div></div>
-                <input type="hidden" id="health-kind" value="domain"><div class="filters health-filters unified-filters">
-                    <button type="button" class="btn" data-open-filter="health-filter-options">筛选</button><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="health-query" aria-label="搜索资产" placeholder="搜索域名、IP 或资产名称"></label><div id="health-filter-options" class="inventory-filter-options hidden">
-                    <select id="health-status" aria-label="筛选检查状态"><option value="">全部检查状态</option><option value="healthy">正常</option><option value="unhealthy">异常</option><option value="stale">结果已过期</option><option value="unchecked">未检查</option></select>
-                </div></div>
-                <div class="health-selection-bar hidden"><span id="health-selected-count">未选择域名</span><button class="btn btn-sm btn-primary" id="health-to-relations" disabled>查看选中域名关系图</button><button class="btn btn-sm" id="health-selection-clear">清除选择</button></div><div class="table-wrap"><table id="health-table"><thead><tr><th><input type="checkbox" id="health-select-all" aria-label="选择当前结果中的域名"></th><th>资产</th><th>类型与来源</th><th>检查状态</th><th>检查摘要</th><th>上次检查</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载资产…</td></tr></tbody></table></div>
-                <div id="health-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-grid"/></svg><strong>暂无匹配的资产</strong><p>调整筛选条件，或先同步域名、添加 IP 资产。</p></div>
-                <div class="panel-caption"><span class="info-dot">i</span> 检查结果反映探测时的网络状态；未检查与结果过期的资产不会计为正常。</div>
-            </section>
-            </div>
-            <div id="health-summary-panel" class="hidden" role="region" aria-label="健康统计" data-panel-group="health">
-            <div id="health-dns-toolbar" class="inventory-toolbar"><div id="dns-inventory-summary" class="muted">子域名与 DNS 快照：读取中…</div><button class="btn btn-sm" id="dns-cache-missing">缓存尚未读取的 DNS</button><span id="dns-cache-progress" class="muted" role="status"></span></div>
-            <div id="health-stats" class="health-stats" aria-live="polite">
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-                <div class="hc-stat skeleton-card"><span class="skeleton skeleton-label"></span><span class="skeleton skeleton-number"></span><span class="skeleton skeleton-caption"></span></div>
-            </div>
-            <section class="health-distribution" aria-label="资产健康分布"><div class="distribution-heading"><span class="section-kicker">健康分布</span><span class="muted">以最近一次检查结果为准</span></div><div id="health-status-bar" class="health-status-bar"><span class="health-bar-empty" title="等待检查数据"></span></div></section>
-            </div>
-            <div id="health-domains-panel" class="hidden" role="region" aria-label="域名统计与同步" data-panel-group="health">
-            <div class="section-heading"><h2>域名资产概况</h2><span class="muted">注册状态与到期提醒</span></div>
-            <div id="stats-grid" class="stats-grid compact-stats"></div>
-            <div class="two-col supplementary-grid"><section class="panel"><div class="panel-title"><h3>账号资产分布</h3><span class="panel-meta">DOMAINS</span></div><div id="provider-dist"><p class="muted">正在加载…</p></div></section><section class="panel"><div class="panel-title"><h3>最近同步</h3><span class="panel-meta">ACTIVITY</span><div class="maintenance-actions"><button class="btn btn-sm" id="recent-sync-copy" title="复制最近一次同步的账号结果与错误，便于排查或粘贴给 AI">复制日志</button></div></div><div id="recent-sync"><p class="muted">正在加载…</p></div></section></div>
-            </div>
-        </section>
-
-        <section id="view-issues" class="inventory-page tab-view hidden" aria-labelledby="issues-page-title">
-            <div class="page-head">
-                <div><p class="eyebrow">ISSUE CENTER</p><h1 id="issues-page-title">问题中心<span class="heading-dot">.</span> <span id="issues-count" class="count-tag">加载中</span></h1></div>
-                <div class="head-actions"><button id="issues-refresh" class="btn btn-icon" type="button" aria-label="刷新问题清单" title="刷新问题清单"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button><button type="button" class="btn btn-primary" id="issues-check-all"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查全部问题</button></div>
-            </div>
-            <div id="issues-progress-slot"></div>
-            <section class="asset-panel" id="issues-panel" aria-labelledby="issues-title">
-                <div class="trend-heading"><div><h2 id="issues-title">待处理问题</h2><p class="muted" id="issues-sub">正在汇总待处理问题…</p></div><div class="trend-actions" id="issue-filters" role="group" aria-label="问题筛选"><button type="button" class="domain-filter-tab" data-issue-filter="all" aria-pressed="true">全部 <b id="issues-total">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="unhealthy" aria-pressed="false">HTTP 异常 <b id="issues-unhealthy">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="stale" aria-pressed="false">结果过时 <b id="issues-stale">0</b></button><button type="button" class="domain-filter-tab" data-issue-filter="expiring" aria-pressed="false">即将到期 <b id="issues-expiring">0</b></button></div></div>
-                <div id="issues-list" class="table-wrap"><p class="muted">正在加载问题清单…</p></div>
-                <p class="trend-note"><span class="info-dot">i</span> 可达性判定只看 HTTP 访问，HTTPS 证书与 HTTPS 可达性不在这里展示，请在「HTTPS 跟进」页单独跟进。AI 与脚本可通过 <code>GET /api/issues</code> 与 <code>GET /api/https-review</code> 分别读取两份清单。</p>
-            </section>
-        </section>
-
-        <section id="view-trends" class="inventory-page tab-view hidden" aria-labelledby="trends-page-title">
-            <div class="page-head">
-                <div><p class="eyebrow">CHECK TRENDS</p><h1 id="trends-page-title">检查趋势<span class="heading-dot">.</span></h1></div>
-                <div class="head-actions"><button class="btn" id="trend-refresh" type="button">刷新趋势</button></div>
-            </div>
-            <section class="asset-panel" id="trend-panel" aria-labelledby="trend-title">
-                <div class="trend-heading"><div><h2 id="trend-title">近 30 天检查趋势</h2><p class="muted" id="trend-summary">检查趋势展示最近 30 天逐项检查的分布与延迟。</p></div><div class="trend-actions"><span class="trend-legend"><i class="trend-dot" style="background:var(--green)"></i>正常</span><span class="trend-legend"><i class="trend-dot" style="background:var(--red)"></i>异常</span></div></div>
-                <div class="trend-body"><div id="health-trend-chart" role="img" aria-label="最近 30 天检查趋势图，加载中"><p class="muted">正在加载趋势…</p></div><details class="trend-table"><summary>查看每日明细</summary><div class="table-wrap"><table id="trend-table"><thead><tr><th>日期</th><th>检查</th><th>正常</th><th>异常</th><th>完整检查</th><th>平均延迟</th></tr></thead><tbody><tr><td colspan="6">尚未加载</td></tr></tbody></table></div></details></div>
-                <p class="trend-note"><span class="info-dot">i</span> 趋势来自服务器缓存证据；AI 与监控平台可通过 <code>GET /api/trends</code> 与 <code>GET /api/metrics</code>（Prometheus 格式）读取同一份数据。</p>
-            </section>
-        </section>
-
-        <section id="view-https" class="inventory-page tab-view hidden" aria-labelledby="https-page-title">
-            <div class="page-head">
-                <div><p class="eyebrow">HTTPS FOLLOW-UPS</p><h1 id="https-page-title">HTTPS 跟进<span class="heading-dot">.</span> <span id="https-count" class="count-tag">加载中</span></h1></div>
-                <div class="head-actions"><button id="https-refresh" class="btn btn-icon" type="button" aria-label="刷新 HTTPS 跟进清单" title="刷新 HTTPS 跟进清单"><svg class="icon" aria-hidden="true"><use href="#icon-refresh"/></svg></button></div>
-            </div>
-            <section class="asset-panel" id="https-panel" aria-labelledby="https-title">
-                <div class="trend-heading"><div><h2 id="https-title">证书与 HTTPS 可达性</h2><p class="muted">不影响可达性判定：HTTP 正常的域名在这里只做证书与 HTTPS 专项跟进。</p></div><div class="trend-actions" id="https-filters" role="group" aria-label="HTTPS 跟进筛选"><button type="button" class="domain-filter-tab" data-https-filter="all" aria-pressed="true">全部 <b id="https-total">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="fail" aria-pressed="false">HTTPS 异常 <b id="https-fail">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="unknown" aria-pressed="false">未确认 <b id="https-unknown">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="stale" aria-pressed="false">证据过时 <b id="https-stale">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="pending" aria-pressed="false">待复检 <b id="https-pending">0</b></button><button type="button" class="domain-filter-tab" data-https-filter="expiring" aria-pressed="false">证书临期 <b id="https-expiring">0</b></button></div></div>
-                <div id="https-list" class="table-wrap"><p class="muted">正在加载 HTTPS 跟进清单…</p></div>
-                <p class="trend-note"><span class="info-dot">i</span> 可达性判定只看 HTTP；本页汇总 HTTPS 证书验证失败、HTTPS 连接异常与尚未确认的域名，检查通过后自动移出。AI 与脚本可通过 <code>GET /api/https-review</code> 读取同一份清单。</p>
-            </section>
-        </section>
-
-        <section id="view-calendar" class="tab-view hidden" aria-labelledby="calendar-title">
-            <div class="page-head calendar-page-head"><div><p class="eyebrow">A MOMENT FOR YOURSELF</p><h1 id="calendar-title">日历与打卡<span class="heading-dot">.</span></h1><p class="muted">记录今天的心情，也为下一步留一点空间。</p></div></div>
-            <div class="calendar-layout">
-                <section class="panel calendar-panel" aria-label="月历">
-                    <div class="calendar-heading"><button type="button" class="btn" id="calendar-prev" aria-label="上个月">‹</button><h2 id="calendar-month"></h2><button type="button" class="btn" id="calendar-next" aria-label="下个月">›</button><button type="button" class="btn btn-sm" id="calendar-today">今天</button></div>
-                    <div class="calendar-weekdays"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div><div class="calendar-grid" id="calendar-grid"></div>
-                    <div class="calendar-legend"><span><i class="calendar-legend-dot"></i> 已打卡</span><span>数字表示待办与检查条数</span></div>
-                </section>
-                <section class="panel calendar-day" aria-labelledby="calendar-day-title">
-                    <div class="calendar-day-header"><div><p class="eyebrow">YOUR DAILY SPACE</p><h2 id="calendar-day-title"></h2><p id="calendar-day-caption" class="muted"></p></div><span class="calendar-day-mark" aria-hidden="true">✳</span></div>
-                    <div class="calendar-tabs" role="tablist" aria-label="日历内容"><button type="button" role="tab" id="calendar-tab-daily" aria-controls="calendar-panel-daily" aria-selected="true" tabindex="0" data-calendar-tab="daily">日常记录</button><button type="button" role="tab" id="calendar-tab-overview" aria-controls="calendar-panel-overview" aria-selected="false" tabindex="-1" data-calendar-tab="overview">资产概况</button><button type="button" role="tab" id="calendar-tab-runs" aria-controls="calendar-panel-runs" aria-selected="false" tabindex="-1" data-calendar-tab="runs">检查汇总</button><button type="button" role="tab" id="calendar-tab-events" aria-controls="calendar-panel-events" aria-selected="false" tabindex="-1" data-calendar-tab="events">检查明细</button></div>
-                    <p class="error-text hidden" id="calendar-error" role="alert"></p>
-                    <div id="calendar-panel-daily" role="tabpanel" aria-labelledby="calendar-tab-daily" data-calendar-panel="daily">
-                        <section class="calendar-checkin"><div class="calendar-section-title"><div><span class="calendar-section-kicker">CHECK IN</span><h3>打卡记录</h3></div><span class="calendar-section-number">01</span></div><div id="calendar-checkin-saved"></div>
-                            <form id="calendar-checkin-form"><p class="calendar-checkin-prompt">今天的心情怎么样？</p><div class="calendar-moods" role="radiogroup" aria-label="选择心情"><label><input type="radio" name="mood" value="great" required><span><b aria-hidden="true">😄</b><small>很开心</small></span></label><label><input type="radio" name="mood" value="good"><span><b aria-hidden="true">🙂</b><small>不错</small></span></label><label><input type="radio" name="mood" value="calm"><span><b aria-hidden="true">😌</b><small>平静</small></span></label><label><input type="radio" name="mood" value="tired"><span><b aria-hidden="true">😮‍💨</b><small>有点累</small></span></label><label><input type="radio" name="mood" value="low"><span><b aria-hidden="true">🥺</b><small>低落</small></span></label></div><label class="calendar-note-label" for="calendar-checkin-text">写下一句话 <span>给今天留个小小的注脚</span></label><textarea id="calendar-checkin-text" name="text" rows="3" maxlength="280" required placeholder="今天想记录什么？"></textarea><div class="calendar-checkin-actions"><span>最多 280 字</span><button type="button" id="calendar-checkin-cancel" class="btn btn-sm hidden">取消</button><button type="submit" id="calendar-checkin-submit" class="btn btn-primary">记录此刻</button></div></form>
-                        </section>
-                        <section class="calendar-todo-section"><div class="calendar-section-title"><div><span class="calendar-section-kicker">TO DO &amp; NOTES</span><h3>待办与记录</h3></div><span class="calendar-section-number">02</span></div><div id="calendar-tasks"></div><form id="calendar-task-form" class="settings-form"><label>标题<input name="title" required maxlength="120" placeholder="例如：检查域名续费"></label><label>描述<textarea name="description" rows="3" maxlength="2000" placeholder="补充说明、记录或处理步骤"></textarea></label><div class="calendar-form-actions"><button type="submit" class="btn btn-primary">保存待办</button><button type="button" class="btn hidden" id="calendar-cancel">取消编辑</button></div></form></section>
-                    </div>
-                    <div id="calendar-panel-overview" role="tabpanel" aria-labelledby="calendar-tab-overview" data-calendar-panel="overview" hidden><h3>当前资产状态</h3><div id="calendar-overview"></div></div>
-                    <div id="calendar-panel-runs" role="tabpanel" aria-labelledby="calendar-tab-runs" data-calendar-panel="runs" hidden><h3>完整检查汇总</h3><div id="calendar-runs"></div></div>
-                    <div id="calendar-panel-events" role="tabpanel" aria-labelledby="calendar-tab-events" data-calendar-panel="events" hidden><h3>当天检查明细</h3><div id="calendar-events"></div></div>
-                </section>
-            </div>
-        </section>
-
-        <section id="view-relations" class="inventory-page tab-view hidden" aria-labelledby="relations-title">
-            <div class="page-head"><div><p class="eyebrow">ASSET RELATIONSHIPS</p><h1 id="relations-title">域名与服务器<span class="heading-dot">.</span> <span class="count-tag" id="rel-count"></span></h1><p class="muted">从解析线索到确认绑定，一眼看清承载关系与影响范围。</p></div><div class="head-actions"><button class="btn" data-rel-open="graph">资产关联图</button><button class="btn" data-rel-open="summary">关联统计</button><button class="btn" id="rel-refresh">刷新</button></div></div>
-            <div class="asset-type-tabs" role="group" aria-label="关联资产类型"><button type="button" data-rel-type="domain" aria-pressed="true">主域名 <b id="rel-type-domain-count">0</b></button><button type="button" data-rel-type="ip" aria-pressed="false">IP / 服务器 <b id="rel-type-ip-count">0</b></button></div><div id="rel-type-overview" class="asset-progress" aria-label="所选关联资产检查统计"></div>
-            <div id="rel-scope-note" class="rel-scope-note hidden"></div>
-            <p id="rel-cache-note" class="muted" role="status">正在读取文件缓存…</p>
-            <div id="rel-summary-panel" class="hidden" role="region" aria-label="关联统计">
-            <div id="rel-summary" class="rel-summary"></div>
-            <div class="two-col rel-charts"><section class="panel"><h2>当前类型关联覆盖率</h2><div id="rel-coverage"></div></section><section class="panel"><h2>关联数量排行 <small class="muted">点击查看详情</small></h2><div id="rel-ranking"></div></section></div>
-            </div>
-            <section id="rel-results-panel" class="asset-panel rel-panel"><div class="panel-heading"><div><h2><span id="rel-result-title">关联明细表</span> </h2><p class="muted">实线：人工确认绑定　虚线：DNS 解析关联（可能是 CDN）</p></div></div>
-            <div class="filters unified-filters"><button type="button" class="btn" data-open-filter="rel-filter-options">筛选</button><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="rel-query" aria-label="搜索关联资产" placeholder="搜索域名、IP、服务器名称或备注"></label><div id="rel-filter-options" class="inventory-filter-options hidden"><select id="rel-ip" aria-label="按 IP 查询"><option value="">全部 IP / 服务器</option></select>
-            <div id="rel-tabs" class="rel-quick-tabs" role="tablist" aria-label="关联快捷查询"><button role="tab" aria-selected="true" data-rel-tab="all">全部</button><button role="tab" aria-selected="false" data-rel-tab="confirmed">已确认绑定</button><button role="tab" aria-selected="false" data-rel-tab="dns">仅 DNS 关联</button><button role="tab" aria-selected="false" data-rel-tab="unlinked">未关联</button><button role="tab" aria-selected="false" data-rel-tab="unhealthy">检查异常</button></div></div></div>
-            <div id="rel-graph-panel" class="hidden"><div id="rel-drilldown-note" class="rel-scope-note hidden"></div><div id="rel-graph" class="rel-graph" aria-label="域名和 IP 关系图"></div></div><div id="rel-table" class="table-wrap"></div>
-            <div id="rel-pagination" class="rel-pagination"><label class="muted">每页 <input type="number" id="rel-page-size" value="12" min="1" max="10000" aria-label="每页资产数量"></label><label class="muted"><input type="checkbox" id="rel-show-all"> 展示全部</label><button class="btn btn-sm" id="rel-fullscreen">全屏展示</button><button class="btn btn-sm" id="rel-prev">上一页</button><span id="rel-page" class="muted"></span><button class="btn btn-sm" id="rel-next">下一页</button></div>
-            <div class="panel-caption">点击节点查看详情；从详情可编辑资产、管理绑定或进入 DNS。绑定操作只更新台账。</div></section>
-        </section>
-
-        <section id="view-domains" class="inventory-page tab-view hidden" aria-labelledby="domains-title">
-            <div class="page-head"><div><p class="eyebrow">DOMAIN INVENTORY</p><h1 id="domains-title">域名管理<span class="heading-dot">.</span></h1><span class="count-tag" id="domains-sub">共 0 个域名</span><p class="muted" id="access-summary"></p></div><div class="head-actions"><button class="btn" data-open-domain-stats>域名统计</button><button id="access-check-btn" class="btn" title="探测全部域名能否访问"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>访问检测</button><button id="domain-add-btn" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>新增域名</button><button id="domains-sync-btn" class="btn btn-primary">立即同步</button></div></div>
-            <section class="asset-panel">
-                <div class="filters domain-filters">
-                    <label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="f-q" aria-label="搜索域名或备注" placeholder="搜索域名 / 备注…"></label><div id="domain-filter-options" class="domain-inline-filter-row" aria-label="域名筛选条件"><div class="domain-filter-group"><span class="domain-filter-label">云账号</span><input type="hidden" id="f-provider" value=""><div class="domain-filter-tabs" data-filter-tabs="f-provider" role="group" aria-label="云账号"></div></div>
-                    <div class="domain-filter-group"><span class="domain-filter-label">资产状态</span><input type="hidden" id="f-valid" value=""><div class="domain-filter-tabs" data-filter-tabs="f-valid" role="group" aria-label="资产状态"></div></div>
-                    <div class="domain-filter-group"><span class="domain-filter-label">到期时间</span><input type="hidden" id="f-expiring" value=""><div class="domain-filter-tabs" data-filter-tabs="f-expiring" role="group" aria-label="到期时间"></div></div>
-                    <div class="domain-filter-group"><span class="domain-filter-label">健康状态</span><input type="hidden" id="f-access" value=""><div class="domain-filter-tabs" data-filter-tabs="f-access" role="group" aria-label="健康状态"></div></div>
-                    <div class="domain-filter-group"><span class="domain-filter-label">排序</span><input type="hidden" id="f-sort" value="expire"><div class="domain-filter-tabs" data-filter-tabs="f-sort" role="group" aria-label="排序"></div></div>
-                </div></div>
-                <div class="health-selection-bar hidden"><span id="domain-selected-count">未选择域名</span><button class="btn btn-sm btn-primary" id="domains-to-relations" disabled>查看选中域名关系图</button><button class="btn btn-sm" id="domains-batch-ip" disabled title="把所选域名的 @ A 记录批量改为新 IP">批量改解析 IP</button><button class="btn btn-sm" id="domain-selection-clear">清除选择</button></div><div class="table-wrap"><table id="domains-table"><thead><tr><th><input type="checkbox" id="domain-select-all" aria-label="选择当前列表中的有效域名"></th><th>域名</th><th>云商</th><th>状态</th><th>到期时间</th><th>健康状态</th><th>备注</th><th>操作</th></tr></thead><tbody></tbody></table></div>
-                <div id="domains-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-globe"/></svg><strong>暂无域名数据</strong><p>同步云账号中的域名，或手动添加一条资产。</p></div>
-            </section>
-        </section>
-
-        <section id="view-ips" class="inventory-page tab-view hidden" aria-labelledby="ips-title">
-            <div class="page-head"><div><p class="eyebrow">IP INVENTORY</p><h1 id="ips-title">IP 资产<span class="heading-dot">.</span> <span id="ip-count" class="count-tag">加载中</span></h1><p class="muted">统一收录服务器与 DNS 发现的 IP，管理网站链接并检查 HTTP 访问状态。</p></div><div class="head-actions"><button id="ip-open-create" class="btn"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>添加 IP 资产</button><button id="ip-location-missing" class="btn">查询未缓存归属地</button><button id="ip-check-all" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-pulse"/></svg>检查全部 IP</button></div></div>
-            <div id="ip-progress-slot"></div><section class="asset-panel"><div class="panel-heading"><div><h2>IP 资产列表 </h2></div></div><div class="filters unified-filters ip-filters"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="ip-query" aria-label="搜索 IP 资产" placeholder="搜索名称、IP、备注、网站或关联域名"></label><div class="ip-filter-row" aria-label="IP 筛选条件"><input type="hidden" id="ip-version" value=""><input type="hidden" id="ip-status" value=""><div class="ip-filter-group" role="group" aria-label="地址类型"><span class="ip-filter-label">地址类型</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv4" data-color="tencent" aria-pressed="false">IPv4</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-version" data-value="IPv6" data-color="violet" aria-pressed="false">IPv6</button></div><div class="ip-filter-group" role="group" aria-label="IP 状态"><span class="ip-filter-label">IP 状态</span><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="healthy" data-color="healthy" aria-pressed="false">IP 正常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unhealthy" data-color="unhealthy" aria-pressed="false">IP 异常</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="stale" data-color="stale" aria-pressed="false">结果过时</button><button type="button" class="domain-filter-tab" data-ip-filter="ip-status" data-value="unchecked" aria-pressed="false">未检查</button></div></div></div><div class="table-wrap"><table id="ip-table"><thead><tr><th>名称与 IP</th><th>网站链接</th><th>用途与备注</th><th>关联域名</th><th>状态</th><th>检查时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="7" class="table-loading"><span class="loading-ring"></span>正在加载 IP 资产…</td></tr></tbody></table></div><div id="ip-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-server"/></svg><strong>还没有 IP 资产</strong><p>点击“添加 IP 资产”，或检查域名以发现其解析地址。</p></div><div class="panel-caption"><span class="info-dot">i</span> 归属地查询会将 IP 发送给 ipwho.is，结果为近似位置并缓存在服务器；可手动重新查询。HTTP 检查不跟随重定向，结果与时间保存在服务器。</div></section>
-        </section>
-
-        <section id="view-prompts" class="inventory-page tab-view hidden" aria-labelledby="prompts-title">
-            <div class="page-head"><div><p class="eyebrow">PROMPT LIBRARY</p><h1 id="prompts-title">提示词库<span class="heading-dot">.</span> <span id="prompts-count" class="count-tag">加载中</span></h1><p class="muted">提示词即文档：内容来自项目 <code>prompts/</code> 目录的 Markdown 文件，直接编辑文件即可调整，页面只读展示与复制。</p></div></div>
-            <section class="asset-panel"><div class="panel-heading"><div><h2>提示词</h2></div></div><div id="prompts-list" class="prompt-list"><div class="table-loading"><span class="loading-ring"></span>正在加载提示词库…</div></div><p id="prompts-error" class="error-text hidden" role="alert"></p></section>
-        </section>
-
-        <section id="view-plans" class="inventory-page tab-view hidden" aria-labelledby="plans-title">
-            <div class="page-head"><div><p class="eyebrow">IMPROVEMENT PLAN</p><h1 id="plans-title">改进计划<span class="heading-dot">.</span> <span id="plans-count" class="count-tag">加载中</span></h1><p class="muted">功能点逐条审核：通过后进入执行，AI 协助提出的计划与手动新增的都在这里跟踪。</p></div><div class="head-actions"><button id="plan-copy-active" class="btn" title="把执行中条目整理为纯文本简报，可直接粘贴给 AI 执行"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>复制执行中</button><button id="plan-open-create" class="btn btn-primary"><svg class="icon" aria-hidden="true"><use href="#icon-plus"/></svg>新增计划点</button></div></div>
-            <section class="asset-panel"><div class="panel-heading"><div><h2>计划条目</h2></div></div><div class="filters unified-filters plans-filters"><label class="search-field"><svg class="icon" aria-hidden="true"><use href="#icon-search"/></svg><input type="search" id="plan-search" aria-label="搜索计划点" placeholder="搜索标题、详情或审核意见"></label><select id="plan-status" aria-label="状态筛选"><option value="">全部</option><option value="proposed">待审核</option><option value="approved">已通过</option><option value="in_progress">执行中</option><option value="done">已完成</option><option value="rejected">已驳回</option></select></div><div class="table-wrap"><table id="plans-table"><thead><tr><th>计划点</th><th>优先级</th><th>来源</th><th>状态</th><th>更新时间</th><th>操作</th></tr></thead><tbody><tr><td colspan="6" class="table-loading"><span class="loading-ring"></span>正在加载改进计划…</td></tr></tbody></table></div><div id="plans-empty" class="empty-state hidden"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg><strong>没有匹配的计划条目</strong><p>换个筛选条件，或点击「新增计划点」。</p></div><div id="plan-pagination" class="plan-pagination hidden"><button class="btn btn-sm" id="plan-prev" type="button">上一页</button><span id="plan-page-info" class="muted"></span><button class="btn btn-sm" id="plan-next" type="button">下一页</button></div><p id="plans-error" class="error-text hidden" role="alert"></p></section>
-        </section>
-
-        <?php require __DIR__ . '/settings.php'; ?>
-        <footer class="workspace-footer"><span>资产工作台</span><span>每一项资产，都有清晰的状态。</span></footer>
-    </main>
-</div>
-<template id="ip-create-template">
-    <section class="modal ip-create-modal" role="dialog" aria-modal="true" aria-labelledby="ip-create-title">
-        <div class="modal-head"><h3 id="ip-create-title">添加 IP 资产</h3><button type="button" class="modal-close" aria-label="关闭添加 IP">×</button></div>
-        <form id="ip-add-form" class="ip-create-form">
-            <div class="modal-body"><div class="ip-add-form"><label for="ip-name">资产名称 <span class="muted">选填</span><input id="ip-name" type="text" placeholder="如：生产服务器 · 上海" maxlength="120"></label><label for="ip-address">IP 地址 <span class="required-dot">*</span><input id="ip-address" type="text" placeholder="IPv4 或 IPv6 地址" required spellcheck="false" autocomplete="off"></label><label for="ip-note" class="ip-note-field">用途与备注 <span class="muted">选填</span><textarea id="ip-note" rows="2" maxlength="2000" placeholder="记录服务器用途或维护说明"></textarea></label><fieldset class="asset-links-field"><legend>网站链接 <span class="muted">选填</span></legend><div id="ip-links-editor"></div></fieldset><p id="ip-add-error" class="error-text hidden" role="alert"></p></div></div>
-            <div class="modal-foot"><button type="button" class="btn" data-ip-cancel>取消</button><button id="ip-add-btn" class="btn btn-primary" type="submit">添加资产</button></div>
-        </form>
-    </section>
-</template>
-
-<template id="plan-form-template">
-    <section class="modal plan-form-modal" role="dialog" aria-modal="true" aria-labelledby="plan-form-title">
-        <div class="modal-head"><h3 id="plan-form-title">新增计划点</h3><button type="button" class="modal-close" aria-label="关闭计划表单">×</button></div>
-        <form id="plan-form">
-            <div class="modal-body"><div class="plan-form-fields">
-                <input type="hidden" id="plan-form-id" value="">
-                <label for="plan-form-title-input">标题 <span class="required-dot">*</span><input id="plan-form-title-input" type="text" maxlength="120" required placeholder="一句话说清这个功能点"></label>
-                <div class="plan-form-row">
-                    <select id="plan-form-priority" aria-label="优先级"><option value="high">高</option><option value="medium" selected>中</option><option value="low">低</option></select>
-                    <select id="plan-ai-model" aria-label="AI 模型"></select>
-                    <button type="button" id="plan-ai-suggest" class="btn" title="让 AI（智谱 GLM）改写详情，对比后决定是否采用"><svg class="icon" aria-hidden="true"><use href="#icon-arrow"/></svg>AI 建议</button>
-                </div>
-                <label for="plan-form-detail">详情（Markdown）<span class="muted">## 小节 · **加粗** · - 列表</span><textarea id="plan-form-detail" rows="10" maxlength="4000" placeholder="## 现状&#10;…&#10;&#10;## 方案&#10;…&#10;&#10;## 验收&#10;…"></textarea></label>
-                <div id="plan-ai-panel" class="plan-ai-panel hidden">
-                    <div class="plan-ai-head"><strong>AI 建议 <span class="muted" id="plan-ai-used-model"></span></strong><button type="button" class="btn btn-sm btn-link" id="plan-ai-close">关闭对比</button></div>
-                    <div class="plan-ai-compare">
-                        <div><h5>当前内容</h5><div class="plan-md" id="plan-ai-original"></div></div>
-                        <div><h5>建议内容</h5><div class="plan-md" id="plan-ai-suggestion"></div></div>
-                    </div>
-                    <div class="plan-ai-actions"><button type="button" class="btn btn-sm btn-primary" id="plan-ai-adopt">采用建议（替换详情，保存前可再改）</button><button type="button" class="btn btn-sm" id="plan-ai-regenerate">重新生成</button></div>
-                </div>
-                <p id="plan-form-error" class="error-text hidden" role="alert"></p>
-            </div></div>
-            <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-form-submit" class="btn btn-primary" type="submit">保存</button></div>
-        </form>
-    </section>
-</template>
-
-<template id="plan-detail-template">
-    <section class="modal plan-detail-modal" role="dialog" aria-modal="true" aria-labelledby="plan-detail-title">
-        <div class="modal-head"><h3 id="plan-detail-title"></h3><button type="button" class="modal-close" aria-label="关闭详情">×</button></div>
-        <div class="modal-body">
-            <p id="plan-detail-meta" class="plan-meta"></p>
-            <div id="plan-detail-content" class="plan-md"></div>
-            <p id="plan-detail-review" class="plan-note hidden"></p>
-            <p id="plan-detail-result" class="plan-note hidden"></p>
-            <p id="plan-detail-error" class="error-text hidden" role="alert"></p>
-        </div>
-        <div class="modal-foot" id="plan-detail-actions"><button type="button" class="btn" data-plan-close>关闭</button></div>
-    </section>
-</template>
-
-<template id="plan-review-template">
-    <section class="modal plan-review-modal" role="dialog" aria-modal="true" aria-labelledby="plan-review-title">
-        <div class="modal-head"><h3 id="plan-review-title">审核计划点</h3><button type="button" class="modal-close" aria-label="关闭审核">×</button></div>
-        <form id="plan-review-form">
-            <div class="modal-body"><div class="plan-form-fields">
-                <input type="hidden" id="plan-review-id" value="">
-                <input type="hidden" id="plan-review-decision" value="">
-                <p id="plan-review-target" class="muted"></p>
-                <label for="plan-review-note">审核意见 <span class="muted" id="plan-review-note-hint">选填，可点下方快捷理由多选拼接</span><textarea id="plan-review-note" rows="3" maxlength="500" placeholder="通过时可写补充要求；驳回时必填原因"></textarea></label>
-                <div class="plan-quick-notes" id="plan-quick-notes" aria-label="快捷理由"></div>
-                <p id="plan-review-error" class="error-text hidden" role="alert"></p>
-            </div></div>
-            <div class="modal-foot"><button type="button" class="btn" data-plan-cancel>取消</button><button id="plan-review-submit" class="btn btn-primary" type="submit">确认</button></div>
-        </form>
-    </section>
-</template>
+<!-- 已登录用户直接跳转 /screen；保留节点以兼容 setup.js / core.js 的显隐逻辑 -->
+<div id="app-view" class="view hidden"></div>
 
 <?php foreach ($scripts as $script): ?>
 <script src="<?= $assetUrl('/assets/js/' . $script . '.js') ?>"></script>

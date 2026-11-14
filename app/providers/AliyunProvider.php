@@ -263,4 +263,10 @@ class AliyunProvider extends CloudProvider
         $this->dns('DeleteDomainRecord', ['RecordId' => $recordId]);
         return true;
     }
+
+    public function setRecordStatus(string $domain, string $recordId, bool $paused): bool
+    {
+        $this->dns('SetDomainRecordStatus', ['RecordId' => $recordId, 'Status' => $paused ? 'Disable' : 'Enable']);
+        return true;
+    }
 }

@@ -94,7 +94,10 @@ function conditional_get(string $etag): void
 function asset_etag(string $query = ''): string
 {
     $parts = [WorkspaceData::revision(DATA_DIR), $query, (string) (int) (time() / 300)];
-    $extras = array_merge([DATA_DIR . '/ip_locations.json'], glob(DATA_DIR . '/cache/dns-*.json') ?: []);
+    $extras = array_merge(
+        [DATA_DIR . '/ip_assets.json', DATA_DIR . '/ip_locations.json'],
+        glob(DATA_DIR . '/cache/dns-*.json') ?: []
+    );
     foreach ($extras as $file) {
         $parts[] = is_file($file) ? (string) filemtime($file) : 'missing';
     }

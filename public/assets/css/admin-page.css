@@ -1,0 +1,362 @@
+/* 独立管理页（/settings、/calendar）共享基础：与大屏 screen.css 同一套深色设计语言。 */
+
+:root {
+    --bg: #0b1220;
+    --bg-soft: #101a2e;
+    --card: #0f1830;
+    --card-border: #1e2a44;
+    --line: #22304e;
+    --text: #dbe4f5;
+    --muted: #8b97b3;
+    --accent: #38bdf8;
+    --green: #34d399;
+    --amber: #fbbf24;
+    --red: #f87171;
+    --shadow: 0 8px 24px rgba(2, 6, 17, 0.55);
+    --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* hidden 属性优先于任何 display 设置（面板切换依赖它） */
+[hidden] { display: none !important; }
+
+html, body { min-height: 100%; }
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+    background:
+        radial-gradient(1200px 500px at 85% -10%, rgba(56, 189, 248, 0.08), transparent 60%),
+        radial-gradient(900px 420px at -10% 110%, rgba(52, 211, 153, 0.06), transparent 60%),
+        var(--bg);
+    color: var(--text);
+    font-size: 14px;
+    line-height: 1.6;
+}
+
+/* ---- 头部（全站统一：/screen、/settings、/calendar 同一套结构） ---- */
+
+.ap-head {
+    display: flex;
+    align-items: center;
+    gap: clamp(14px, 2vw, 34px);
+    flex-wrap: wrap;
+    padding: clamp(12px, 1.4vw, 22px) clamp(16px, 2.2vw, 40px);
+    border-bottom: 1px solid var(--card-border);
+    background: rgba(16, 26, 46, 0.55);
+    backdrop-filter: blur(8px);
+    position: sticky;
+    top: 0;
+    z-index: 20;
+}
+
+.ap-brand { display: flex; align-items: baseline; gap: 14px; flex-wrap: wrap; }
+
+.ap-brand h1 {
+    font-size: clamp(20px, 1.6vw + 8px, 34px);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    background: linear-gradient(92deg, #7dd3fc, #34d399);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    white-space: nowrap;
+}
+
+.ap-sub { color: var(--muted); font-size: clamp(12px, 0.5vw + 8px, 15px); }
+
+.ap-clock {
+    font-variant-numeric: tabular-nums;
+    font-size: clamp(18px, 1.2vw + 8px, 30px);
+    font-weight: 600;
+    color: var(--accent);
+    letter-spacing: 0.06em;
+}
+
+.ap-tools {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+    gap: clamp(10px, 1.2vw, 22px);
+    flex-wrap: wrap;
+}
+
+/* 头部导航：ghost 按钮风格（链接与按钮同款）；
+   header 直接子元素的导航右对齐（大屏的导航在 ap-tools 内不受影响） */
+.ap-nav { display: flex; gap: 8px; flex-wrap: wrap; }
+.ap-head > .ap-nav { margin-left: auto; }
+
+.ap-nav a, .ap-nav button {
+    display: inline-block;
+    background: var(--bg-soft);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 7px 14px;
+    font-size: 13px;
+    font-family: inherit;
+    text-decoration: none;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: color 0.15s, border-color 0.15s;
+}
+.ap-nav a:hover, .ap-nav button:hover { color: var(--text); border-color: var(--accent); }
+.ap-nav a.is-current {
+    color: #04121f;
+    background: linear-gradient(135deg, #38bdf8, #0284c7);
+    border-color: transparent;
+    font-weight: 700;
+}
+.ap-nav a.is-current:hover { color: #04121f; border-color: transparent; }
+
+.ap-cache { color: var(--muted); font-size: clamp(12px, 0.45vw + 8px, 14px); }
+.ap-cache.ap-stale { color: var(--amber); }
+
+.ap-switch {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    color: var(--muted);
+    cursor: pointer;
+    white-space: nowrap;
+    font-size: 13px;
+}
+.ap-switch input { accent-color: var(--accent); width: 15px; height: 15px; cursor: pointer; }
+
+/* ---- 主体 ---- */
+
+.ap-main {
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: clamp(16px, 2.5vw, 30px) clamp(14px, 2.5vw, 32px) 60px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+/* ---- 标签页 ---- */
+
+.ap-tabs { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.ap-tabs button {
+    background: var(--bg-soft);
+    color: var(--muted);
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    padding: 8px 16px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: color 0.15s, border-color 0.15s;
+}
+.ap-tabs button:hover { color: var(--text); }
+.ap-tabs button[aria-selected="true"] {
+    color: #04121f;
+    background: linear-gradient(135deg, #38bdf8, #0284c7);
+    border-color: transparent;
+    font-weight: 700;
+}
+
+/* ---- 面板卡片 ---- */
+
+.ap-panel {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    padding: 18px 20px;
+    box-shadow: var(--shadow);
+}
+
+.ap-panel-head { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+.ap-panel-head h2 { font-size: 15px; font-weight: 700; }
+.ap-panel .ap-muted { color: var(--muted); font-size: 12.5px; }
+.ap-panel p.ap-muted { margin-bottom: 8px; }
+
+.ap-badge {
+    display: inline-block;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    border-radius: 999px;
+    padding: 2px 9px;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    background: var(--bg-soft);
+    white-space: nowrap;
+}
+.ap-badge.b-aliyun { color: #fb923c; border-color: rgba(251, 146, 60, 0.45); }
+.ap-badge.b-tencent { color: #38bdf8; border-color: rgba(56, 189, 248, 0.45); }
+.ap-badge.b-godaddy { color: #34d399; border-color: rgba(52, 211, 153, 0.45); }
+.ap-badge.b-gray { color: var(--muted); }
+.ap-badge.b-red { color: var(--red); border-color: rgba(248, 113, 113, 0.45); }
+.ap-badge.b-green { color: var(--green); border-color: rgba(52, 211, 153, 0.45); }
+
+/* ---- 表单 ---- */
+
+label { display: block; color: var(--muted); font-size: 12.5px; }
+
+/* 表单控件：仅作用于管理页主体与弹窗内，避免影响大屏工具栏的下拉宽度 */
+.ap-main input, .ap-main select, .ap-main textarea,
+.ap-overlay input, .ap-overlay select, .ap-overlay textarea,
+.ap-form input, .ap-form select, .ap-form textarea {
+    width: 100%;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+    font-family: inherit;
+}
+.ap-main select, .ap-overlay select, .ap-form select { cursor: pointer; }
+.ap-main input:focus, .ap-main select:focus, .ap-main textarea:focus,
+.ap-overlay input:focus, .ap-overlay select:focus, .ap-overlay textarea:focus,
+.ap-form input:focus, .ap-form select:focus, .ap-form textarea:focus { outline: none; border-color: var(--accent); }
+.ap-main input[type="checkbox"], .ap-overlay input[type="checkbox"], .ap-form input[type="checkbox"] {
+    width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer;
+}
+.ap-main input[type="radio"] { accent-color: var(--accent); cursor: pointer; }
+.ap-main textarea, .ap-overlay textarea, .ap-form textarea { resize: vertical; }
+
+.ap-form label { margin-bottom: 10px; }
+.ap-form .ap-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ap-check {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    color: var(--text);
+    font-size: 13px;
+    margin-bottom: 10px;
+    cursor: pointer;
+}
+.ap-help { color: var(--muted); font-size: 12px; margin: 4px 0 10px; }
+.ap-error { color: var(--red); font-size: 12.5px; margin: 6px 0; }
+.ap-error.hidden { display: none; }
+
+/* ---- 按钮 ---- */
+
+.ap-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 15px;
+    font-size: 13px;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: filter 0.15s, border-color 0.15s;
+}
+.ap-btn:hover { border-color: var(--accent); }
+.ap-btn:disabled { opacity: 0.55; cursor: wait; }
+.ap-btn-primary {
+    background: linear-gradient(135deg, #0ea5e9, #0284c7);
+    color: #04121f;
+    font-weight: 700;
+    border-color: transparent;
+}
+.ap-btn-primary:hover { filter: brightness(1.12); border-color: transparent; }
+.ap-btn-danger { color: var(--red); border-color: rgba(248, 113, 113, 0.45); }
+.ap-btn-sm { padding: 5px 11px; font-size: 12.5px; }
+
+.ap-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ---- 空态 ---- */
+
+.ap-empty {
+    text-align: center;
+    padding: 34px 20px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    color: var(--muted);
+}
+.ap-empty strong { color: var(--text); display: block; margin-bottom: 6px; font-size: 14px; }
+.ap-empty p { font-size: 12.5px; margin-bottom: 14px; }
+
+/* ---- 弹窗 ---- */
+
+.ap-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(2, 6, 17, 0.72);
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 8vh 16px 16px;
+    z-index: 60;
+    overflow-y: auto;
+}
+
+.ap-modal {
+    background: var(--card);
+    border: 1px solid var(--card-border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: min(560px, 100%);
+    padding: 18px 20px;
+}
+
+.ap-modal-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 12px;
+}
+.ap-modal-head h3 { font-size: 15px; }
+
+.ap-modal-close {
+    background: none;
+    border: none;
+    color: var(--muted);
+    font-size: 18px;
+    cursor: pointer;
+    line-height: 1;
+}
+.ap-modal-close:hover { color: var(--text); }
+
+.ap-modal-foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 14px; }
+
+/* ---- Toast ---- */
+
+.ap-toast {
+    position: fixed;
+    left: 50%;
+    bottom: 34px;
+    transform: translateX(-50%) translateY(20px);
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 18px;
+    font-size: 13px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s, transform 0.2s;
+    z-index: 80;
+    max-width: min(480px, 88vw);
+}
+.ap-toast.is-show { opacity: 1; transform: translateX(-50%) translateY(0); }
+.ap-toast.is-error { color: var(--red); border-color: rgba(248, 113, 113, 0.45); }
+
+/* ---- 页脚 ---- */
+
+.ap-foot {
+    text-align: center;
+    color: var(--muted);
+    font-size: 12px;
+    padding: 18px 16px 26px;
+}
+
+/* ---- 全屏变体：管理页主体放开宽度，利用宽屏左右布局 ---- */
+
+.ap-main.ap-wide { max-width: none; }
+
+/* ---- Markdown 代码块语法高亮（内置 tokenizer 的 token 颜色） ---- */
+
+pre.dc-hl { color: var(--text); }
+.tok-com { color: #6b7f9c; font-style: italic; }
+.tok-str { color: #fbbf24; }
+.tok-kw { color: #38bdf8; font-weight: 600; }
+.tok-num { color: #a78bfa; }

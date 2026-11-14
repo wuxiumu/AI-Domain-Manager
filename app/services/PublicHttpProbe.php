@@ -3,6 +3,53 @@
 /** Shared bounded probes for legacy access checks: public destinations, pinned DNS, verified TLS. */
 class PublicHttpProbe
 {
+    /** 域名归一化：小写、去根点、IDN 转码；拒绝 IP 字面量、单标签与非法字符。 */
+    public static function normalizeHost(string $host): ?string
+    {
+        $host = strtolower(rtrim(trim($host), '.'));
+        if (preg_match('/[^\x00-\x7f]/', $host)) {
+            if (!function_exists('idn_to_ascii')) { return null; }
+            $host = idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46);
+            if ($host === false) { return null; }
+        }
+        if (strlen($host) > 253 || filter_var($host, FILTER_VALIDATE_IP) || strpos($host, '.') === false) { return null; }
+        foreach (explode('.', $host) as $label) {
+            if (!preg_match('/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/D', $label)) { return null; }
+        }
+        return $host;
+    }
+
+    /** 仅公网地址：排除私有/保留段；IPv6 只放行 2000::/3 全球单播，拒绝过渡与特殊用途前缀。 */
+    public static function isPublicIp($ip): bool
+    {
+        if (!is_string($ip) || filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE) === false) {
+            return false;
+        }
+        if (strpos($ip, ':') !== false) {
+            // Global unicast only; reject transition/translation, documentation,
+            // special-purpose prefixes and IPv4-mapped forms.
+            if (!self::inCidr($ip, '2000::', 3)) { return false; }
+            foreach ([['2001::', 23], ['2001:db8::', 32], ['2002::', 16], ['3fff::', 20]] as $range) {
+                if (self::inCidr($ip, $range[0], $range[1])) { return false; }
+            }
+            return true;
+        }
+        foreach ([['0.0.0.0', 8], ['100.64.0.0', 10], ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24],
+            ['198.18.0.0', 15], ['198.51.100.0', 24], ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4]] as $range) {
+            if (self::inCidr($ip, $range[0], $range[1])) { return false; }
+        }
+        return true;
+    }
+
+    private static function inCidr(string $ip, string $network, int $bits): bool
+    {
+        $packed = @inet_pton($ip); $base = @inet_pton($network);
+        if ($packed === false || $base === false || strlen($packed) !== strlen($base)) { return false; }
+        $bytes = intdiv($bits, 8); $remaining = $bits % 8;
+        return substr($packed, 0, $bytes) === substr($base, 0, $bytes)
+            && (!$remaining || ((ord($packed[$bytes]) ^ ord($base[$bytes])) & (0xff << (8 - $remaining))) === 0);
+    }
+
     public static function plan(string $url, ?callable $resolver = null, ?float $deadline = null): array
     {
         if (preg_match('/[\x00-\x20\x7f]/', $url)) { throw new InvalidArgumentException('探测 URL 不能包含空白或控制字符'); }
@@ -12,11 +59,11 @@ class PublicHttpProbe
             || !in_array($parts['path'] ?? '', ['', '/'], true)) { throw new InvalidArgumentException('拒绝不安全的探测 URL'); }
         $host = trim($parts['host'], '[]'); $scheme = $parts['scheme'];
         if (filter_var($host, FILTER_VALIDATE_IP)) {
-            if (!HealthService::isPublicIp($host)) { throw new InvalidArgumentException('拒绝探测非公网或保留 IP'); }
+            if (!self::isPublicIp($host)) { throw new InvalidArgumentException('拒绝探测非公网或保留 IP'); }
             $ip = inet_ntop(inet_pton($host)); $host = $ip;
         } else {
             if (preg_match('/^(?:0x[0-9a-f]+|[0-9]+)(?:\.(?:0x[0-9a-f]+|[0-9]+))*$/iD', $host)) { throw new InvalidArgumentException('拒绝非标准 IP 表示'); }
-            $host = HealthService::normalizeHost($host);
+            $host = self::normalizeHost($host);
             if ($host === null) { throw new InvalidArgumentException('探测域名格式无效'); }
             $deadline = $deadline ?? microtime(true) + 4;
             $pending = [$host]; $seen = []; $ips = [];
@@ -28,9 +75,9 @@ class PublicHttpProbe
                 $records = $resolver ? $resolver($lookup) : DnsResolver::lookup($lookup, $deadline - microtime(true));
                 foreach (is_array($records) ? $records : [] as $record) {
                     $candidate = $record['ip'] ?? $record['ipv6'] ?? null;
-                    if ($candidate !== null && HealthService::isPublicIp($candidate)) { $ips[] = inet_ntop(inet_pton($candidate)); }
+                    if ($candidate !== null && self::isPublicIp($candidate)) { $ips[] = inet_ntop(inet_pton($candidate)); }
                     if (($record['type'] ?? '') === 'CNAME') {
-                        $alias = HealthService::normalizeHost($record['target'] ?? '');
+                        $alias = self::normalizeHost($record['target'] ?? '');
                         if ($alias && !isset($seen[$alias])) { $pending[] = $alias; }
                     }
                 }

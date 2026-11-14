@@ -149,10 +149,7 @@ class AiProposalService
                     ? ['expected_version' => DnsRecordCache::recordVersion($target)]
                     : $proposal['record'] + ['expected_version' => DnsRecordCache::recordVersion($target)];
             }
-            $change = new DnsChangeService($this->dir, $cloud, function () use ($account, $domain): void {
-                try { (new HealthService($this->dir))->invalidateDnsHealth($account, $domain); }
-                catch (Throwable $ignored) { /* 健康缓存失效失败不影响 DNS 写入结果判定 */ }
-            });
+            $change = new DnsChangeService($this->dir, $cloud);
             $result = $change->apply($account, $domain, $proposal['action'], $proposal['record_id'], $body,
                 ['user' => ($actor['user'] ?? 'admin') . '（批准 AI 提案）', 'via' => 'browser']);
             $this->store(function (array $state) use ($id, $actor, $result): array {

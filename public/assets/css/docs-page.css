@@ -1,0 +1,155 @@
+/* 独立文档页（/docs）：左侧文件清单 + 右侧编辑器 / 预览。 */
+
+.dc-layout {
+    display: grid;
+    grid-template-columns: 300px 1fr;
+    gap: 16px;
+    align-items: start;
+}
+@media (max-width: 900px) { .dc-layout { grid-template-columns: 1fr; } }
+
+/* ---- 文件清单 ---- */
+
+.dc-list-panel { display: flex; flex-direction: column; gap: 10px; }
+
+.dc-list {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    max-height: 70vh;
+    overflow-y: auto;
+}
+
+.dc-file {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 11px;
+    text-align: left;
+    cursor: pointer;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 12.5px;
+    transition: border-color 0.15s;
+}
+.dc-file:hover { border-color: var(--accent); }
+.dc-file.active { border-color: var(--accent); background: rgba(56, 189, 248, 0.1); }
+.dc-file strong {
+    display: block;
+    font-size: 12.5px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dc-file small { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+.dc-file .dc-locked { color: var(--muted); font-size: 10px; margin-left: 5px; }
+
+/* ---- 编辑区 ---- */
+
+.dc-editor { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+
+.dc-editor-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.dc-editor-head .dc-path {
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    color: var(--text);
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 11px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.dc-editor-head .ap-actions { margin-left: auto; }
+
+.dc-dirty { color: var(--amber); font-size: 12px; white-space: nowrap; }
+
+.dc-textarea {
+    width: 100%;
+    min-height: 62vh;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 13px 15px;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    resize: vertical;
+    tab-size: 2;
+}
+.dc-textarea:focus { outline: none; border-color: var(--accent); }
+
+.dc-preview {
+    background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 14px 18px;
+    min-height: 62vh;
+    max-height: 80vh;
+    overflow-y: auto;
+}
+
+.dc-empty {
+    text-align: center;
+    padding: 80px 20px;
+    border: 1px dashed var(--line);
+    border-radius: var(--radius);
+    color: var(--muted);
+}
+
+/* ---- 新建弹窗 ---- */
+
+.dc-form label { display: block; color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+.dc-form input {
+    width: 100%;
+    background: var(--bg-soft);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 8px 10px;
+    font-size: 13.5px;
+    font-family: inherit;
+}
+.dc-form input:focus { outline: none; border-color: var(--accent); }
+.dc-form-err { color: var(--red); font-size: 12.5px; margin: 4px 0; }
+.dc-form-err.hidden { display: none; }
+
+.dc-dirty.hidden { display: none; }
+
+/* ---- 编辑器：行号列（与 textarea 同步滚动） ---- */
+
+.dc-code { display: flex; align-items: stretch; }
+
+.dc-lines {
+    flex: none;
+    width: 48px;
+    margin: 0;
+    padding: 13px 8px 13px 0;
+    background: var(--bg);
+    border: 1px solid var(--line);
+    border-right: none;
+    border-radius: 10px 0 0 10px;
+    color: var(--muted);
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.7;
+    text-align: right;
+    overflow: hidden;
+    user-select: none;
+}
+
+.dc-code .dc-textarea {
+    border-radius: 0 10px 10px 0;
+    border-left: none;
+    min-height: 62vh;
+    white-space: pre;
+    overflow-x: auto;
+}
+.dc-code[hidden] { display: none !important; }

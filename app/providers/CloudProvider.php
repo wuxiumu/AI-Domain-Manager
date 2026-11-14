@@ -37,4 +37,13 @@ abstract class CloudProvider
 
     /** 删除解析记录，返回是否成功 */
     abstract public function deleteRecord(string $domain, string $recordId): bool;
+
+    /**
+     * 暂停 / 恢复单条解析记录（记录保留，仅停止解析）。
+     * 并非所有云商支持：基类默认抛出异常，支持的子类覆盖。
+     */
+    public function setRecordStatus(string $domain, string $recordId, bool $paused): bool
+    {
+        throw new RuntimeException('该云商不支持暂停 / 恢复解析记录，请在云商控制台操作');
+    }
 }

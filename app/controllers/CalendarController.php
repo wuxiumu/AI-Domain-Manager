@@ -1,25 +1,20 @@
 <?php
 class CalendarController
 {
+    /** 独立日历页（/calendar）：管理员会话；自包含视图，$calendarBootstrap 携带 CSRF。 */
+    public function page(): void
+    {
+        Auth::requireSession();
+        header('Cache-Control: no-store');
+        $calendarBootstrap = [
+            'csrf' => Auth::csrfToken(),
+            'user' => (string) Auth::user(),
+        ];
+        require PUBLIC_DIR . '/views/calendar.php';
+    }
     public function index(): void {
         Auth::requireSession();
-        $result = (new CalendarService())->listing((string) ($_GET['month'] ?? date('Y-m')));
-        $dashboard = (new HealthService())->dashboard();
-        $overview = [];
-        foreach (['domain', 'ip', 'subdomain'] as $kind) { $overview[$kind] = ['total' => 0, 'healthy' => 0, 'unhealthy' => 0, 'stale' => 0, 'unchecked' => 0]; }
-        $count = static function (array $asset, string $kind) use (&$overview): void {
-            $status = $asset['health']['status'] ?? 'unchecked';
-            $overview[$kind]['total']++;
-            if (isset($overview[$kind][$status])) { $overview[$kind][$status]++; }
-        };
-        foreach ($dashboard['assets'] as $asset) {
-            $count($asset, $asset['kind']);
-            if ($asset['kind'] === 'domain') foreach ($asset['subdomains'] ?? [] as $host) { if ($host['checkable']) $count($host, 'subdomain'); }
-        }
-        $result['overview'] = $overview;
-        $result['dns_uncached_domains'] = $dashboard['summary']['dns_uncached_domains'];
-        $result['overview_at'] = $dashboard['generated_at'];
-        json_out($result);
+        json_out((new CalendarService())->listing((string) ($_GET['month'] ?? date('Y-m'))));
     }
     public function createTask(): void { Auth::requireSession(); json_out((new CalendarService())->saveTask(body_json())); }
     public function updateTask(string $id): void { Auth::requireSession(); json_out((new CalendarService())->saveTask(body_json(), $id)); }

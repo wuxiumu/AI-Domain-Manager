@@ -125,6 +125,52 @@ class RecordAccessService
         return is_array($results) ? $results : [];
     }
 
+    /**
+     * 合并浏览器侧探测结果（大屏前端检查上报），按 FQDN 存储、与解析快照版本对齐。
+     * $results: {fqdn: {ok: bool, ms?: int}}；结果全局缓存，跨浏览器可见。
+     */
+    public static function mergeBrowser(string $provider, string $domain, string $revision, array $results): array
+    {
+        $checkedAt = date('Y-m-d H:i:s');
+        $clean = [];
+        foreach ($results as $fqdn => $item) {
+            $fqdn = strtolower(rtrim(trim((string) $fqdn), '.'));
+            if ($fqdn === '' || !is_array($item) || !isset($item['ok']) || !is_bool($item['ok'])) { continue; }
+            $entry = ['ok' => $item['ok'], 'checked_at' => $checkedAt];
+            if (isset($item['ms']) && is_int($item['ms']) && $item['ms'] >= 0 && $item['ms'] <= 60000) {
+                $entry['ms'] = $item['ms'];
+            }
+            $clean[$fqdn] = $entry;
+        }
+        if (!$clean) { throw new InvalidArgumentException('浏览器检查结果为空或格式无效'); }
+        WorkspaceData::locked(DATA_DIR, static function () use ($provider, $domain, $revision, $clean, $checkedAt): void {
+            if ((DnsRecordCache::peek(DATA_DIR, $provider, $domain)['revision'] ?? null) !== $revision) {
+                throw new DomainException('DNS 已变化，浏览器检查结果未保存；请刷新解析后重新检查');
+            }
+            $store = WorkspaceData::read(DATA_DIR . '/' . self::FILE);
+            $group = $store[$provider . '|' . $domain] ?? [];
+            if (($group['records_revision'] ?? null) !== $revision) {
+                throw new DomainException('DNS 已变化，浏览器检查结果未保存；请刷新解析后重新检查');
+            }
+            $existing = is_array($group['browser']['results'] ?? null) ? $group['browser']['results'] : [];
+            $group['browser'] = ['checked_at' => $checkedAt, 'results' => array_merge($existing, $clean)];
+            $store[$provider . '|' . $domain] = $group;
+            JsonStore::write(DATA_DIR . '/' . self::FILE, $store);
+        });
+        return ['ok' => true, 'checked_at' => $checkedAt, 'count' => count($clean)];
+    }
+
+    /** 浏览器侧探测结果映射（fqdn => {ok, checked_at}），与解析快照版本对齐；无则空数组 */
+    public static function browserMapOf(string $provider, string $domain): array
+    {
+        $store = JsonStore::read(DATA_DIR . '/' . self::FILE, []);
+        $group = $store[$provider . '|' . $domain] ?? [];
+        $revision = DnsRecordCache::peek(DATA_DIR, $provider, $domain)['revision'] ?? null;
+        if ($revision === null || ($group['records_revision'] ?? null) !== $revision) return [];
+        $browser = $group['browser'] ?? [];
+        return is_array($browser['results'] ?? null) ? $browser['results'] : [];
+    }
+
     /** 并发探测 URL 列表（HEAD），返回 url => ['http_code','ms','error'] */
     private static function probeUrls(array $urls): array
     {

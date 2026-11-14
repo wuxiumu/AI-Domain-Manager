@@ -3,17 +3,19 @@
 /** OpenAPI and discovery documents contain contracts only, never deployment secrets. */
 class ApiDescriptionService
 {
+    public const VERSION = '1.3.0';
+
     public static function discovery(): array
     {
-        return ['name' => 'Asset Workspace', 'version' => AssetSnapshot::VERSION, 'description' => '域名、子域名、IP 健康与 DNS 管理工作台',
+        return ['name' => 'Asset Workspace', 'version' => self::VERSION, 'description' => '域名与 IP 资产大屏 + DNS 管理，AI 可读可操作',
             'openapi_url' => '/api/openapi.json', 'instructions_url' => '/llms.txt',
             'authentication' => ['recommended' => 'bearer', 'header' => 'Authorization: Bearer <token>',
-                'provisioning' => '管理员登录 → 产品设置 → AI API → 创建密钥',
+                'provisioning' => '管理员登录 → /settings → AI API → 创建密钥',
                 'session_login' => '/api/login', 'session_captcha' => '/api/login/captcha', 'session_write_header' => 'X-CSRF-Token'],
             'scopes' => ApiTokenService::SCOPES,
-            'entrypoints' => ['health' => '/api/health', 'operations' => '/api/operations', 'issues' => '/api/issues', 'report' => '/api/health/report', 'handover' => '/api/handover', 'proposals' => '/api/proposals', 'trends' => '/api/trends', 'metrics' => '/api/metrics', 'domains' => '/api/domains', 'accounts' => '/api/accounts'],
+            'entrypoints' => ['domain_screen' => '/api/domains/screen', 'domain_screen_md' => '/api/domains/screen.md', 'domain_screen_report' => '/api/domains/screen/report', 'ip_screen' => '/api/ips/screen', 'ip_screen_md' => '/api/ips/screen.md', 'domains' => '/api/domains', 'proposals' => '/api/proposals', 'accounts' => '/api/accounts'],
             'cache' => '列表优先读取文件快照；同步、检查与刷新 DNS 需要显式调用；DNS 写入会刷新缓存。',
-            'limits' => ['health_check_batch' => 5], 'providers' => array_column(SettingsService::providerSchema(), 'id')];
+            'providers' => array_column(SettingsService::providerSchema(), 'id')];
     }
 
     public static function instructions(): string
@@ -21,12 +23,14 @@ class ApiDescriptionService
         return <<<'TEXT'
 # Asset Workspace API
 
+Domain & IP asset wall display with DNS management. AI can read the inventory and operate DNS under scoped permission.
+
 Discover operations and request schemas at GET /api/openapi.json.
 Machine discovery: GET /.well-known/asset-workspace.json (alias /api/capabilities).
 All URLs are relative to this installation's origin.
 
 Authentication:
-- The administrator creates an expiring, scoped API token in Product Settings > AI API.
+- The administrator creates an expiring, scoped API token on the /settings page (or via POST /api/tokens).
 - Send Authorization: Bearer <token> on each request. No cookies or CSRF header are needed with a valid token.
 - Interactive password login requires GET /api/login/captcha first. Keep its cookie, display the returned image to a human,
   then POST /api/login with user, pass, captcha_id and captcha, plus the challenge csrf_token as X-CSRF-Token.
@@ -37,21 +41,26 @@ Authentication:
 - Tokens expire, can be revoked, and are invalidated when administrator login credentials change.
 
 Workflow:
-1. GET /api/handover is the takeover briefing: current summary counts, your granted scopes, next actions and the full playbook.
-2. GET /api/issues is the triage list: every problem (P0 HTTP-unreachable, P1 stale or TLS certificate expiring within 7 days, P2 domain/certificate expiring within 30 days) with a stable id, evidence, dns_path and suggested actions. Accessibility is judged by HTTP only; HTTPS certificate VALIDITY failures live in GET /api/https-review (which also lists certificates expiring within 30 days) — the same list the administrator sees first on the dashboard. Triage it, record your conclusion in the asset note (assets:write) or a proposal rationale referencing the issue id, act via checks:run / proposals:write, then re-read this endpoint to confirm the issue disappeared.
-3. GET /api/health for cached domains, IPs, health evidence, subdomains and relationship IDs.
-   GET /api/operations lists domains without a successful latest HTTPS check and unhealthy domains with observed IPs. Unknown is not proof of no HTTPS; check timestamps and stale status.
-   GET /api/health/report returns the same cached evidence compiled into one bounded Markdown report (failing domains, unconfirmed HTTPS, failing IPs, 30-day expiries, interpretation guide).
-   Its prompt field embeds the report in a ready-to-run analysis prompt; paste it into a chat assistant or follow it yourself when summarizing for a human.
-   Add ?format=markdown to download it as text/markdown. Read-only, never triggers checks or syncs; generated_at marks the snapshot time.
-4. GET /api/domains for the domain inventory. provider means a cloud ACCOUNT ID, not a vendor name.
-5. GET /api/domains/{provider}/{domain}/records for cached DNS records and their IDs.
-6. Health checks require checks:run: POST /api/health/check with {"asset_ids":["<asset id>"]}; at most 5 IDs per request.
+1. GET /api/domains/screen is the wall-display snapshot: unexpired domains with their subdomain A records (IPv4),
+   per-record access status, expire dates and account grouping. Read-only cache snapshot, never triggers cloud I/O;
+   generated_at and cache.saved_at mark the cache time.
+2. GET /api/domains/screen.md is the same snapshot as one plain Markdown document (per-domain A records, access
+   status and a CRUD playbook with exact endpoints, bodies and scopes) — feed it to an AI as a single file.
+3. GET /api/domains/screen/report is the daily anomaly report: expiring soon, failed access checks, cold DNS cache,
+   non-public A values, shared IPs; add ?format=markdown for raw text. scripts/generate-screen-report.php prints it
+   for daily cron (--prompt wraps the analysis instructions, --digest prints the Markdown snapshot).
+4. GET /api/ips/screen is the IP view of the wall display: public IPs aggregated from cached A records plus manually
+   registered IPs (data: ip, sources, domains with access status, worst-of status, cached ipwho.is location). Read-only cache snapshot.
+   GET /api/ips/screen.md is that IP view as one plain Markdown document — feed it to an AI as a single file.
+   Manage manual IPs with assets:write: POST /api/ips {"ip":"192.0.2.10","port":443,"name":"...","note":"..."} (public IPs only, no network request), PUT/DELETE /api/ips/{id}.
+   POST /api/ips/{ip}/location (checks:run) explicitly refreshes one IP's geolocation via ipwho.is; the result enters the cache and appears in the next snapshot read.
+5. GET /api/domains for the full local ledger (including expired domains). provider means a cloud ACCOUNT ID, not a vendor name.
+6. GET /api/domains/{provider}/{domain}/records for cached DNS records and their IDs.
 7. Preferred write path — submit a proposal instead of writing DNS directly:
    POST /api/proposals with {"account":"<provider id>","domain":"example.com","action":"add|update|delete",
    "record_id":"<required for update/delete>","record":{"type":"A","name":"@","value":"192.0.2.1"},
    "rationale":"4-500 char reason","evidence":"optional report line or check reference"}. Scope proposals:write.
-   The administrator sees the proposal, the cached before-values and your rationale, then approves or rejects.
+   The administrator approves or rejects (session API: POST /api/proposals/{id}/approve|reject).
    Approval reads the fresh cloud version, writes once and verifies by readback (same guards as manual edits).
    GET /api/proposals (proposals:write) tracks status: pending / executed / failed / rejected. Duplicate pending changes are rejected with 409.
 8. Direct DNS editing (dns:write) stays available for trusted automation but the proposal queue is the recommended path:
@@ -59,15 +68,19 @@ Workflow:
    with expected_version from that record's version and only the fields to change. DELETE also requires expected_version in its JSON body.
    POST requires expected_revision from the list response's revision plus the new record fields.
    A fresh cloud read rejects stale versions with HTTP 409. HTTP 202 / verified:false means unconfirmed; do not retry writes automatically.
-   Only verified:true confirms cloud readback, not worldwide DNS propagation. DNS change history is administrator-session-only at GET /api/dns/changes.
+   Only verified:true confirms cloud readback, not worldwide DNS propagation.
+   POST /api/domains/{provider}/{domain}/records/{recordId}/status (dns:write) pauses or resumes one record
+   with {"paused":true|false,"expected_version":"..."} — the record is kept but stops resolving (Aliyun / Tencent only; GoDaddy returns an error).
+   Paused records appear with a paused flag in the screen snapshots.
+   POST /api/domains/{provider}/{domain}/records/access-check (checks:run) probes the hosts of the zone's records and refreshes access status;
+   add {"record_ids":["<id>",...]} to probe only the selected records.
 9. POST /api/sync explicitly refreshes the cloud domain inventory. Requires sync:run.
-10. GET /api/trends returns the 30-day daily check trend for human dashboards (checks, healthy/unhealthy, avg latency, full-run summaries).
-   GET /api/metrics exposes the same state in Prometheus text format (asset_workspace_* series) so external monitoring platforms can scrape it with assets:read.
+   POST /api/accounts/{id}/sync syncs one cloud account the same way; add {"refresh_dns":true} to also refetch cached DNS records for its unexpired domains (may take minutes).
 
 Interpretation:
 - Reads reuse file caches. Do not sync, refresh DNS, run checks or write DNS just to display a list.
-- DNS-derived IPs may be CDN/proxy addresses. Manual bindings and DNS observations have different meanings.
-- unchecked and stale results are not healthy results. IP checks request http://IP/ and accept HTTP 2xx/3xx without following redirects; results and timestamps persist on the server.
+- DNS-derived IPs may be CDN/proxy addresses. Manual registrations and DNS discovery have different meanings; an IP can be both.
+- unchecked and stale results are not healthy results. Access checks request http://fqdn/ and accept HTTP 2xx/3xx without following redirects.
 - Treat HTTP errors and JSON ok:false as failures; some legacy cloud endpoints return ok:false with HTTP 200.
 - Use URL-encoded path segments. Do not invent account, record or asset IDs.
 - Never include passwords, cloud secrets or bearer tokens in a URL, a shared report, or logs.
@@ -96,10 +109,6 @@ TEXT;
         $domain = self::object(['provider' => ['type' => 'string', 'description' => '云账号 ID 或 manual'],
             'domain' => $string, 'status' => $string, 'expire_at' => ['type' => 'string', 'description' => 'YYYY-MM-DD 或空字符串'],
             'registration_date' => $string, 'registrar' => $string, 'note' => $string, 'valid' => $boolean], ['provider', 'domain']);
-        $links = ['type' => 'array', 'maxItems' => 30, 'items' => self::object(['name' => ['type' => 'string', 'maxLength' => 120], 'url' => ['type' => 'string', 'format' => 'uri', 'description' => 'http(s):// URL']], ['name', 'url'])];
-        $ip = self::object(['ip' => ['type' => 'string', 'description' => '公网 IPv4 或 IPv6 字面量'],
-            'port' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 65535, 'default' => 443],
-            'name' => $string, 'note' => $string, 'links' => $links], ['ip']);
         $account = self::object(['provider' => ['type' => 'string', 'enum' => ['aliyun', 'tencent', 'godaddy']],
             'name' => $string, 'note' => $string, 'enabled' => $boolean, 'access_key_id' => $secret, 'access_key_secret' => $secret,
             'secret_id' => $secret, 'secret_key' => $secret, 'api_key' => $secret, 'api_secret' => $secret,
@@ -129,7 +138,7 @@ TEXT;
                     'description' => $path === '/api/login' ? '先 GET /api/login/captcha 获取，同时保留 Cookie' : ($path === '/api/setup' ? '先 GET /api/setup/status 获取，同时保留 Cookie' : ($access === 'session' ? '管理员 Cookie 会话写入时必填' : 'Cookie 会话写入时必填；Bearer 调用不需要'))];
             }
             if ($body !== null) { $op['requestBody'] = ['required' => true, 'content' => ['application/json' => ['schema' => $body]]]; }
-            if (in_array($id, ['createCloudAccount', 'createApiToken', 'createAssetBackup'], true)) { $op['responses']['201'] = $op['responses']['200']; unset($op['responses']['200']); }
+            if (in_array($id, ['createCloudAccount', 'createApiToken'], true)) { $op['responses']['201'] = $op['responses']['200']; unset($op['responses']['200']); }
             $paths[$path][strtolower($method)] = $op;
         };
         $add('GET', '/api/setup/status', 'getSetupStatus', '首次配置状态', null, null, [], 'public');
@@ -147,29 +156,6 @@ TEXT;
         }
         $add('GET', '/api/me', 'getIdentity', '读取当前登录身份');
         $add('POST', '/api/logout', 'logout', '退出管理员会话', null, null, [], 'session');
-        $add('GET', '/api/health', 'getHealthSnapshot', '读取缓存健康看板、子域名和 IP 关系（列表不内嵌检查历史）', 'assets:read', null, [], 'api',
-            self::object(['assets' => ['type' => 'array', 'items' => ['$ref' => '#/components/schemas/Asset']], 'summary' => ['type' => 'object'], 'cache' => ['type' => 'object']]));
-        $add('GET', '/api/health/history', 'getAssetHistory', '读取单资产最近 10 次检查历史；列表出口不内嵌历史，详情按需读取', 'assets:read', null,
-            ['asset_id' => ['type' => 'string', 'description' => '资产 ID，从 /api/health 的 assets[].id 读取']], 'api',
-            self::object(['ok' => $boolean, 'asset_id' => $string, 'history' => ['type' => 'array', 'items' => ['type' => 'object']]]));
-        $operationItem = self::object(['id' => $string, 'domain' => $string, 'provider' => $string,
-            'checked_at' => ['type' => ['string', 'null']], 'health_status' => $string,
-            'https_status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'unknown']],
-            'resolved_ips' => ['type' => 'array', 'items' => $string], 'message' => $string]);
-        $add('GET', '/api/operations', 'getOperations', '读取待运营域名和最近检查异常域名及解析 IP；未知或过时结果需重新检查', 'assets:read', null, [], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string,
-                'pending_domains' => ['type' => 'array', 'items' => $operationItem],
-                'unhealthy_domains' => ['type' => 'array', 'items' => $operationItem]]));
-        $add('GET', '/api/health/report', 'getHealthReport', '把缓存健康证据编译成可直接交给 AI 分析的 Markdown 报告；只读，不触发检查', 'assets:read', null,
-            ['format' => ['type' => 'string', 'enum' => ['markdown'], 'description' => 'markdown 时直接返回 text/markdown 正文']], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string, 'last_checked_at' => ['type' => ['string', 'null']],
-                'summary' => ['type' => 'object'], 'markdown' => ['type' => 'string', 'description' => '完整 Markdown 报告正文'],
-                'prompt' => ['type' => 'string', 'description' => '已内嵌报告的完整分析提示词，可直接交给聊天助手'],
-                'usage' => $string]));
-        $add('GET', '/api/handover', 'getHandover', 'AI 接管交接简报：当前统计、持有权限、下一步动作与操作序列；只读', 'assets:read', null, [], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string, 'scopes' => ['type' => 'array', 'items' => $string],
-                'summary' => ['type' => 'object'], 'unhealthy_domains' => $integer, 'proposals' => ['type' => 'object'],
-                'next_actions' => ['type' => 'array', 'items' => ['type' => 'object']], 'playbook' => ['type' => 'array', 'items' => ['type' => 'object']]]));
         $proposalBody = self::object(['account' => ['type' => 'string', 'description' => '云账号 ID，从域名列表的 provider 字段读取'],
             'domain' => ['type' => 'string', 'description' => '该账号台账中的主域名'],
             'action' => ['type' => 'string', 'enum' => ['add', 'update', 'delete']],
@@ -182,62 +168,93 @@ TEXT;
             self::object(['ok' => $boolean, 'proposal' => ['type' => 'object']]));
         $add('GET', '/api/proposals', 'listProposals', '读取提案列表与状态统计', 'proposals:write', null, [], 'api',
             self::object(['ok' => $boolean, 'counts' => ['type' => 'object'], 'proposals' => ['type' => 'array', 'items' => ['type' => 'object']]]));
-        $dailyItem = self::object(['date' => $string, 'checks' => $integer, 'healthy' => $integer, 'unhealthy' => $integer,
-            'full_runs' => $integer, 'avg_latency_ms' => ['type' => ['integer', 'null']]]);
-        $add('GET', '/api/https-review', 'listHttpsFollowups', '读取 HTTPS 跟进清单（证书验证未通过、HTTPS 未确认、证据过时或证书 30 天内临期的域名，items 含 url 与证书到期日/剩余天数），独立于可达性问题；只读', 'assets:read', null, [], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string, 'counts' => ['type' => 'object'],
-                'items' => ['type' => 'array', 'items' => ['type' => 'object']], 'usage' => $string]));
-        $add('GET', '/api/trends', 'getTrends', '读取最近 30 天检查趋势（每日检查数、健康 / 异常、平均延迟），供图表展示；只读', 'assets:read', null, [], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string, 'days' => $integer,
-                'daily' => ['type' => 'array', 'items' => $dailyItem],
-                'summary' => ['type' => 'object'], 'current' => ['type' => 'object']]));
-        $add('GET', '/api/metrics', 'getMetrics', '以 Prometheus 文本格式输出 asset_workspace_* 指标，供监控平台抓取；只读', 'assets:read');
-        $issueItem = self::object(['id' => ['type' => 'string', 'description' => '稳定问题标识，可在备注与提案 rationale 中引用'],
-            'severity' => ['type' => 'string', 'enum' => ['P0', 'P1', 'P2']], 'type' => ['type' => 'string', 'enum' => ['unhealthy', 'stale', 'expiring']],
-            'asset_id' => $string, 'kind' => ['type' => 'string', 'enum' => ['domain', 'ip']], 'name' => $string, 'provider' => $string,
-            'summary' => $string, 'since' => ['type' => ['string', 'null']], 'due' => ['type' => ['string', 'null']],
-            'ips' => ['type' => 'array', 'items' => $string],
-            'url' => ['type' => ['string', 'null'], 'description' => '本次检查探测的目标 URL，可直接访问核对；IP 为 http://IP/'],
-            'dns_path' => ['type' => ['string', 'null'], 'description' => '云托管域名的问题附带 DNS 记录读取路径，manual 为空'],
-            'actions' => ['type' => 'array', 'items' => ['type' => 'object', 'properties' => ['type' => ['type' => 'string'], 'label' => ['type' => 'string']]]]]);
-        $add('GET', '/api/issues', 'getIssues', '读取分级问题清单（P0 HTTP 异常 / P1 过时或证书 7 天内到期 / P2 域名与证书临期；可达性只看 HTTP），与首页问题中心同源；只读', 'assets:read', null, [], 'api',
-            self::object(['ok' => $boolean, 'generated_at' => $string, 'counts' => ['type' => 'object'],
-                'issues' => ['type' => 'array', 'items' => $issueItem], 'truncated' => $boolean,
-                'severity_labels' => ['type' => 'object'], 'usage' => $string]));
         $add('POST', '/api/proposals/{id}/approve', 'approveProposal', '管理员批准提案：读取云端最新版本后按既有护栏执行 DNS 写入并回读核实', null,
             self::object(), [], 'session');
         $add('POST', '/api/proposals/{id}/reject', 'rejectProposal', '管理员拒绝提案，可附原因（最多 300 字）', null,
             self::object(['reason' => ['type' => 'string', 'maxLength' => 300]]), [], 'session');
-        $add('POST', '/api/health/check', 'checkHealth', '检查 1–5 项资产并保存结果', 'checks:run',
-            self::object(['asset_ids' => ['type' => 'array', 'minItems' => 1, 'maxItems' => 5, 'items' => $string]], ['asset_ids']));
-        $add('POST', '/api/health/ips', 'createIpAsset', '登记公网 IP 检查目标', 'assets:write', $ip);
-        $add('POST', '/api/health/ips/{id}/location', 'refreshIpLocation', '查询并缓存 IP 归属地；会将 IP 发送给 ipwho.is，失败保留旧结果', 'checks:run');
-        $add('POST', '/api/health/ips/{id}/browser-probe', 'recordBrowserProbe', '记录管理员浏览器侧的 IP 探测结果：可达时计入健康状态并标注来源 browser（经管理员浏览器网络/系统代理）；不可达不改变记录。仅管理员会话', null,
-            self::object(['reachable' => $boolean, 'ms' => ['type' => 'integer', 'minimum' => 0, 'maximum' => 60000]], ['reachable']), [], 'session');
-        $ipUpdate = self::object(['name' => $string, 'note' => $string, 'links' => $links, 'server_provider' => $string, 'configuration' => $string, 'expires_at' => $string]);
-        $add('PUT', '/api/health/ips/{id}', 'updateIpAsset', '编辑 IP 资产资料', 'assets:write', $ipUpdate);
-        $add('DELETE', '/api/health/ips/{id}', 'deleteIpAsset', '移除手工登记的 IP 目标', 'assets:write');
-        $add('PUT', '/api/health/domains/{id}/bindings', 'saveDomainBindings', '保存域名与服务器的人工确认绑定', 'assets:write',
-            self::object(['ip_ids' => ['type' => 'array', 'items' => $string]], ['ip_ids']));
         $checkin = self::object(['mood' => ['type' => 'string', 'enum' => ['great', 'good', 'calm', 'tired', 'low']],
             'text' => ['type' => 'string', 'maxLength' => 280]], ['mood', 'text']);
         $taskBody = self::object(['date' => ['type' => 'string', 'description' => 'YYYY-MM-DD'], 'title' => ['type' => 'string', 'maxLength' => 120],
             'description' => ['type' => 'string', 'maxLength' => 2000], 'done' => $boolean], ['date', 'title']);
         $runBody = self::object(['counts' => self::object(array_combine(['domain', 'ip', 'subdomain'], array_fill(0, 3,
             self::object(['healthy' => $integer, 'unhealthy' => $integer], ['healthy', 'unhealthy']))), ['counts'])], ['counts']);
-        $add('GET', '/api/calendar', 'getCalendar', '读取检查日历的打卡、待办、检查记录与资产概览；仅管理员会话', null, null, ['month' => ['type' => 'string', 'pattern' => '^\d{4}-(0[0-9]|1[0-2])$', 'default' => '当月']], 'session');
+        $add('GET', '/api/calendar', 'getCalendar', '读取日历的打卡、待办与完整检查运行记录；仅管理员会话', null, null, ['month' => ['type' => 'string', 'pattern' => '^\d{4}-(0[0-9]|1[0-2])$', 'default' => '当月']], 'session');
         $add('PUT', '/api/calendar/checkins/{date}', 'saveCheckin', '保存当日心情与一句话打卡；仅管理员会话', null, $checkin, [], 'session');
         $add('DELETE', '/api/calendar/checkins/{date}', 'deleteCheckin', '删除指定日期的打卡记录；仅管理员会话', null, null, [], 'session');
         $add('POST', '/api/calendar/tasks', 'createTask', '新增检查待办；仅管理员会话', null, $taskBody, [], 'session');
         $add('PUT', '/api/calendar/tasks/{id}', 'updateTask', '更新检查待办；仅管理员会话', null, $taskBody, [], 'session');
         $add('DELETE', '/api/calendar/tasks/{id}', 'deleteTask', '删除检查待办；仅管理员会话', null, null, [], 'session');
         $add('POST', '/api/calendar/runs', 'addRun', '记录一次完整全局检查的分类统计；仅管理员会话', null, $runBody, [], 'session');
-        $add('GET', '/api/domains', 'listDomains', '查询本地缓存域名台账', 'assets:read', null,
-            ['provider' => $string, 'q' => $string, 'valid' => ['type' => 'string', 'enum' => ['0', '1']], 'sort' => ['type' => 'string', 'enum' => ['expire', 'expire_desc', 'domain', 'synced']], 'expiring' => $string, 'access' => $string, 'all' => ['type' => 'string', 'enum' => ['1']]]);
+        $add('GET', '/api/domains', 'listDomains', '查询本地缓存域名台账（含已过期域名）', 'assets:read', null,
+            ['provider' => $string, 'q' => $string, 'valid' => ['type' => 'string', 'enum' => ['0', '1']], 'sort' => ['type' => 'string', 'enum' => ['expire', 'expire_desc', 'domain', 'synced']], 'expiring' => $string, 'all' => ['type' => 'string', 'enum' => ['1']]]);
         $add('GET', '/api/domains/stats', 'getDomainStats', '读取域名统计', 'assets:read');
+        $screenRecord = self::object(['id' => $string, 'value' => $string, 'ttl' => ['type' => ['integer', 'null']],
+            'version' => ['type' => 'string', 'description' => '修改 / 删除该记录时作为 expected_version 提交'],
+            'access' => ['type' => ['object', 'null'], 'description' => '最近一次后端访问检测结果：status http_code ms checked_at']]);
+        $screenSubdomain = self::object(['name' => ['type' => 'string', 'description' => '相对主机记录，根记录为 @'],
+            'fqdn' => $string, 'ips' => ['type' => 'array', 'items' => $string, 'description' => 'A 记录 IPv4 值'],
+            'ttl' => ['type' => ['integer', 'null'], 'description' => '组内最小 TTL'],
+            'records' => ['type' => 'array', 'items' => $screenRecord, 'description' => '组内 A 记录明细，供 DNS 修改 / 删除使用'],
+            'access' => ['type' => ['string', 'null'], 'description' => '组级访问状态 ok / fail / null：任一记录检测通过即 ok']]);
+        $screenDomain = self::object(['domain' => $string, 'provider' => ['type' => 'string', 'description' => '云账号 ID'],
+            'provider_name' => $string, 'registrar' => $string,
+            'expire_at' => ['type' => 'string', 'description' => 'YYYY-MM-DD 或空字符串'],
+            'days_left' => ['type' => ['integer', 'null'], 'description' => '剩余天数；null 表示未知到期，均不含已过期域名'],
+            'synced_at' => $string, 'dns_cached' => $boolean, 'dns_snapshot_at' => ['type' => ['string', 'null']],
+            'dns_revision' => ['type' => ['string', 'null'], 'description' => '解析区域当前 revision；批量添加记录时作为 expected_revision 提交，成功响应会返回新 revision'],
+            'subdomain_count' => $integer, 'a_count' => $integer,
+            'other_count' => ['type' => 'integer', 'description' => '非 A 记录条数，仅计数不展开'],
+            'subdomains' => ['type' => 'array', 'items' => $screenSubdomain]], ['domain', 'provider', 'subdomains']);
+        $add('GET', '/api/domains/screen', 'getDomainScreen', '大屏聚合：未过期域名及其子域名 A 记录（只读缓存快照，generated_at 与 cache.saved_at 即缓存时间）', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'cache' => ['type' => 'object'],
+                'stats' => self::object(['domains' => $integer, 'subdomains' => $integer, 'a_records' => $integer,
+                    'hidden' => self::object(['expired' => $integer, 'invalid' => $integer, 'orphaned' => $integer])], ['domains']),
+                'accounts' => ['type' => 'array', 'items' => self::object(['id' => $string, 'name' => $string, 'provider' => $string,
+                    'domains' => $integer, 'a_records' => $integer, 'subdomains' => $integer, 'dns_pending' => $integer,
+                    'dns_snapshot_at' => ['type' => ['string', 'null']]], ['id', 'name'])],
+                'domains' => ['type' => 'array', 'items' => $screenDomain]]));
+        $add('GET', '/api/domains/screen.md', 'getDomainScreenMarkdown', '纯 Markdown 快照：域名、子域名 A 记录、访问状态与可执行的 CRUD 指引，一份文件可直接交给 AI 阅读与操作', 'assets:read', null, [], 'api',
+            self::object(['markdown' => $string]));
+        $add('GET', '/api/domains/screen/report', 'getDomainScreenReport', '每日异常报告（只读快照编排）：到期预警、访问异常、解析缺口、非公网记录与解读指引；?format=markdown 直出正文，适合 AI 每日分析', 'assets:read', null,
+            ['format' => ['type' => 'string', 'enum' => ['markdown'], 'description' => 'markdown 时直接返回 text/markdown 正文']], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'summary' => ['type' => 'object'],
+                'markdown' => $string, 'prompt' => ['type' => 'string', 'description' => '已内嵌报告与完整分析要求的提示词，可直接交给 AI'],
+                'usage' => $string]));
         $add('POST', '/api/domains', 'createDomain', '添加本地域名台账，不购买域名', 'assets:write', $domain);
         $add('PUT', '/api/domains', 'updateDomain', '编辑本地域名台账，不修改云端 DNS', 'assets:write', $domain);
         $add('DELETE', '/api/domains', 'deleteDomain', '删除本地域名台账，不删除云端域名', 'assets:write', self::object(['provider' => $string, 'domain' => $string], ['provider', 'domain']));
+        $ipScreenDomain = self::object(['provider' => $string, 'provider_name' => $string, 'domain' => $string,
+            'fqdn' => $string, 'name' => $string, 'record_id' => $string,
+            'access' => ['type' => ['string', 'null'], 'enum' => ['ok', 'fail', 'na', null], 'description' => '最近一次访问检查结果；null=未检查，未检查不等于正常'],
+            'http_code' => ['type' => ['integer', 'null']], 'checked_at' => ['type' => ['string', 'null']]]);
+        $ipScreenRow = self::object(['ip' => $string, 'manual' => $boolean, 'name' => ['type' => ['string', 'null']],
+            'note' => ['type' => ['string', 'null']], 'port' => ['type' => ['integer', 'null']],
+            'sources' => ['type' => 'array', 'items' => $string, 'description' => '指向此 IP 的云账号 ID 列表；手工登记含 manual'],
+            'domain_count' => $integer, 'records' => $integer,
+            'domains' => ['type' => 'array', 'items' => $ipScreenDomain],
+            'status' => ['type' => ['string', 'null'], 'enum' => ['ok', 'fail', null], 'description' => '关联记录的最差访问结果；空=未检查，未检查不等于正常'],
+            'access_ok' => $integer, 'access_fail' => $integer, 'checked_at' => ['type' => ['string', 'null']],
+            'location' => ['type' => ['object', 'null'], 'description' => '最近一次 ipwho.is 归属地缓存，可能是 CDN 出口']],
+            ['ip', 'manual', 'sources']);
+        $ipAsset = self::object(['ip' => $string, 'port' => ['type' => ['integer', 'null'], 'minimum' => 1, 'maximum' => 65535],
+            'name' => $string, 'note' => $string], ['ip']);
+        $add('GET', '/api/ips/screen', 'getIpScreen', 'IP 大屏聚合：DNS A 记录自动发现的公网 IP 与手工登记 IP 合并（只读缓存快照，含归属地缓存与访问状态）', 'assets:read', null, [], 'api',
+            self::object(['ok' => $boolean, 'generated_at' => $string, 'cache' => ['type' => 'object'],
+                'stats' => self::object(['ips' => $integer, 'manual' => $integer, 'auto' => $integer, 'countries' => $integer,
+                    'records' => $integer, 'domains_linked' => $integer], ['ips']),
+                'accounts' => ['type' => 'array', 'items' => self::object(['id' => $string, 'name' => $string, 'provider' => $string,
+                    'ips' => $integer, 'records' => $integer], ['id', 'name'])],
+                'ips' => ['type' => 'array', 'items' => $ipScreenRow]]));
+        $add('GET', '/api/ips/screen.md', 'getIpScreenMarkdown', '纯 Markdown 快照：IP 清单、归属地、访问状态与关联域名，一份文件可直接交给 AI 阅读', 'assets:read', null, [], 'api',
+            self::object(['markdown' => $string]));
+        $add('POST', '/api/ips', 'createIpAsset', '手工登记一个公网 IP（拒绝私有/保留地址），不发起任何网络请求', 'assets:write', $ipAsset);
+        $add('PUT', '/api/ips/{id}', 'updateIpAsset', '编辑手工登记 IP 的名称、备注、端口或地址', 'assets:write', $ipAsset);
+        $add('DELETE', '/api/ips/{id}', 'deleteIpAsset', '删除手工登记 IP；DNS 自动发现不受影响', 'assets:write');
+        $add('POST', '/api/ips/{ip}/location', 'refreshIpLocation', '显式刷新该 IP 的归属地（ipwho.is），结果进入缓存', 'checks:run');
+        $add('POST', '/api/ips/check', 'checkIps', '服务端并发探测指定 IP 列表的访问状态（http://IP/，不跟随跳转），结果全局缓存并整合进 IP 视图访问状态', 'checks:run',
+            self::object(['ips' => ['type' => 'array', 'items' => $string, 'maxItems' => 50, 'description' => '公网 IP 列表']], ['ips']));
+        $add('POST', '/api/ips/browser-check', 'reportIpBrowserCheck', '上报大屏前端检查的 IP 访问结果（浏览器直连 http://IP/），全局缓存；结果整合进 IP 视图访问状态', 'checks:run',
+            self::object(['results' => ['type' => 'object', 'description' => 'ip => {ok: 是否可达, ms?: 耗时毫秒}']], ['results']));
         $dnsPath = '/api/domains/{provider}/{domain}/records';
         $add('GET', $dnsPath, 'listDnsRecords', '读取并缓存解析记录；refresh=1 显式刷新云端', 'dns:read', null, ['refresh' => ['type' => 'string', 'enum' => ['1']]]);
         $recordAdd = $record;
@@ -254,24 +271,47 @@ TEXT;
         $add('PUT', $dnsPath . '/{recordId}', 'updateDnsRecord', '核对旧版本后修改 DNS，保留未提交字段，回读核实', 'dns:write', $recordUpdate);
         $add('DELETE', $dnsPath . '/{recordId}', 'deleteDnsRecord', '核对旧版本后删除单条 DNS，保留同组其他记录，回读核实', 'dns:write',
             self::object(['expected_version' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$']], ['expected_version']));
+        $add('POST', $dnsPath . '/{recordId}/status', 'setDnsRecordStatus', '暂停 / 恢复单条解析记录（记录保留、停止或恢复解析；需 expected_version；阿里云与腾讯云支持，GoDaddy 不支持并返回错误）', 'dns:write',
+            self::object(['paused' => $boolean, 'expected_version' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$']], ['paused', 'expected_version']));
         foreach ([[$dnsPath, 'post'], [$dnsPath . '/{recordId}', 'put'], [$dnsPath . '/{recordId}', 'delete']] as [$path, $method]) {
             $paths[$path][$method]['responses']['202'] = ['description' => '云端结果未确认；verified:false，保留变更编号并刷新核实，不能直接重试',
                 'content' => ['application/json' => ['schema' => self::object(['ok' => $boolean, 'verified' => $boolean, 'status' => $string, 'change_id' => $string, 'message' => $string])]]];
         }
-        $add('GET', '/api/dns/changes', 'listDnsChanges', '管理员查看最近 50 条 DNS 原值、拟提交值、回读值及结果（保留 200 条）', null, null, [], 'session');
-        $add('POST', $dnsPath . '/access-check', 'checkDnsHosts', '检查解析记录对应的主机访问状态', 'checks:run');
+        $add('POST', $dnsPath . '/browser-check', 'reportBrowserCheck', '上报大屏前端检查结果（浏览器直连探测，按 FQDN），与解析快照版本对齐后全局缓存；结果整合进大屏访问状态与检查时间', 'checks:run',
+            self::object(['revision' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$', 'description' => 'DNS 列表返回的区域 revision'],
+                'results' => ['type' => 'object', 'description' => 'fqdn => {ok: 是否可达}']], ['revision', 'results']));
+        $add('POST', $dnsPath . '/access-check', 'checkDnsHosts', '检查解析记录对应的主机访问状态；body.record_ids 可选（从记录列表读取），只探测指定记录，缺省探测该域名全部记录', 'checks:run',
+            self::object(['record_ids' => ['type' => 'array', 'items' => $string, 'description' => '可选，只检查这些记录 ID；勾选范围检查场景使用']]));
         $add('GET', '/api/accounts', 'listCloudAccounts', '列出云账号标识和脱敏信息', 'assets:read', null, [], 'api', ['type' => 'array', 'items' => ['type' => 'object']]);
         $add('POST', '/api/accounts', 'createCloudAccount', '添加云账号配置', null, $account, [], 'session');
         $accountUpdate = $account; unset($accountUpdate['required'], $accountUpdate['oneOf']);
         $add('PUT', '/api/accounts/{id}', 'updateCloudAccount', '编辑云账号；密钥留空保留，enabled=false 停用', null, $accountUpdate, [], 'session');
         $add('DELETE', '/api/accounts/{id}', 'deleteCloudAccount', '删除云账号配置，保留资产与缓存', null, null, [], 'session');
         $add('POST', '/api/accounts/{id}/test', 'testCloudAccount', '测试云账号连接', 'sync:run');
+        $add('POST', '/api/accounts/{id}/sync', 'syncCloudAccount', '同步指定云账号的域名台账；refresh_dns=true 时同时刷新该账号未过期域名的解析缓存（可能耗时数分钟）', 'sync:run',
+            self::object(['refresh_dns' => $boolean]), [], 'api',
+            self::object(['ok' => $boolean, 'account' => ['type' => 'object'],
+                'domains' => self::object(['count' => $integer, 'new' => $integer, 'stale' => $integer, 'latency_ms' => $integer]),
+                'dns' => ['type' => ['object', 'null'], 'description' => 'refresh_dns 时的解析缓存刷新结果；pending 为超预算未刷新的域名'],
+                'latency_ms' => $integer]));
         $add('POST', '/api/test-all', 'testAllCloudAccounts', '测试全部云账号连接', 'sync:run', null, [], 'api', ['type' => 'array', 'items' => ['type' => 'object']]);
         $add('POST', '/api/sync', 'syncDomains', '显式同步云端域名列表', 'sync:run');
         $add('GET', '/api/sync/logs', 'getSyncLogs', '读取同步记录', 'assets:read', null, ['limit' => $integer]);
-        $add('GET', '/api/access-check', 'getLegacyAccessResults', '读取历史访问检查结果：汇总计数与全部逐域结果（状态、HTTP 码、耗时、检测时间）', 'assets:read');
-        $add('POST', '/api/access-check', 'runLegacyAccessCheck', '并发探测全部有效域名能否访问，结果与检测时间持久化并返回全量明细', 'checks:run');
         $add('GET', '/api/settings', 'getWorkspaceSettings', '读取当前配置状态和可配置字段（不回显秘密）', null, null, [], 'session');
+        $add('GET', '/api/dns/changes', 'listDnsChanges', '读取 DNS 变更记录（最近 50 条：原值、拟提交值、回读值、结果与操作者），供设置页与管理员核对', null, null, [], 'session');
+        $add('GET', '/api/audit', 'listAuditLog', '读取操作审计记录（最近 100 条：已通过登录与权限校验的写入请求，不含请求正文与秘密）', null, null, [], 'session');
+        $add('GET', '/api/docs', 'listDocs', '列出仓库文档白名单（README / AGENTS / CHANGELOG / tasks.md 与 docs/ 全部 Markdown）的路径、标题、大小与更新时间', null, null, [], 'session');
+        $add('GET', '/api/docs/read', 'readDoc', '读取单篇白名单文档的 Markdown 正文；path 必须命中清单，越界路径返回 404', null, null,
+            ['path' => ['type' => 'string', 'description' => '文档相对路径，如 CHANGELOG.md 或 docs/00-目录.md']], 'session');
+        $docBody = self::object(['path' => ['type' => 'string', 'description' => 'docs/ 内以 .md 结尾的相对路径'],
+            'content' => ['type' => 'string', 'description' => 'Markdown 正文，最大 2 MB']], ['path', 'content']);
+        $add('POST', '/api/docs', 'createDoc', '在 docs/ 内新建 Markdown 文档（同名返回 409；父目录不存在时自动创建；仅管理员会话）', null, $docBody, [], 'session');
+        $add('PUT', '/api/docs', 'saveDoc', '覆盖保存白名单文档（原子写入；根目录 README / AGENTS / CHANGELOG / tasks.md 可编辑；仅管理员会话）', null, $docBody, [], 'session');
+        $add('DELETE', '/api/docs', 'deleteDoc', '删除 docs/ 内的 Markdown 文档（根目录白名单文件受保护，返回 403；仅管理员会话）', null,
+            self::object(['path' => $string], ['path']), [], 'session');
+        $add('GET', '/api/stats', 'getSystemStats', '系统概况：代码规模（app / public / scripts / tests 的文件数、行数、磁盘占用）、数据目录大小与 PHP 运行时内存（只读，仅管理员会话）', null, null, [], 'session');
+        $add('PUT', '/api/settings/screen', 'updateScreenRefresh', '更新大屏刷新配置：是否自动刷新与轮询周期（60–3600 秒）', null,
+            self::object(['auto_refresh' => $boolean, 'refresh_seconds' => ['type' => 'integer', 'minimum' => 60, 'maximum' => 3600]]), [], 'session');
         $add('PUT', '/api/settings/http', 'updateHttpSettings', '更新云商接口代理与超时', null,
             self::object(['proxy' => $secret, 'clear_proxy' => $boolean, 'timeout' => ['type' => 'integer', 'minimum' => 5, 'maximum' => 120], 'connect_timeout' => ['type' => 'integer', 'minimum' => 1, 'maximum' => 30]]), [], 'session');
         $add('PUT', '/api/auth/credentials', 'updateAdminCredentials', '修改管理员账号和密码；会话和旧 API 密钥失效', null,
@@ -284,72 +324,10 @@ TEXT;
         $add('GET', '/api/openapi.json', 'getOpenApi', '读取完整接口契约', null, null, [], 'public');
         $add('GET', '/api/capabilities', 'getCapabilities', '读取 AI 能力与认证说明', null, null, [], 'public');
         $add('GET', '/api/env-check', 'checkRuntimeEnvironment', '读取环境自检（初始化后仅管理员会话）', null, null, [], 'session');
-        $add('GET', '/api/maintenance', 'readMaintenance', '读取版本、资产数量、备份目录、交付自检与最近操作记录', null, null, [], 'session');
-        $add('POST', '/api/maintenance/backups', 'createAssetBackup', '创建不含凭据与检查缓存的服务器资产备份（最多 30 份）', null, self::object(), [], 'session');
-        $add('GET', '/api/maintenance/backups/{id}', 'downloadAssetBackup', '下载私有资产备份内容与 SHA-256', null, null, [], 'session');
-        $add('DELETE', '/api/maintenance/backups/{id}', 'deleteAssetBackup', '删除指定服务器备份', null, null, [], 'session');
-        $add('GET', '/api/maintenance/export', 'exportAssets', '导出 JSON 迁移文件或 CSV 交接资料；返回 filename、content 与 sha256', null, null, ['format' => ['type' => 'string', 'enum' => ['json', 'csv'], 'default' => 'json']], 'session');
-        $add('POST', '/api/maintenance/preview', 'previewAssetRestore', '预览全量替换；从 backup_id 或 content 指定一种来源，最大 5 MB，有效 15 分钟', null,
-            self::object(['backup_id' => $string, 'content' => ['type' => 'string', 'description' => 'assets-v1 JSON 文件正文；不能与 backup_id 同时填写']]), [], 'session');
-        $add('POST', '/api/maintenance/restore', 'restoreAssets', '验证密码与预览版本，自动留底后替换本地资产；不修改云端 DNS', null,
-            self::object(['token' => $string, 'password' => $secret, 'confirmation' => ['type' => 'string', 'const' => '恢复资产']], ['token', 'password', 'confirmation']), [], 'session');
-        $add('GET', '/api/maintenance/cleanup', 'readCleanupOverview', '读取账号不可用（已删除或停用）的遗留域名记录分组与四类日志（检查历史、DNS 变更、操作记录、同步日志）的计数与最早时间', null, null, [], 'session');
-        $add('POST', '/api/maintenance/cleanup/orphans', 'cleanupOrphanDomains', '清理账号不可用的域名记录：delete 删除台账行，manual 转为手工资产；两者都连带清除 DNS 缓存、健康观测与遗留检测数据。仅限已删除或已停用的账号', null,
-            self::object(['provider' => $string, 'action' => ['type' => 'string', 'enum' => ['delete', 'manual']], 'domains' => ['type' => 'array', 'items' => $string, 'description' => '可选，缺省表示该账号全部域名']], ['provider', 'action']), [], 'session');
-        $add('POST', '/api/maintenance/cleanup/logs', 'cleanupLogsByDimension', '按维度删除日志：store 为 check_events（按域名/时间/全部，保留最近健康状态）、dns_changes（按域名/全部）、audit（按时间/全部）或 sync_log（按类型/时间/全部）', null,
-            self::object(['store' => ['type' => 'string', 'enum' => ['check_events', 'dns_changes', 'audit', 'sync_log']],
-                'domain' => $string, 'provider' => $string, 'type' => $string,
-                'before' => ['type' => 'string', 'description' => '仅删除早于此时间的条目，Y-m-d 或完整时间'],
-                'all' => ['type' => 'boolean', 'description' => '清空该类日志全部条目']], ['store']), [], 'session');
-        $taskItem = self::object(['id' => $string, 'type' => ['type' => 'string', 'enum' => ['health-check', 'access-check', 'sync']],
-            'status' => ['type' => 'string', 'enum' => ['pending', 'running', 'done', 'failed']],
-            'progress' => ['type' => 'object'], 'result' => ['type' => ['object', 'null']], 'error' => ['type' => ['string', 'null']],
-            'actor' => $string, 'created_at' => $string, 'started_at' => ['type' => ['string', 'null']], 'finished_at' => ['type' => ['string', 'null']]]);
-        $add('GET', '/api/tasks', 'listBackgroundTasks', '后台任务队列：当前执行摘要与最近任务；执行由服务器 cron 的 worker（scripts/task-worker.php）逐个认领', null, null, [], 'session',
-            self::object(['ok' => $boolean, 'active' => ['type' => ['object', 'null']], 'tasks' => ['type' => 'array', 'items' => $taskItem]]));
-        $add('POST', '/api/tasks', 'enqueueBackgroundTask', '把长任务转入后台队列后立即返回；关闭浏览器也会继续执行。health-check=全量健康检查（可限定 kind=domain|ip，不含子域名）、access-check=域名访问检测、sync=域名同步', null,
-            self::object(['type' => ['type' => 'string', 'enum' => ['health-check', 'access-check', 'sync']],
-                'params' => self::object(['kind' => ['type' => 'string', 'enum' => ['domain', 'ip'], 'description' => '仅 health-check 支持；缺省检查域名与 IP']])]), [], 'session',
-            self::object(['ok' => $boolean, 'task' => $taskItem]));
-        $planItem = self::object(['id' => $string, 'title' => $string, 'detail' => $string,
-            'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
-            'source' => ['type' => 'string', 'enum' => ['agent', 'admin'], 'description' => 'agent=AI 协助提出，admin=工作台手动提出'],
-            'status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected']],
-            'review_note' => $string, 'result_note' => $string,
-            'created_at' => $string, 'updated_at' => $string, 'reviewed_at' => ['type' => ['string', 'null']]]);
-        $add('GET', '/api/plans', 'listImprovementPlans', '改进计划：功能点条目与审核状态，待审核优先排序；?status= 按状态筛选（如 approved 供 AI 直接读取已通过条目执行）；附带 AI 建议可用性与可选模型（不含密钥）', 'plans:read',
-            null, ['status' => ['type' => 'string', 'enum' => ['proposed', 'approved', 'in_progress', 'done', 'rejected'], 'description' => '可选，按状态筛选；approved 即 AI 待执行清单']], 'api',
-            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => $planItem],
-                'ai' => self::object(['enabled' => $boolean, 'models' => ['type' => 'array', 'items' => $string], 'default' => $string])]));
-        $add('POST', '/api/plans', 'createImprovementPlan', '新增改进计划条目（待审核）；同名待处理条目会返回 409', null,
-            self::object(['title' => $string, 'detail' => $string, 'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']]], ['title']), [], 'session',
-            self::object(['ok' => $boolean, 'item' => $planItem]));
-        $add('PUT', '/api/plans/{id}', 'updateImprovementPlan', '编辑条目或推进执行状态：status 仅支持 proposed / in_progress / done（通过 / 驳回走审核接口）', null,
-            self::object(['title' => $string, 'detail' => $string, 'priority' => ['type' => 'string', 'enum' => ['high', 'medium', 'low']],
-                'status' => ['type' => 'string', 'enum' => ['proposed', 'in_progress', 'done']], 'result_note' => ['type' => 'string', 'description' => '执行结果说明，标记完成时填写']]), [], 'session',
-            self::object(['ok' => $boolean, 'item' => $planItem]));
-        $add('POST', '/api/plans/{id}/review', 'reviewImprovementPlan', '审核计划条目：decision=approve 通过 / reject 驳回（驳回必须附 note 原因）', null,
-            self::object(['decision' => ['type' => 'string', 'enum' => ['approve', 'reject']], 'note' => ['type' => 'string', 'description' => '审核意见；驳回时必填']]), ['decision'], 'session',
-            self::object(['ok' => $boolean, 'item' => $planItem]));
-        $add('POST', '/api/plans/ai-suggest', 'suggestImprovementPlan', 'AI 优化建议：调用已配置的智谱 GLM（config/config.php 的 ai 节点）生成详情 Markdown 改写稿；仅返回建议文本不落盘，由管理员对比后决定是否采用', null,
-            self::object(['title' => $string, 'detail' => $string,
-                'model' => ['type' => 'string', 'description' => '可选，须在配置的 ai.models 列表内；缺省用 ai.model']], ['title']), [], 'session',
-            self::object(['ok' => $boolean, 'suggestion' => $string, 'model' => $string]));
-        $add('DELETE', '/api/plans/{id}', 'deleteImprovementPlan', '删除计划条目', null, null, [], 'session',
-            self::object(['ok' => $boolean]));
-        $add('GET', '/api/prompts', 'listPromptLibrary', '提示词库：prompts/ 目录下 Markdown 文件的只读清单（标题/文件名/更新时间/全文）；内容即文件，调整直接编辑 md', null, null, [], 'session',
-            self::object(['ok' => $boolean, 'items' => ['type' => 'array', 'items' => self::object(['name' => $string, 'file' => $string, 'title' => $string,
-                'updated_at' => $string, 'bytes' => $integer, 'content' => $string])]]));
-        return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => AssetSnapshot::VERSION,
-                'description' => '缓存优先的域名 / IP 工作台。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],
+        return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => self::VERSION,
+                'description' => '缓存优先的域名 / IP 资产大屏与 DNS 管理。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],
             'servers' => [['url' => '/']], 'paths' => $paths, 'components' => [
-                'securitySchemes' => ['bearerAuth' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'aw_<64 hex>', 'description' => '在产品设置创建，按 scopes 授权'],
-                    'sessionCookie' => ['type' => 'apiKey', 'in' => 'cookie', 'name' => session_name(), 'description' => '先获取图形验证码，再 POST /api/login；保留 Cookie，写请求另传 X-CSRF-Token']],
-                'schemas' => ['Asset' => self::object(['id' => $string, 'kind' => ['type' => 'string', 'enum' => ['domain', 'ip']],
-                    'name' => $string, 'provider' => $string, 'ip' => $string, 'ip_version' => ['type' => 'string', 'enum' => ['IPv4', 'IPv6']],
-                    'port' => $integer, 'note' => $string, 'links' => $links, 'linked_ips' => ['type' => 'array', 'items' => $string], 'bound_ips' => ['type' => 'array', 'items' => $string],
-                    'subdomain_count' => ['type' => ['integer', 'null']], 'subdomains' => ['type' => 'array', 'items' => ['type' => 'object']],
-                    'health' => self::object(['status' => ['type' => 'string', 'enum' => ['healthy', 'unhealthy', 'stale', 'unchecked']], 'message' => $string, 'checked_at' => ['type' => ['string', 'null']],
-                        'cert' => self::object(['expires_at' => ['type' => 'string', 'description' => 'TLS 叶子证书到期日 Y-m-d（HTTPS 检查时采集）'], 'subject' => ['type' => ['string', 'null']], 'issuer' => ['type' => ['string', 'null']]])])], ['id', 'kind', 'name', 'health'])]]];
+                'securitySchemes' => ['bearerAuth' => ['type' => 'http', 'scheme' => 'bearer', 'bearerFormat' => 'aw_<64 hex>', 'description' => '在 /settings 创建，按 scopes 授权'],
+                    'sessionCookie' => ['type' => 'apiKey', 'in' => 'cookie', 'name' => session_name(), 'description' => '先获取图形验证码，再 POST /api/login；保留 Cookie，写请求另传 X-CSRF-Token']]]];
     }
 }

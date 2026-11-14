@@ -49,8 +49,7 @@ class Router
                         AuditLog::begin($method, $p, $params);
                         // Hold the local lock through JSON output. Request shutdown
                         // releases the resource, including controllers that exit.
-                        if (in_array($p, ['/api/domains', '/api/domains/stats', '/api/health', '/api/health/ips',
-                            '/api/health/ips/{id}', '/api/health/domains/{id}/bindings'], true) || strpos($p, '/api/maintenance') === 0) {
+                        if (in_array($p, ['/api/domains', '/api/domains/stats'], true)) {
                             WorkspaceData::acquire(DATA_DIR);
                         }
                     }
