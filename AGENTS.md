@@ -43,6 +43,8 @@ for f in public/assets/js/*.js; do node --check "$f"; done
 grep -rn "HealthService\|TrendService\|MaintenanceService\|AssetSnapshot" app/ public/ scripts/ --include="*.php" --include="*.js" || true
 # 公开文档规范（命名 / 链接 / 地址策略）
 python3 scripts/check-public-docs.py
+# API 三件事防漂移（路由 ↔ scope 声明 ↔ 契约；新增/删除路由后必须为零）
+python3 scripts/check-api-contracts.py
 ```
 
 浏览器手动验收基线：登录 → `/screen` 域名 / IP 双视图与弹窗批量操作 → `/settings` 四个面板（云账号 / AI API / 修改记录与文档 / 通用设置）→ `/calendar` 打卡与待办 → `/docs` 预览与编辑。

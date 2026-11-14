@@ -82,8 +82,8 @@ class Auth
             return;
         }
         $scope = null;
-        if ($method === 'POST' && ($route === '/api/ips/{ip}/location'
-            || substr($route, -13) === '/access-check')) { $scope = 'checks:run'; }
+        if ($method === 'POST' && ($route === '/api/ips/{ip}/location' || $route === '/api/ips/check'
+            || $route === '/api/ips/browser-check' || substr($route, -13) === '/access-check')) { $scope = 'checks:run'; }
         elseif ($route === '/api/sync' || $route === '/api/test-all' || $route === '/api/accounts/{id}/test' || $route === '/api/accounts/{id}/sync') { $scope = 'sync:run'; }
         elseif ($route === '/api/proposals/{id}/approve' || $route === '/api/proposals/{id}/reject') { $scope = null; } // 仅管理员会话：批准会执行 DNS 写入
         elseif ($route === '/api/proposals') { $scope = 'proposals:write'; }

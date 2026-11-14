@@ -33,6 +33,7 @@
 - [x] T7 文档同步：llms.txt MCP 节、README「接入三步」+「MCP Server」小节
 - [x] T8 README「扩展开发」章节：云商适配器路径 + API 三件事
 - [x] T9 发布包补齐新交付物（mcp-server.py / AGENTS.md / tasks.md）+ FORBIDDEN_PREFIXES 硬校验
+- [x] T10 契约防漂移脚本 check-api-contracts.py（首跑修复 ips/check 真实 scope 漂移）+ 纳入 AGENTS 验证命令
 
 ---
 
@@ -118,7 +119,10 @@
 - **内容**：diff「index.php 路由 ↔ Auth scope ↔ ApiDescriptionService 契约」三方，不一致退出非零；
   纳入 AGENTS.md 验证命令
 - **验收**：删路由不删契约时脚本报错
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:58）——脚本支持 $dnsPath 变量展开与别名折叠，正反向各三重检查；
+  **首跑即抓到一处真实漂移并修复**：`POST /api/ips/check` 与 `/api/ips/browser-check` 契约声明
+  `checks:run` 但 authorizeRoute 未声明（Bearer 调用被 403），已补上并用 checks:run 临时 token 实测
+  （422 验证拒绝 TEST-NET 地址而非 403）；负向测试（临时删路由）精确报错 exit=1；已纳入 AGENTS 验证命令
 
 ### T11 · `scripts/cleanup-data.php --dry-run`
 - **内容**：按代码引用白名单清点 `data/`，报告孤儿文件；防下次删功能再留渣

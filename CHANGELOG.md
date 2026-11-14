@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **契约防漂移脚本（T10）**：新增 `scripts/check-api-contracts.py`（路由 ↔ authorizeRoute scope ↔ OpenAPI 契约三方 diff，`$dnsPath` 变量展开与别名折叠，正反向检查），纳入 AGENTS.md 验证命令。**首跑即抓到并修复一处真实漂移**：`POST /api/ips/check` 与 `/api/ips/browser-check` 契约声明 `checks:run` 但鉴权未声明，Bearer 密钥调用被 403——现已对齐并用 checks:run 临时 token 实测通过（TEST-NET 地址按设计以 422 拒绝，不发起连接）。
 - **发布包加固（T9）**：`package-release.py` 交付物清单补齐新增文件（mcp-server.py / AGENTS.md / tasks.md），并新增 `FORBIDDEN_PREFIXES` 构建期硬校验（`data/` / `.local/` / `.git/` / 真实凭据文件进入发布即失败）；实测构建 96 个源文件零违规。
 - **文档同步（T7）**：`llms.txt` 新增 MCP 节（stdio 工具清单、`WORKSPACE_URL` / `WORKSPACE_API_TOKEN` 配置、scope 门禁与提案不直写承诺）；README「AI 接入」章节新增「接入三步」（创建密钥 → bootstrap 一个文件 → 提案流）与「MCP Server」小节。
 - **MCP Server（T6）**：新增 `scripts/mcp-server.py`（stdio 传输、零依赖，复用 workspace-api.py 客户端），六工具暴露给任意 MCP 客户端——`get_domain_screen` / `get_ip_screen` / `list_dns_records` / `get_daily_report` / `list_docs` 只读 + `propose_dns_change`（proposals:write；客户端预校验必填字段与 record_id 依赖，管理员批准后才执行）；配置经 `WORKSPACE_URL` / `WORKSPACE_API_TOKEN` 环境变量，scope 不足与未知工具均返回清晰错误；协议实现 initialize / tools/list / tools/call / ping（2025-03-26）。
