@@ -28,6 +28,7 @@
 - [x] T1 孤儿数据清理：data/ 18M → 3.9M（健康栈删除后的运行时残渣）
 - [x] T3 AI Bootstrap 单文件接入：`GET /api/ai/bootstrap.md`（assets:read，一次请求 = 说明 + 契约 + 护栏 + 双视图快照）
 - [x] T4 密钥签发附 AI 接入材料：签发响应 `ai_usage` + /settings 弹窗「复制接入材料」按钮
+- [x] T5 workspace-api.py 语义化客户端：bootstrap/screen/ips/records/report/propose 子命令 + 一键接入自检
 
 ---
 
@@ -68,7 +69,9 @@
 - **内容**：新增 `bootstrap()` / `screen()` / `ips()` / `records()` / `propose()` / `report()` 语义方法
   与 `--bootstrap` 自描述命令；保持零依赖、单文件
 - **验收**：`python3 scripts/workspace-api.py bootstrap` 一条命令完成接入自检
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:50）——语义子命令 bootstrap / screen / ips / records / report / propose
+  （raw 模式保留兼容，/api/health 过期示例一并修正）；`bootstrap` 一键自检 9 项全 ✓（bootstrap 文档、
+  OpenAPI 53 路径、能力发现、双视图快照），经服务层临时 token（创建→自检→撤销，净零）真实链路验证
 
 ---
 
