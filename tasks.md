@@ -143,6 +143,7 @@
 - [x] DNS 缓存 raw 瘦身（2026-11-14）：阿里云 / 腾讯云 listRecords 的 raw 收敛到唯一消费字段（Weight，供 DnsChangeService 权重保留），存量 79 个缓存就地迁移 609KB → 281KB（raw 占比 64% → 极小）；raw 不参与 version 哈希，record_access revision 对齐不受影响，Weight 保留链路实测通过。
 - [x] 大屏自动刷新与快照 TTL 联动提示（2026-11-14）：SnapshotCache 透出固定时长 ttl（120s，写入时不随剩余秒数递减），前端缓存芯片在「自动刷新周期 < 快照有效期」时显示说明与悬停解释（刷新 300s 或关闭自动刷新时自动隐藏）。
 - [x] AGENTS.md 架构地图随 P0–P2 刷新（2026-11-14）：scripts 行补 AI 客户端 / MCP / 防漂移 / 数据清点，AI 接入点补 bootstrap.md 与客户端 / MCP 入口。
+- [x] IP 定位高亮持久化 + 视图条件写入 URL（2026-11-14）：修复点击卡片 IP 后弹窗定位高亮被异步归属地重渲染抹掉的问题（高亮跨重渲染保留、closeModal 复位、筛选重绘不丢）；视图条件（mode / tab / status / sort / size / page / q）点击即写入 URL hash（replaceState，默认值不写入），刷新与分享链接后还原，hash 优先于本地记忆且 mode 大小写不敏感（修复 `#mode=IP` 无法识别）。
 - [ ] `data/cache` 单 zone 文件可达 4.7MB：DNS 缓存可剥离 raw 字段瘦身（改 provider 返回结构，需回归测试）
 - [ ] 大屏自动刷新周期与 SnapshotCache TTL 联动提示（刷新快于缓存时给出说明）
 - [ ] `AGENTS.md` 架构地图随 P0–P2 落地同步刷新

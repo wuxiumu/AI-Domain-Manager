@@ -2,6 +2,7 @@
 
 ## 未发布
 
+- **IP 定位高亮持久化 + 视图条件写入 URL**：修复域名视图点击 IP 后弹窗定位高亮被异步归属地重渲染抹掉的问题——高亮与勾选跨重渲染保留（筛选重绘不丢），关闭弹窗复位，滚动定位仅首屏执行一次；视图条件（mode / tab / status / sort / size / page / q）点击即写入 URL hash（replaceState 不产生历史记录，默认值不写入保持链接干净），刷新与分享链接后完整还原，hash 优先于本地记忆且 mode 大小写不敏感（修复 `#mode=IP` 大写写法无法识别视图）。
 - **DNS 缓存瘦身与快照 TTL 透出**：阿里云 / 腾讯云 `listRecords` 的 raw 字段收敛到唯一下游消费字段（Weight，权重保留链路实测通过），存量 79 个 DNS 缓存就地迁移 609KB → 281KB（raw 不参与 version 哈希，访问状态 revision 对齐不受影响）；SnapshotCache 有效期信息随快照透出（`cache.ttl` / `ttl_ends_at`，ttl 为写入时固定的配置时长），大屏缓存芯片在「自动刷新周期快于快照有效期」时显示说明（悬停见完整解释），避免"刷新了却没变化"的困惑。
 - **大屏前端模块化拆分**：screen.js（1759 行）按职责拆为视图域 876 行 + 新模块 `screen-modal.js`（930 行，解析管理弹窗全部逻辑——渲染 / 关键词与状态筛选 / 勾选与批量工具 / 批量添加 / 单条记录编辑 / 解析示例 / 非 A 记录 / 弹窗检查）。共享 state 与工具经 ScreenBoard 桥接传递（引用同一对象），模块回填 `openModal` / `modalItemFor` / `openOtherRecords` / `closeModal` 供视图域与 IP 视图调用。顺带修复一处隐藏 bug：非 A 记录编辑成功后调用了不存在的 `reload()`（实际保存成功但提示失败），改为强制重载快照。
 - **数据清点脚本（T11）**：新增 `scripts/cleanup-data.php`（只读报告，永不代删）——按代码引用白名单分类 `data/` 全部内容（存储 / 锁附属 / SnapshotCache 快照按 remember key 哈希归类 / dns-* 结构化缓存 / dns-locks 运行锁 / 未知目录），孤儿候选以 exit 1 报告；正负双向验证。顺带修正 T1 的一个误判：非 dns 缓存中 domain-screen-v1 / ip-screen-v1 是 SnapshotCache 在用快照（删除后自动重建）；确认 3 项真孤儿（`.write_test`、旧任务队列 `tasks.json` + 锁，日历待办已迁入 calendar.json），留管理员决定删除。

@@ -40,6 +40,7 @@ function openModal(key, source, locateIp) {
     // 来源上下文（从 IP 视图进入时携带）：高亮指向该 IP 的记录与被点击的域名。
     state.modalSource = source && source.ip ? { ip: String(source.ip), fqdn: String(source.fqdn || '') } : null;
     state.locateIp = locateIp ? String(locateIp) : null; // 点击卡片 IP：打开后勾选该组并滚动定位
+    state.locateScroll = !!state.locateIp;
     state.selected = {};
     hideInlineBars();
     ensureIpLocations(); // 归属地缓存就绪后重绘记录行
@@ -59,6 +60,7 @@ function closeModal() {
     state.modalKey = null;
     state.modalSource = null;
     state.locateIp = null;
+    state.locateScroll = false;
     state.selected = {};
     state.modalQ = '';
     state.modalStatus = '';
@@ -215,7 +217,8 @@ function renderModal() {
             ? '<div class="sb-hosts-empty">没有匹配的记录：调整关键词或访问状态筛选</div>'
             : '<div class="sb-hosts-empty">该域名暂无 A 记录 · 点上方「批量添加」创建第一条解析（每行一条：主机名 + IPv4）</div>'));
 
-    // 点击卡片 IP 进入：勾选该子域名组、高亮并滚动定位到可见
+    // 点击卡片 IP 进入：勾选该子域名组、高亮并滚动定位到可见。
+    // locateIp 跨重渲染保留（异步归属地刷新 / 筛选重绘不再抹掉高亮），仅首屏滚动一次；closeModal 时复位。
     if (state.locateIp) {
         var targetRow = null;
         document.querySelectorAll('#sb-modal-body .sb-host').forEach(function (rowEl) {
@@ -232,9 +235,11 @@ function renderModal() {
             targetRow.classList.add('sb-host-locate');
             syncPickAll();
             syncButtons();
-            setTimeout(function () { targetRow.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
+            if (state.locateScroll) {
+                setTimeout(function () { targetRow.scrollIntoView({ block: 'center', behavior: 'smooth' }); }, 60);
+                state.locateScroll = false;
+            }
         }
-        state.locateIp = null; // 一次性定位
     }
 
     syncPickAll();

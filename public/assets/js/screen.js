@@ -231,6 +231,22 @@ function saveView() {
     try {
         localStorage.setItem(VIEW_KEY, JSON.stringify({ tab: state.tab, q: state.q, sort: state.sort, size: state.size, page: state.page, mode: state.mode, ipSort: state.ipSort, ipStatus: state.ipStatus, domainStatus: state.domainStatus }));
     } catch (e) { /* 忽略 */ }
+    writeViewHash(); // 条件同步到 URL：刷新 / 分享链接后点击过的筛选仍然保留
+}
+
+// 视图条件 → URL hash（replaceState 不产生历史记录）；默认值不写入，保持链接干净。
+function writeViewHash() {
+    var params = [['mode', state.mode]];
+    if (state.tab) { params.push(['tab', state.tab]); }
+    var status = state.mode === 'ip' ? state.ipStatus : state.domainStatus;
+    if (status) { params.push(['status', status]); }
+    var sort = state.mode === 'ip' ? state.ipSort : state.sort;
+    if (sort !== (state.mode === 'ip' ? 'domains' : 'expire')) { params.push(['sort', sort]); }
+    if (state.size !== '24') { params.push(['size', state.size]); }
+    if (state.page > 1) { params.push(['page', String(state.page)]); }
+    if (state.q) { params.push(['q', state.q]); }
+    var hash = '#' + params.map(function (p) { return p[0] + '=' + encodeURIComponent(p[1]); }).join('&');
+    if (location.hash !== hash) { history.replaceState(null, '', hash); }
 }
 
 function restoreView() {
@@ -248,9 +264,28 @@ function restoreView() {
             state.mode = v.mode === 'ip' ? 'ip' : 'domain';
         }
     } catch (e) { /* 忽略 */ }
-    // URL hash 优先（#mode=ip），其次本地记忆
-    var hashMode = (location.hash.match(/^#mode=(ip|domain)/) || [])[1];
-    if (hashMode) { state.mode = hashMode; }
+    // URL hash 条件优先（mode / tab / status / sort / size / page / q），其余沿用本地记忆；mode 大小写不敏感
+    var hashQuery = {};
+    location.hash.replace(/^#/, '').split('&').forEach(function (pair) {
+        if (!pair) { return; }
+        var eq = pair.indexOf('=');
+        if (eq === -1) { return; }
+        hashQuery[pair.slice(0, eq)] = decodeURIComponent(pair.slice(eq + 1));
+    });
+    var hashMode = (hashQuery.mode || '').toLowerCase();
+    if (hashMode === 'ip' || hashMode === 'domain') { state.mode = hashMode; }
+    if (typeof hashQuery.tab === 'string') { state.tab = hashQuery.tab; }
+    if (typeof hashQuery.q === 'string') { state.q = hashQuery.q; }
+    var hashStatus = ['ok', 'fail', 'unchecked'].indexOf(hashQuery.status) !== -1 ? hashQuery.status : null;
+    if (hashStatus !== null) {
+        if (state.mode === 'ip') { state.ipStatus = hashStatus; } else { state.domainStatus = hashStatus; }
+    }
+    if (hashQuery.sort) {
+        if (state.mode === 'ip' && IP_SORT_KEYS.indexOf(hashQuery.sort) !== -1) { state.ipSort = hashQuery.sort; }
+        if (state.mode === 'domain' && SORTS[hashQuery.sort]) { state.sort = hashQuery.sort; }
+    }
+    if (SIZES.indexOf(hashQuery.size) !== -1) { state.size = hashQuery.size; }
+    if (Number(hashQuery.page) > 0) { state.page = Math.floor(Number(hashQuery.page)); }
     $('sb-q').value = state.q;
     applyModeUi(); // 内部已按当前视图重建排序下拉并赋值，不再重复赋值
     $('sb-size').value = state.size;
@@ -293,9 +328,7 @@ function setMode(mode) {
     if (state.mode === mode) { return; }
     state.mode = mode;
     closeModal(); // 视图切换时关闭打开的弹窗
-    var modeHash = '#mode=' + mode;
-    if (location.hash !== modeHash) { history.replaceState(null, '', modeHash); }
-    applyModeUi();
+    applyModeUi(); // URL hash 由 render → saveView → writeViewHash 带全量条件更新
     // 记忆每套视图的排序键；tab / 搜索词 / 分页保持上下文延续。
     var saved = null;
     try { saved = JSON.parse(localStorage.getItem(VIEW_KEY) || 'null'); } catch (e) { /* 忽略 */ }
@@ -768,9 +801,14 @@ function bind() {
     });
 
     // hash-only 导航（前进 / 后退 / 手动改 URL）时跟随视图模式
+    // hash 变化（前进 / 后退 / 手动改 URL / 粘贴分享链接）：从 hash 恢复全部视图条件
     window.addEventListener('hashchange', function () {
-        var m = (location.hash.match(/^#mode=(ip|domain)/) || [])[1];
-        if (m && m !== state.mode) { setMode(m); }
+        restoreView();
+        applyModeUi();
+        $('sb-size').value = state.size;
+        state.page = Math.max(1, state.page);
+        render();
+        if (state.mode === 'ip' && !state.ipsData) { loadIpData(); }
     });
     setInterval(function () {
         $('sb-clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false });
