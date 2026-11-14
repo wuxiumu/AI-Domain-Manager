@@ -30,6 +30,7 @@
 - [x] T4 密钥签发附 AI 接入材料：签发响应 `ai_usage` + /settings 弹窗「复制接入材料」按钮
 - [x] T5 workspace-api.py 语义化客户端：bootstrap/screen/ips/records/report/propose 子命令 + 一键接入自检
 - [x] T6 MCP Server：scripts/mcp-server.py（stdio 零依赖，六工具，护栏经 scope 校验）
+- [x] T7 文档同步：llms.txt MCP 节、README「接入三步」+「MCP Server」小节
 
 ---
 
@@ -91,7 +92,9 @@
 - **内容**：`llms.txt` 增 MCP 一节；README 新增「AI 接入」章节（bootstrap / token / 提案流 / MCP）；
   CHANGELOG 记录
 - **验收**：AI 与人类都能从 README 一路走到可用
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:56）——llms.txt 新增 MCP 节（工具清单 / 环境变量 / scope 门禁 / 提案不直写），
+  bootstrap.md 内嵌内容随之同步；README「AI 接入」章节新增「接入三步」与「MCP Server」小节；
+  check-public-docs 通过
 
 ---
 

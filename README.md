@@ -89,6 +89,22 @@ php -S 127.0.0.1:8080 -t public public/index.php
 
 归属地说明：IP 归属地查询会把目标公网 IP 发送给第三方 [ipwhois.io](https://ipwhois.io/documentation)，结果仅为近似位置，缓存在 `data/ip_locations.json`。AI 使用 `checks:run` 调用 `POST /api/ips/{ip}/location` 显式刷新。
 
+### 接入三步（给 AI 的最短路径）
+
+1. 管理员在 `/settings → AI API` 创建密钥——签发成功弹窗自带「AI 接入材料」（认证头 + bootstrap 地址 + curl 示例），复制整段发给任何 AI；
+2. AI 请求 `GET /api/ai/bootstrap.md` 一个文件完成 onboarding（说明 + 契约 + 护栏 + 双视图快照）；也可用官方客户端自检：`python3 scripts/workspace-api.py bootstrap`（逐项 ✓/✗）；
+3. AI 读台账、提交变更提案（`proposals:write`），管理员在 `/settings` 批准后按护栏执行。
+
+### MCP Server（stdio，零依赖）
+
+`scripts/mcp-server.py` 把本实例接入任意支持 MCP 的 AI 客户端：
+
+```bash
+WORKSPACE_URL=http://127.0.0.1:8080 WORKSPACE_API_TOKEN=aw_xxx python3 scripts/mcp-server.py
+```
+
+提供工具：`get_domain_screen` / `get_ip_screen` / `list_dns_records` / `get_daily_report` / `list_docs` 只读 + `propose_dns_change`（走提案流，需 `proposals:write`；scope 不足时服务端拒绝）。CLI 直用同一客户端：`python3 scripts/workspace-api.py screen` / `ips` / `report` / `records --provider <账号> --domain <域名>`。
+
 本机开发调试可用免登录模式：在 `config/` 下创建空的 `dev-unlock.flag` 文件，或以 `AW_DEV_UNLOCK=1` 环境变量启动 PHP。它只对 `127.0.0.1` / `::1` 的回环请求自动建立会话（与正常登录同权限、仍受 CSRF 保护）；删除文件或取消环境变量立即恢复「密码 + 图形验证码」登录，生产环境不会意外启用。
 
 ## 架构设计

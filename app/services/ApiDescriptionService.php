@@ -79,6 +79,14 @@ Workflow:
 9. POST /api/sync explicitly refreshes the cloud domain inventory. Requires sync:run.
    POST /api/accounts/{id}/sync syncs one cloud account the same way; add {"refresh_dns":true} to also refetch cached DNS records for its unexpired domains (may take minutes).
 
+MCP (Model Context Protocol):
+- scripts/mcp-server.py exposes this API as MCP tools over stdio (zero-dependency): get_domain_screen,
+  get_ip_screen, list_dns_records, get_daily_report, list_docs and propose_dns_change.
+- Configure with WORKSPACE_URL (server origin) and WORKSPACE_API_TOKEN; the token's scopes gate every tool
+  (reads need assets:read, propose_dns_change needs proposals:write and the server rejects calls without the scope).
+- propose_dns_change validates required fields before submitting and never writes cloud DNS directly;
+  the administrator approves or rejects each proposal.
+
 Interpretation:
 - Reads reuse file caches. Do not sync, refresh DNS, run checks or write DNS just to display a list.
 - DNS-derived IPs may be CDN/proxy addresses. Manual registrations and DNS discovery have different meanings; an IP can be both.
