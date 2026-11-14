@@ -28,6 +28,7 @@ $router->get('/api/openapi.json', [ApiDescriptionController::class, 'openapi']);
 $router->get('/api/capabilities', [ApiDescriptionController::class, 'discovery']);
 $router->get('/.well-known/asset-workspace.json', [ApiDescriptionController::class, 'discovery']);
 $router->get('/llms.txt', [ApiDescriptionController::class, 'instructions']);
+$router->get('/api/ai/bootstrap.md', [ApiDescriptionController::class, 'bootstrap']);
 
 // 鉴权
 $router->get('/api/dns/changes', [RecordController::class, 'changes']);

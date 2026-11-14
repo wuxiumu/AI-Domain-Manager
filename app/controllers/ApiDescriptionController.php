@@ -24,4 +24,16 @@ class ApiDescriptionController
         header('Content-Type: text/plain; charset=utf-8');
         echo $text;
     }
+
+    /** AI bootstrap（/api/ai/bootstrap.md）：使用说明 + 能力清单 + 护栏速查 + 双视图快照的单文件接入包。 */
+    public function bootstrap(): void
+    {
+        Auth::requireLogin();
+        $text = ApiDescriptionService::bootstrapMarkdown();
+        conditional_get(hash('sha256', $text));
+        header('Content-Type: text/markdown; charset=utf-8');
+        header('Content-Disposition: inline; filename="asset-workspace-bootstrap.md"');
+        header('Cache-Control: no-store');
+        echo $text;
+    }
 }

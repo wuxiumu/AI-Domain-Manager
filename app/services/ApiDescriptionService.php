@@ -8,7 +8,7 @@ class ApiDescriptionService
     public static function discovery(): array
     {
         return ['name' => 'Asset Workspace', 'version' => self::VERSION, 'description' => '域名与 IP 资产大屏 + DNS 管理，AI 可读可操作',
-            'openapi_url' => '/api/openapi.json', 'instructions_url' => '/llms.txt',
+            'openapi_url' => '/api/openapi.json', 'instructions_url' => '/llms.txt', 'ai_bootstrap_md' => '/api/ai/bootstrap.md',
             'authentication' => ['recommended' => 'bearer', 'header' => 'Authorization: Bearer <token>',
                 'provisioning' => '管理员登录 → /settings → AI API → 创建密钥',
                 'session_login' => '/api/login', 'session_captcha' => '/api/login/captcha', 'session_write_header' => 'X-CSRF-Token'],
@@ -27,6 +27,8 @@ Domain & IP asset wall display with DNS management. AI can read the inventory an
 
 Discover operations and request schemas at GET /api/openapi.json.
 Machine discovery: GET /.well-known/asset-workspace.json (alias /api/capabilities).
+One-file onboarding: GET /api/ai/bootstrap.md bundles these instructions, the capability list,
+the write-guardrail cheat-sheet and BOTH view snapshots (domains + IPs) as a single Markdown document.
 All URLs are relative to this installation's origin.
 
 Authentication:
@@ -85,6 +87,69 @@ Interpretation:
 - Use URL-encoded path segments. Do not invent account, record or asset IDs.
 - Never include passwords, cloud secrets or bearer tokens in a URL, a shared report, or logs.
 TEXT;
+    }
+
+    /** AI 一次请求的自包含接入文档：使用说明 + 能力清单 + 写护栏速查 + 域名/IP 双视图快照。 */
+    public static function bootstrapMarkdown(): string
+    {
+        $scopes = [];
+        foreach (ApiTokenService::SCOPES as $scope => $desc) {
+            $scopes[] = '| `' . $scope . '` | ' . $desc . ' |';
+        }
+        $lines = [
+            '# Asset Workspace · AI Bootstrap（一次请求完成接入）',
+            '',
+            '本文档是自包含接入包：认证与工作流说明 + 能力清单 + 写护栏速查 + 域名/IP 双视图 Markdown 快照。',
+            '读完本文即可完成「读台账 + 提交变更提案」全流程；所有 URL 相对本安装源；读取均为缓存快照，不会触发云请求。',
+            '生成时间：' . date('Y-m-d H:i:s') . ' · 版本：' . self::VERSION . '。',
+            '',
+            '---',
+            '',
+            '## 第一部分 · 使用说明（与 GET /llms.txt 内容一致）',
+            '',
+            self::instructions(),
+            '',
+            '---',
+            '',
+            '## 第二部分 · 能力清单（与 GET /.well-known/asset-workspace.json 一致）',
+            '',
+            '```json',
+            json_encode(self::discovery(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT),
+            '```',
+            '',
+            '## 第三部分 · 权限范围（scope）',
+            '',
+            '| scope | 说明 |',
+            '| --- | --- |',
+            implode("\n", $scopes),
+            '',
+            '## 第四部分 · 写护栏速查（写操作前必读）',
+            '',
+            '1. 首选提案流（`proposals:write`）：POST /api/proposals 提交，管理员批准后才执行；重复待审提案返回 409。',
+            '2. 直接写（`dns:write`）必须携带目标记录的 `expected_version`（新增用列表响应的 `expected_revision`）；',
+            '   云端版本不符返回 **HTTP 409**（未写入，请刷新后重试）；',
+            '   **HTTP 202 / `verified:false`** 表示结果未核实——不要自动重试，稍后刷新核对；',
+            '   只有 **`verified:true`** 表示已回读云端核实（不等于全球 DNS 传播完成）。',
+            '3. 每次写只改一条记录；同一区域先读后写；绝不自动重试写操作。',
+            '4. 暂停 / 恢复用 POST .../records/{id}/status（`dns:write`，body {paused, expected_version}）；GoDaddy 不支持。',
+            '',
+            '---',
+            '',
+            '## 第五部分 · 域名视图快照（GET /api/domains/screen.md 的当前内容）',
+            '',
+            ScreenService::markdown(DATA_DIR, config('accounts')),
+            '',
+            '---',
+            '',
+            '## 第六部分 · IP 视图快照（GET /api/ips/screen.md 的当前内容）',
+            '',
+            IpScreenService::markdown(DATA_DIR, config('accounts')),
+            '',
+            '---',
+            '',
+            '*本文档由 GET /api/ai/bootstrap.md 生成（`assets:read`）；内容随缓存刷新而变化，AI 应以最新一次读取为准。*',
+        ];
+        return implode("\n", $lines) . "\n";
     }
 
     private static function object(array $properties = [], array $required = []): array
@@ -323,6 +388,7 @@ TEXT;
         $add('DELETE', '/api/tokens/{id}', 'revokeApiToken', '撤销 API 密钥，立即停止后续调用', null, null, [], 'session');
         $add('GET', '/api/openapi.json', 'getOpenApi', '读取完整接口契约', null, null, [], 'public');
         $add('GET', '/api/capabilities', 'getCapabilities', '读取 AI 能力与认证说明', null, null, [], 'public');
+        $add('GET', '/api/ai/bootstrap.md', 'getAiBootstrap', 'AI 一次请求完成接入的自包含 Markdown：使用说明 + 能力清单 + 写护栏速查 + 域名/IP 双视图当前快照', 'assets:read', null, [], 'api');
         $add('GET', '/api/env-check', 'checkRuntimeEnvironment', '读取环境自检（初始化后仅管理员会话）', null, null, [], 'session');
         return ['openapi' => '3.1.0', 'info' => ['title' => 'Asset Workspace API', 'version' => self::VERSION,
                 'description' => '缓存优先的域名 / IP 资产大屏与 DNS 管理。使用 Bearer API 密钥或登录 Session；云配置与登录密码不能读回。'],

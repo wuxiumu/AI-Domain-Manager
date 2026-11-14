@@ -26,6 +26,7 @@
 - [x] 本地自托管 vendor 管线（marked + DOMPurify + hljs + mermaid），运行时零外链
 - [x] 代码干净度审计：零死类、路由↔契约 67:67 零漂移、零调试残留
 - [x] T1 孤儿数据清理：data/ 18M → 3.9M（健康栈删除后的运行时残渣）
+- [x] T3 AI Bootstrap 单文件接入：`GET /api/ai/bootstrap.md`（assets:read，一次请求 = 说明 + 契约 + 护栏 + 双视图快照）
 
 ---
 
@@ -51,7 +52,8 @@
   同步登记契约与 `assets:read` scope（三件事）
 - **验收**：一个请求返回完整自包含 Markdown；AI 仅凭此文件能完成「读台账 + 提交提案」全流程；
   README / llms.txt 链接此入口
-- **状态**：未开始
+- **状态**：✅ 完成（2026-11-14 22:36）——六部分结构（说明/能力/scope/护栏速查/双视图快照），88KB 单文件 200；
+  无效密钥 401；llms.txt、能力发现、README 均已链接；三件事核对通过
 
 ### T4 · 密钥签发响应附带「AI 使用说明」
 - **内容**：`POST /api/tokens` 响应（与 /settings 创建成功弹窗）追加现成可复制块：

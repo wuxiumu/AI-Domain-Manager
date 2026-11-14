@@ -75,10 +75,11 @@ php -S 127.0.0.1:8080 -t public public/index.php
 
 ## AI 接入
 
-实例对外提供 `/api/openapi.json`、`/.well-known/asset-workspace.json`、`/llms.txt`（AI 使用说明）与 `/api/capabilities`。API 密钥按权限范围授权（`assets:read` / `assets:write` / `dns:read` / `dns:write` / `checks:run` / `sync:run` / `proposals:write`），账号配置与密钥管理仅允许管理员会话。
+实例对外提供 `/api/openapi.json`、`/.well-known/asset-workspace.json`、`/llms.txt`（AI 使用说明）、`/api/capabilities` 与 **`/api/ai/bootstrap.md`（AI 一次请求完成接入的自包含文档：使用说明 + 能力清单 + 写护栏速查 + 双视图当前快照）**。API 密钥按权限范围授权（`assets:read` / `assets:write` / `dns:read` / `dns:write` / `checks:run` / `sync:run` / `proposals:write`），账号配置与密钥管理仅允许管理员会话。
 
 面向 AI 的核心入口：
 
+- `GET /api/ai/bootstrap.md` — AI 接入首选入口：一个请求返回自包含接入包（说明 + 契约 + 护栏 + 双视图快照）。
 - `GET /api/domains/screen.md` — 域名大屏的自包含 Markdown 快照（域名、子域名 A 记录、访问状态、可直接照做的 CRUD 指引），一个文件交给 AI 即可读写操作。
 - `GET /api/domains/screen/report` — 每日异常报告（到期预警、访问异常、解析缺口、非公网记录），`?format=markdown` 直出正文；`php scripts/generate-screen-report.php`（`--prompt` / `--digest`）适合 cron 投喂。
 - `GET /api/ips/screen.md` — IP 视图 Markdown 快照（IP、归属地、访问状态、关联域名）。
