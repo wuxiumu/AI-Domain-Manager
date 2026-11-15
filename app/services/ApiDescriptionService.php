@@ -90,7 +90,7 @@ MCP (Model Context Protocol):
 Interpretation:
 - Reads reuse file caches. Do not sync, refresh DNS, run checks or write DNS just to display a list.
 - DNS-derived IPs may be CDN/proxy addresses. Manual registrations and DNS discovery have different meanings; an IP can be both.
-- unchecked and stale results are not healthy results. Access checks request http://fqdn/ and accept HTTP 2xx/3xx without following redirects.
+- unchecked and stale results are not healthy results. Access checks request https://fqdn/ (verified TLS) and http://<ip>/ without following redirects; each record result carries https_status (ok = HTTPS with a valid certificate, in production; fail = no HTTPS or invalid certificate).
 - Treat HTTP errors and JSON ok:false as failures; some legacy cloud endpoints return ok:false with HTTP 200.
 - Use URL-encoded path segments. Do not invent account, record or asset IDs.
 - Never include passwords, cloud secrets or bearer tokens in a URL, a shared report, or logs.
@@ -353,7 +353,7 @@ TEXT;
         $add('POST', $dnsPath . '/browser-check', 'reportBrowserCheck', '上报大屏前端检查结果（浏览器直连探测，按 FQDN），与解析快照版本对齐后全局缓存；结果整合进大屏访问状态与检查时间', 'checks:run',
             self::object(['revision' => ['type' => 'string', 'pattern' => '^[a-f0-9]{64}$', 'description' => 'DNS 列表返回的区域 revision'],
                 'results' => ['type' => 'object', 'description' => 'fqdn => {ok: 是否可达}']], ['revision', 'results']));
-        $add('POST', $dnsPath . '/access-check', 'checkDnsHosts', '检查解析记录对应的主机访问状态；body.record_ids 可选（从记录列表读取），只探测指定记录，缺省探测该域名全部记录', 'checks:run',
+        $add('POST', $dnsPath . '/access-check', 'checkDnsHosts', '检查解析记录对应的主机访问状态；body.record_ids 可选（从记录列表读取），只探测指定记录，缺省探测该域名全部记录。每条记录结果含 https_status（ok=HTTPS 证书有效可达，已上线运营；fail=未启用 HTTPS 或证书无效），随 records 列表的 access 字段透出', 'checks:run',
             self::object(['record_ids' => ['type' => 'array', 'items' => $string, 'description' => '可选，只检查这些记录 ID；勾选范围检查场景使用']]));
         $add('GET', '/api/accounts', 'listCloudAccounts', '列出云账号标识和脱敏信息', 'assets:read', null, [], 'api', ['type' => 'array', 'items' => ['type' => 'object']]);
         $add('POST', '/api/accounts', 'createCloudAccount', '添加云账号配置', null, $account, [], 'session');

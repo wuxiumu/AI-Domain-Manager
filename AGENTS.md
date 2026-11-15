@@ -25,7 +25,7 @@
 - **读写分离**：列表读取复用文件快照（`SnapshotCache`，大屏快照 120 秒 TTL）；同步、检查、DNS 刷新必须由用户或 API 显式触发，禁止为展示列表而发起网络请求。
 - **安全边界**：云凭据、密码、API 密钥明文只出现在创建/登录响应中，永不回显；不得使用真实凭据或真实云账号；对外文档（README、OpenAPI、`llms.txt`）不得出现真实资产、真实 IP 或密钥，文档 IP 用 TEST-NET 段，测试可用公共 DNS 地址（如 8.8.8.8）但不得真正发起连接。`config/dev-unlock.flag` 是回环免登录开发开关（仅 127.0.0.1/::1 生效），生产环境部署后必须删除。
 - **DNS 写入原则**：只写一次并回读核实；版本冲突返回 409；未确认返回 202 + `verified:false`，绝不自动重试写操作。暂停 / 恢复走 `DnsChangeService::applyStatus`（同套护栏 + 操作留档）。
-- **快照解释**：未检查 ≠ 正常；结果超过 24 小时为过时；DNS 解析 IP 可能是 CDN。UI 与报告文案必须保留这些限定（页面脚注、screen.md / report 的语义说明）。
+- **快照解释**：未检查 ≠ 正常；结果超过 24 小时为过时；DNS 解析 IP 可能是 CDN。HTTPS 结果语义：HTTPS 通过（证书有效）≈ 已上线运营，仅 HTTP 可达 = 未启用 HTTPS，未检查不做推断。UI 与报告文案必须保留这些限定（页面脚注、screen.md / report 的语义说明）。
 - **存储写入**：私有 JSON 走 `PrivateJsonStore`（原子替换 + 0600 权限），核心台账走 `WorkspaceData`（锁内变更），网络操作不得持有数据锁。
 - **前端**：无构建、运行时不外链（第三方开源库下载到 `public/assets/vendor/` 本地自托管：marked + DOMPurify + highlight.js + mermaid）；独立页自包含（各自 CSS/JS，共享 `admin-page.*` 基础层）；用户内容渲染统一走 `AdminPage.renderMarkdown`（marked 解析 + DOMPurify 清洗）与 `AdminPage.enhancePreview`（hljs 高亮 + mermaid 图）；用户内容一律经 `escapeHtml` 输出；`[hidden]{display:none!important}` 是面板切换的硬规则。
 - **文档即页面**：仓库核心文档（README / AGENTS / CHANGELOG / tasks.md）与 docs/ Markdown 通过 `/docs` 页面与 `GET /api/docs*` 展示与维护；写操作路径白名单校验并进入操作审计。新增功能必须同步更新 CHANGELOG、tasks.md 与本文件。

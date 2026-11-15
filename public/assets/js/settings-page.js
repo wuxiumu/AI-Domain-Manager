@@ -496,14 +496,13 @@ function openAccount(id) {
     fields();
 
     var close = function () { overlay.remove(); };
+    // 表单弹窗只能显式关闭（✕ / 取消）：点遮罩与 Escape 极易误触，辛苦填写的凭据会全部丢失。
     overlay.querySelector('.ap-modal-close').addEventListener('click', close);
     overlay.querySelector('[data-cancel]').addEventListener('click', close);
     overlay.addEventListener('click', function (event) {
-        if (event.target === overlay) { close(); }
         var tab = event.target.closest('[data-provider]');
         if (tab && !account) { provider = tab.dataset.provider; fields(); }
     });
-    overlay.addEventListener('keydown', function (event) { if (event.key === 'Escape') { close(); } });
 
     form.addEventListener('submit', function (event) {
         event.preventDefault();

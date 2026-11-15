@@ -59,6 +59,8 @@ $assetVer = static function (string $path): string {
         <option value="">全部访问状态</option>
         <option value="ok">访问正常</option>
         <option value="fail">访问异常</option>
+        <option value="https">HTTPS 正常（运营中）</option>
+        <option value="http-only">仅 HTTP（未启用 HTTPS）</option>
         <option value="unchecked">未检查</option>
     </select>
     <button type="button" class="sb-btn hidden" id="sb-domain-fecheck" title="浏览器直连探测当前列表全部主域名">前端检查</button>
@@ -136,6 +138,7 @@ $assetVer = static function (string $path): string {
                 <button type="button" class="sb-status-tab is-active" data-mstatus="">全部</button>
                 <button type="button" class="sb-status-tab" data-mstatus="ok">通过</button>
                 <button type="button" class="sb-status-tab" data-mstatus="fail">异常</button>
+                <button type="button" class="sb-status-tab" data-mstatus="https">HTTPS</button>
                 <button type="button" class="sb-status-tab" data-mstatus="unchecked">未检查</button>
             </div>
             <span class="sb-filter-count" id="sb-modal-count"></span>

@@ -20,8 +20,9 @@ class RecordAccessService
         @set_time_limit(300);
         $epoch = WorkspaceData::locked(DATA_DIR, static function () { return WorkspaceData::epoch(DATA_DIR); });
 
-        // 每条记录 → 探测目标列表（主机名优先，记录值为 IP/域名时补充）
-        $tasks = [];   // recordId => [url, ...]
+        // 每条记录 → 探测目标列表（主机名优先，记录值为 IP/域名时补充）；
+        // HTTPS 目标单独记账：HTTPS 结果显式落库，用于区分「已上线运营（HTTPS 正常）」与「仅 HTTP（未启用）」。
+        $tasks = [];   // recordId => ['urls' => [...], 'https' => url]
         $allUrls = [];
         foreach ($records as $r) {
             $id = (string) ($r['id'] ?? '');
@@ -30,7 +31,8 @@ class RecordAccessService
             }
             $targets = [];
             $name = (($r['name'] ?? '') === '' || ($r['name'] ?? '') === '@') ? $domain : ($r['name'] . '.' . $domain);
-            $targets[] = 'https://' . self::toAscii($name);
+            $httpsUrl = 'https://' . self::toAscii($name);
+            $targets[] = $httpsUrl;
 
             $v = trim((string) ($r['value'] ?? ''));
             if (self::isIp($v)) {
@@ -39,7 +41,7 @@ class RecordAccessService
                 $targets[] = 'https://' . self::toAscii(rtrim($v, '.'));
             }
             $targets = array_values(array_unique($targets));
-            $tasks[$id] = $targets;
+            $tasks[$id] = ['urls' => $targets, 'https' => $httpsUrl];
             foreach ($targets as $u) {
                 $allUrls[$u] = $u;
             }
@@ -57,12 +59,13 @@ class RecordAccessService
         foreach ($records as $r) {
             $id = (string) ($r['id'] ?? '');
             if (!isset($tasks[$id])) {
-                $results[$id] = ['status' => 'na', 'http_code' => 0, 'ms' => 0, 'target' => '', 'error' => '不适用', 'checked_at' => $checkedAt];
+                $results[$id] = ['status' => 'na', 'http_code' => 0, 'ms' => 0, 'target' => '', 'error' => '不适用',
+                    'https_status' => 'na', 'https_code' => 0, 'checked_at' => $checkedAt];
                 $naCount++;
                 continue;
             }
             $best = null;
-            foreach ($tasks[$id] as $url) {
+            foreach ($tasks[$id]['urls'] as $url) {
                 $p = $probed[$url] ?? ['http_code' => 0, 'ms' => 0, 'error' => ''];
                 $isOk = $p['http_code'] >= 200 && $p['http_code'] < 400;
                 if ($best === null || ($isOk && $best['status'] !== 'ok')) {
@@ -78,6 +81,10 @@ class RecordAccessService
                     break; // 任一目标可达即 ok
                 }
             }
+            // HTTPS 单列结果：https://主机名 探测（严格 TLS 校验）；证书无效或未启用均为 fail
+            $h = $probed[$tasks[$id]['https']] ?? ['http_code' => 0];
+            $best['https_status'] = ($h['http_code'] >= 200 && $h['http_code'] < 400) ? 'ok' : 'fail';
+            $best['https_code'] = (int) $h['http_code'];
             $best['checked_at'] = $checkedAt;
             $results[$id] = $best;
             if ($best['status'] === 'ok') {

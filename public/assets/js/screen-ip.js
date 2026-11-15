@@ -143,10 +143,13 @@ function ipCardHtml(r, names) {
         var msTip = d.access_ms != null ? ' · ' + Number(d.access_ms) + 'ms' : '';
         var mark = d.access === 'ok' ? '<i class="sb-ipmark ok" title="HTTP ' + esc(d.http_code) + msTip + '"></i>'
             : d.access === 'fail' ? '<i class="sb-ipmark fail" title="访问失败"></i>' : '';
+        // HTTPS 徽标：ok=证书有效可达（已上线运营）；仅 HTTP=可达但未启用 HTTPS；旧结果无 https 字段不标
+        var scheme = d.https === 'ok' ? '<b class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</b>'
+            : (d.https === 'fail' && d.access === 'ok' ? '<b class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</b>' : '');
         var paused = d.paused ? '<span class="sb-paused-mini" title="记录已暂停解析">⏸</span>' : '';
         return '<a class="sb-tag" href="' + esc(siteLink(d.fqdn)) + '" target="_blank" rel="noopener"'
             + ' title="新页面打开 ' + esc(d.fqdn) + (d.access_ms != null ? '（' + Number(d.access_ms) + 'ms）' : '') + '">'
-            + '<span class="sb-tag-name' + (d.paused ? ' is-paused' : '') + '">' + mark + esc(d.fqdn) + paused + '</span></a>';
+            + '<span class="sb-tag-name' + (d.paused ? ' is-paused' : '') + '">' + mark + esc(d.fqdn) + paused + scheme + '</span></a>';
     }).join('');
 
     // 域名区：wrap 撑满卡片富余空间（少则正常展示、多则滚动），「更多」按钮固定区右下

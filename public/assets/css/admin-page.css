@@ -149,12 +149,15 @@ body {
     transition: color 0.15s, border-color 0.15s;
 }
 .ap-tabs button:hover { color: var(--text); }
-.ap-tabs button[aria-selected="true"] {
+.ap-tabs button[aria-selected="true"],
+.ap-tabs button[aria-pressed="true"] {
     color: #04121f;
     background: linear-gradient(135deg, #38bdf8, #0284c7);
     border-color: transparent;
     font-weight: 700;
 }
+/* 点选组（aria-pressed）在 hover 时保持选中态可辨识 */
+.ap-tabs button[aria-pressed="true"]:hover { color: #04121f; }
 
 /* ---- 面板卡片 ---- */
 

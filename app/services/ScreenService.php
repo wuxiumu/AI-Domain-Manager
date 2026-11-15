@@ -136,12 +136,26 @@ class ScreenService
                         'status' => (string) $probe['status'],
                         'http_code' => (int) ($probe['http_code'] ?? 0),
                         'ms' => (int) ($probe['ms'] ?? 0),
+                        // HTTPS 单列结果：ok=证书有效可达（上线运营）；fail=未启用或证书无效；空=旧结果未探测
+                        'https' => (string) ($probe['https_status'] ?? ''),
+                        'https_code' => (int) ($probe['https_code'] ?? 0),
                         'checked_at' => (string) ($probe['checked_at'] ?? ''),
                     ];
                     if ($entry['access']['status'] === 'ok') { $groups[$fqdn]['access'] = 'ok'; }
                     elseif ($groups[$fqdn]['access'] === null) { $groups[$fqdn]['access'] = 'fail'; }
                 }
                 $groups[$fqdn]['records'][] = $entry;
+            }
+            // 组级 HTTPS 聚合：任一记录 HTTPS 通过 → ok；可达但全部记录 HTTPS 未通过 → http-only；无 HTTPS 数据 → null
+            foreach ($groups as $fqdn => $group) {
+                $httpsOk = false; $httpsProbed = false;
+                foreach ($group['records'] as $e) {
+                    $h = $e['access']['https'] ?? '';
+                    if ($h === 'ok') { $httpsOk = true; break; }
+                    if ($h !== '') { $httpsProbed = true; }
+                }
+                $groups[$fqdn]['https'] = $httpsOk ? 'ok'
+                    : ($httpsProbed && $group['access'] === 'ok' ? 'http-only' : null);
             }
             // 浏览器探测结果（前端检查上报）：按 FQDN 合并，任一通过即组级 ok；耗时与时间透出供页面显示
             foreach ($browserByFqdn as $fqdn => $browser) {
@@ -256,7 +270,8 @@ class ScreenService
 
     private static function accessSuffix(array $sub): string
     {
-        if (($sub['access'] ?? null) === 'ok') { return '｜访问通过'; }
+        if (($sub['https'] ?? null) === 'ok') { return '｜HTTPS 正常（已上线运营）'; }
+        if (($sub['access'] ?? null) === 'ok') { return '｜仅 HTTP（未启用 HTTPS）'; }
         if (($sub['access'] ?? null) === 'fail') { return '｜访问异常'; }
         return '';
     }

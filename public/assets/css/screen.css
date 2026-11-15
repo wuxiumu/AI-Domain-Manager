@@ -501,6 +501,24 @@ button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
 .sb-access-fail { background: rgba(248, 113, 113, 0.14); color: var(--red); }
 .sb-access-none { background: rgba(139, 151, 179, 0.12); color: var(--muted); }
 
+/* HTTPS 运营状态徽标：HTTPS=证书有效可达（上线运营中）；仅 HTTP=可达但未启用 HTTPS */
+.sb-scheme {
+    flex-shrink: 0;
+    display: inline-block;
+    border-radius: 999px;
+    padding: 0 7px;
+    font-size: 10.5px;
+    font-weight: 700;
+    font-style: normal;
+    line-height: 17px;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.sb-scheme.ok { background: rgba(52, 211, 153, 0.16); color: var(--green); }
+.sb-scheme.no { background: rgba(251, 191, 36, 0.18); color: #b7791f; }
+.sb-tag .sb-scheme, .sb-tag-name .sb-scheme { margin-left: 5px; }
+.sb-rec-main .sb-scheme { margin: 0 2px; }
+
 /* 解析管理弹窗表格化行：勾选 | 主机记录 | 访问状态 | TTL | 解析记录，固定列对齐 + 行分割线 + 悬停高亮 */
 .sb-host, .sb-host-head {
     display: grid;

@@ -37,8 +37,17 @@ function applyFilters(data, tab, q, status) {
     return list.filter(function (d) {
         if (tab && d.provider !== tab) { return false; }
         if (status) {
-            var st = domainStatus(d); // ok / fail / none（前端缓存 + 后端结果合并）
-            if ((st === 'none' ? 'unchecked' : st) !== status) { return false; }
+            // ok / fail / unchecked（前端缓存 + 后端结果合并）；https / http-only 按子域名组级 HTTPS 结果匹配
+            var st;
+            if (status === 'https') {
+                st = (d.subdomains || []).some(function (s) { return s.https === 'ok'; }) ? 'https' : 'other';
+            } else if (status === 'http-only') {
+                st = (d.subdomains || []).some(function (s) { return s.https === 'http-only'; }) ? 'http-only' : 'other';
+            } else {
+                st = domainStatus(d);
+                st = st === 'none' ? 'unchecked' : st;
+            }
+            if (st !== status) { return false; }
         }
         if (!kw) { return true; }
         // 关键词覆盖：账号名、主域名、子域名与解析 IP
@@ -258,7 +267,7 @@ function restoreView() {
             state.sort = SORTS[v.sort] ? v.sort : 'expire';
             state.ipSort = IP_SORT_KEYS.indexOf(v.ipSort) !== -1 ? v.ipSort : 'domains';
             state.ipStatus = ['ok', 'fail', 'unchecked'].indexOf(v.ipStatus) !== -1 ? v.ipStatus : '';
-            state.domainStatus = ['ok', 'fail', 'unchecked'].indexOf(v.domainStatus) !== -1 ? v.domainStatus : '';
+            state.domainStatus = ['ok', 'fail', 'unchecked', 'https', 'http-only'].indexOf(v.domainStatus) !== -1 ? v.domainStatus : '';
             state.size = SIZES.indexOf(v.size) !== -1 ? v.size : '24';
             state.page = Number(v.page) > 0 ? Math.floor(Number(v.page)) : 1;
             state.mode = v.mode === 'ip' ? 'ip' : 'domain';
@@ -276,7 +285,7 @@ function restoreView() {
     if (hashMode === 'ip' || hashMode === 'domain') { state.mode = hashMode; }
     if (typeof hashQuery.tab === 'string') { state.tab = hashQuery.tab; }
     if (typeof hashQuery.q === 'string') { state.q = hashQuery.q; }
-    var hashStatus = ['ok', 'fail', 'unchecked'].indexOf(hashQuery.status) !== -1 ? hashQuery.status : null;
+    var hashStatus = ['ok', 'fail', 'unchecked', 'https', 'http-only'].indexOf(hashQuery.status) !== -1 ? hashQuery.status : null;
     if (hashStatus !== null) {
         if (state.mode === 'ip') { state.ipStatus = hashStatus; } else { state.domainStatus = hashStatus; }
     }
@@ -497,12 +506,19 @@ function cardHtml(d) {
     } else if (!subs.length) {
         hosts = '<div class="sb-hosts-empty">该域名暂无 A 记录</div>';
     } else {
-        // 单行标签：IP 可点（点击打开解析管理弹窗并定位该子域名）
+        // 单行标签：IP 可点（点击打开解析管理弹窗并定位该子域名）；HTTPS 徽标区分运营状态
         var tags = subs.map(function (s) {
             var ipBtns = (s.ips || []).map(function (ip) {
                 return '<button type="button" class="sb-tag-ip" data-ip-goto="' + escapeHtml(ip) + '" title="点击打开解析管理并定位此 IP">' + escapeHtml(ip) + '</button>';
             }).join('');
-            return '<span class="sb-tag"><span class="sb-tag-name">' + escapeHtml(s.name) + '</span>' + ipBtns + '</span>';
+            // HTTPS 结果语义：ok=证书有效可达（上线运营中）；http-only=站点可达但未启用 HTTPS；无检查结果不标
+            var scheme = '';
+            if (s.https === 'ok') {
+                scheme = '<b class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</b>';
+            } else if (s.https === 'http-only') {
+                scheme = '<b class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</b>';
+            }
+            return '<span class="sb-tag"><span class="sb-tag-name">' + escapeHtml(s.name) + '</span>' + scheme + ipBtns + '</span>';
         }).join('');
         hosts = '<div class="sb-tags" data-key="' + escapeHtml(d.provider + '|' + d.domain)
             + '" role="button" tabindex="0" title="点击管理子域名与 IP（多选批量修改 / 删除 / 访问检查）">'

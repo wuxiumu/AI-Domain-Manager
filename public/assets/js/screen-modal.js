@@ -110,6 +110,8 @@ function accessTitle(grp) {
     var be = null;
     (grp.records || []).some(function (r) { if (r.access) { be = r.access; return true; } return false; });
     if (be) { parts.push('后端检查' + (be.status === 'ok' ? '通过' : '异常') + ' HTTP ' + be.http_code + ' ' + be.checked_at); }
+    if (be && be.https === 'ok') { parts.push('HTTPS 通过（证书有效，已上线运营）'); }
+    else if (be && be.https === 'fail' && be.status === 'ok') { parts.push('仅 HTTP 可达（未启用 HTTPS）'); }
     return parts.join('；') || '尚未检查';
 }
 
@@ -156,7 +158,8 @@ function renderModal() {
     var q = (state.modalQ || '').toLowerCase();
     var stFilter = state.modalStatus || '';
     var rows = allRows.filter(function (s) {
-        if (stFilter && groupStatus(s) !== stFilter) { return false; }
+        if (stFilter === 'https') { if (s.https !== 'ok') { return false; } }  // HTTPS 正常（运营中）
+        else if (stFilter && groupStatus(s) !== stFilter) { return false; }
         if (q) {
             var matched = s.fqdn.toLowerCase().indexOf(q) !== -1
                 || (s.records || []).some(function (r) { return String(r.value || '').toLowerCase().indexOf(q) !== -1; });
@@ -190,6 +193,13 @@ function renderModal() {
             if (paused) { marks += '<span class="sb-pausedmark" title="记录已暂停解析：该地址当前不再生效">已暂停</span>'; }
             if (hit) { marks += '<span class="sb-hitmark" title="该记录指向你来源的 IP 卡片">指向本 IP</span>'; }
             var ms = rec.access && rec.access.ms ? '<span class="sb-ms">' + Number(rec.access.ms) + 'ms</span>' : '';
+            // HTTPS 单条徽标：ok=证书有效可达（运营中）；仅 HTTP=可达但 HTTPS 未通过；旧结果无 https 字段不标
+            var scheme = '';
+            if (rec.access && rec.access.https === 'ok') {
+                scheme = '<span class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</span>';
+            } else if (rec.access && rec.access.https === 'fail' && rec.access.status === 'ok') {
+                scheme = '<span class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</span>';
+            }
             // 归属地（全局缓存，就绪后随重绘出现）
             var geo = ipLocMap && ipLocMap[rec.value] ? ipGeoHtml(ipLocMap[rec.value]) : '';
             // 单条记录「修改」按钮：打开编辑弹窗，可改主机记录 / 类型 / 记录值 / TTL / 线路 / 优先级
@@ -197,7 +207,7 @@ function renderModal() {
                 ? '<button type="button" class="sb-rec-edit-btn" data-rec-edit="' + escapeHtml(rec.id) + '" data-rec-type="' + escapeHtml(rec.type || 'A') + '" title="编辑这条解析记录（主机 / 类型 / 值 / TTL 等）">修改</button>'
                 : '';
             return '<span class="sb-rec">'
-                + '<span class="sb-rec-main">' + link + geo + ms + marks + '</span>'
+                + '<span class="sb-rec-main">' + link + geo + ms + scheme + marks + '</span>'
                 + recEdit
                 + '</span>';
         }).join('');
