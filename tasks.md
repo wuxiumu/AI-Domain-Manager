@@ -1,9 +1,7 @@
 # tasks.md — 项目任务看板与路线图
 
 > 本文件是项目的**持续任务清单**：新任务进来先记在这里，做完划掉，决策变化就地更新。
-> 维护规则见文末。最近更新：2026-11-14。
-
-> ⏱ 截至 23:44 自动执行总结：**T1–T11 全部完成**（另有用户直接指派的 screen.js 模块化拆分与三项持续优化已完成），无进行中 / 阻塞任务；遗留 2 项待管理员决定——① 3 项确认真孤儿（`.write_test`、`tasks.json`+锁）是否手动删除；② DNS 写入链路的真实云端写操作由管理员手动验收。全部改动已随各任务独立提交（`88023ff`…`1f17d10`）。
+> 维护规则见文末。最近更新：2026-11-15。T1–T11 已全部完成，任务详情沉淀在 git 历史与 `CHANGELOG.md`，本板只保留路线图与随手项。
 
 ## 产品定位（终态）
 
@@ -16,140 +14,46 @@
 
 ---
 
-## ✅ 已完成里程碑（2026-11-14 收敛）
+## 🎯 下一步路线图提议（2026-11-15，待排期）
 
-- [x] 产品收缩为「大屏 + 独立管理页 + AI API」，删除健康/分析/计划/提示词等全部未投产栈（v1.3.0）
-- [x] `/screen` 域名 + IP 双视图：卡片交互、批量检查、DNS 暂停恢复、关联域名弹窗
-- [x] 弹窗能力：批量添加/修改/删除、单条记录完整编辑弹窗（全字段 + GoDaddy 限制）、筛选行（关键词 + 状态 tab + 反选）
-- [x] IP 访问检查体系：前端浏览器直连 / 后端服务端探测，结果全局缓存，响应时间展示
-- [x] 每个 IP 可编辑：自动发现 IP 一键登记为手工（卡片标注「手工登记」）；修复编辑按钮无反应 bug
-- [x] 弹窗记录列表表格化：固定五列 + 表头 + 行分割线 + 悬停高亮 + 单行省略
-- [x] 独立 `/settings`、`/calendar`、`/docs` 页面；全站统一头部；文档在线预览编辑
-- [x] 本地自托管 vendor 管线（marked + DOMPurify + hljs + mermaid），运行时零外链
-- [x] 代码干净度审计：零死类、路由↔契约 67:67 零漂移、零调试残留
-- [x] T1 孤儿数据清理：data/ 18M → 3.9M（健康栈删除后的运行时残渣）
-- [x] T3 AI Bootstrap 单文件接入：`GET /api/ai/bootstrap.md`（assets:read，一次请求 = 说明 + 契约 + 护栏 + 双视图快照）
-- [x] T4 密钥签发附 AI 接入材料：签发响应 `ai_usage` + /settings 弹窗「复制接入材料」按钮
-- [x] T5 workspace-api.py 语义化客户端：bootstrap/screen/ips/records/report/propose 子命令 + 一键接入自检
-- [x] T6 MCP Server：scripts/mcp-server.py（stdio 零依赖，六工具，护栏经 scope 校验）
-- [x] T7 文档同步：llms.txt MCP 节、README「接入三步」+「MCP Server」小节
-- [x] T8 README「扩展开发」章节：云商适配器路径 + API 三件事
-- [x] T9 发布包补齐新交付物（mcp-server.py / AGENTS.md / tasks.md）+ FORBIDDEN_PREFIXES 硬校验
-- [x] T10 契约防漂移脚本 check-api-contracts.py（首跑修复 ips/check 真实 scope 漂移）+ 纳入 AGENTS 验证命令
-- [x] T11 数据清点脚本 cleanup-data.php（只读报告，正负双向验证；抓到 3 项真孤儿留管理员决定）
+> T1–T11 清零后，产品进入「稳定 + 变现」阶段。以下为三个方向的候选任务（均不破坏单管理员定位与「明确不做」清单），逐条排期后再转为正式任务。
 
-**看板状态：T1–T11 全部完成（P0 / P1 / P2 清零）。**
+### 🔒 安全加固
 
----
+- **S1 · 管理会话空闲过期**：当前会话只在浏览器关闭（会话 cookie）或 PHP GC 后失效；在 `Auth::establish()` 写入活动时间戳，`Auth::check()` 校验空闲超时（建议 8 小时），过期自动回登录壳。改 1 个文件，收益大。
+- **S2 · 登录与退出进审计**：登录成功 / 失败（含验证码错）与退出写入 `audit.json`（现有审计只覆盖写操作）；异常登录尝试可结合现有 IP 限流数据查看。
+- **S3 · 生产环境自检项**：`env-check` 增加「生产警告」段——`dev-unlock.flag` 残留、HTTP 明文访问、`data/`、`config/` 可从 Web 直读（自定义 nginx 常漏掉 `deploy/nginx.conf.example` 里的 deny 规则）。
+- **S4 · 一键备份脚本**：`scripts/backup-data.php`（打包 `data/` + SHA256，保留 N 份）+ cron 示例；JSON 台账的全部家当就是 `data/`，目前没有现成备份手段。
+- **S5 · 云凭据最小权限**：README 安全章节补一条——云商侧使用最小权限子账号（DNS 写权限限定在必要域名），泄漏面与误操作面同时收窄。
 
-## 🔥 P0 — 立即执行
+### 🧰 持续维护
 
-### T1 · 清理孤儿数据（~13MB）
-- **内容**：删除代码零引用的运行时残渣——
-  `data/cache/` 非 `dns-` 前缀文件（8.4MB 旧健康快照）、`data/history/`（4.2MB 旧同步历史）、
-  `data/ratelimit.json`、`data/improvement_plan.json`、`scripts/__pycache__/`
-- **注意**：`data/health.json`、`access_check.json` 保留至迁移脚本 `migrate-ip-assets.php` 确认不再需要后再删；
-  删前逐项列出清单确认
-- **验收**：`data/` 只剩在用文件；`php -l` 全绿；大屏/设置/日历/文档四页走查正常
-- **状态**：✅ 完成（2026-11-14 22:26）——删除 6 个非 dns- 缓存文件（8.4MB）+ history/（4.2MB）+ ratelimit/improvement_plan 及锁文件 + __pycache__；data/ 18M → 3.9M；四页 200、双快照 API 正常、lint 全绿
+- **M1 · 升级流程标准化**：README 部署章节补「升级」小节——备份 `data/` → 覆盖 `app/ public/` → `php -l` + `check-api-contracts.py` → 浏览器 `/api/env-check` → 四页走查；配合 `package-release.py` 即为标准升级路径。
+- **M2 · vendor 跟版本**：`public/assets/vendor/`（marked / DOMPurify / hljs / mermaid）补一份版本清单与升级步骤，DOMPurify 属安全组件，需定期跟上游。
+- **M3 · 定期数据清点**：`cleanup-data.php` 每月跑一次（只读报告），配合 `/api/stats` 观察规模增长；孤儿文件当月处理，不过夜。
+- **M4 · PHP 版本跟进**：生产建议保持 PHP 8.x（当前要求 7.4+）；升级前跑全量走查与静态回归。
 
-### T2 · Git 提交还原点（最高优先级）
-- **内容**：183 个文件未提交（整轮产品收敛 + 本周全部 UI/接口改动）。分批或一次提交均可，先落盘
-- **验收**：`git status` 干净；commit message 按里程碑分段
-- **状态**：✅ 完成（2026-11-14 22:22）——提交 88023ff，工作区清零
+### 💰 商业闭环
 
-### T3 · `GET /api/ai/bootstrap.md`（AI 一次请求完成接入）
-- **内容**：单文件打包 = `llms.txt` + 能力清单 + 域名视图 screen.md + IP 视图 screen.md + 写护栏要点
-  （版本冲突 / 202 未核实 / 提案流）；由 `ApiDescriptionService` 新增组装方法 + 控制器路由；
-  同步登记契约与 `assets:read` scope（三件事）
-- **验收**：一个请求返回完整自包含 Markdown；AI 仅凭此文件能完成「读台账 + 提交提案」全流程；
-  README / llms.txt 链接此入口
-- **状态**：✅ 完成（2026-11-14 22:36）——六部分结构（说明/能力/scope/护栏速查/双视图快照），88KB 单文件 200；
-  无效密钥 401；llms.txt、能力发现、README 均已链接；三件事核对通过
-
-### T4 · 密钥签发响应附带「AI 使用说明」
-- **内容**：`POST /api/tokens` 响应（与 /settings 创建成功弹窗）追加现成可复制块：
-  `Authorization: Bearer …` + bootstrap URL + 三条核心 curl 示例
-- **验收**：管理员复制粘贴即可把接入材料交给任何 AI
-- **状态**：✅ 完成（2026-11-14 22:44）——签发响应新增 `ai_usage`（认证头 / bootstrap 地址 / 含注释的 curl 示例，
-  示例 IP 用 TEST-NET 占位）；/settings 弹窗新增「AI 接入材料」块与「复制接入材料」按钮；
-  浏览器已验证渲染与复制（真实签发链路需管理员密码，留人工验收：创建→复制→交给 AI→AI 完成读台账+提案）
-
-### T5 · `workspace-api.py` 升级为语义化官方客户端
-- **内容**：新增 `bootstrap()` / `screen()` / `ips()` / `records()` / `propose()` / `report()` 语义方法
-  与 `--bootstrap` 自描述命令；保持零依赖、单文件
-- **验收**：`python3 scripts/workspace-api.py bootstrap` 一条命令完成接入自检
-- **状态**：✅ 完成（2026-11-14 22:50）——语义子命令 bootstrap / screen / ips / records / report / propose
-  （raw 模式保留兼容，/api/health 过期示例一并修正）；`bootstrap` 一键自检 9 项全 ✓（bootstrap 文档、
-  OpenAPI 53 路径、能力发现、双视图快照），经服务层临时 token（创建→自检→撤销，净零）真实链路验证
-
----
-
-## 🚀 P1 — AI 生态产品化
-
-### T6 · MCP Server（stdio，零依赖）
-- **内容**：`scripts/mcp-server.py` 复用 workspace-api.py，封装 tools：
-  `get_domain_screen` / `get_ip_screen` / `list_dns_records` / `propose_dns_change` / `get_daily_report` / `list_docs`；
-  配置经环境变量（服务地址 + token）
-- **验收**：任一 MCP 客户端配置即用；只读 tools 不携带写 scope 时拒绝写操作
-- **状态**：✅ 完成（2026-11-14 22:55）——stdio JSON-RPC（initialize / tools/list / tools/call / ping，协议 2025-03-26）；
-  六工具真实链路验证（60 域名 / 25 IP / 21 条 DNS 记录 / 日报 Markdown / 文档表）；propose 客户端预校验
-  （缺 record_id 即拒绝，未触真实提案）；无 token 与未知工具均返回清晰 isError；临时 token 创建→验证→撤销净零
-
-### T7 · 文档同步
-- **内容**：`llms.txt` 增 MCP 一节；README 新增「AI 接入」章节（bootstrap / token / 提案流 / MCP）；
-  CHANGELOG 记录
-- **验收**：AI 与人类都能从 README 一路走到可用
-- **状态**：✅ 完成（2026-11-14 22:56）——llms.txt 新增 MCP 节（工具清单 / 环境变量 / scope 门禁 / 提案不直写），
-  bootstrap.md 内嵌内容随之同步；README「AI 接入」章节新增「接入三步」与「MCP Server」小节；
-  check-public-docs 通过
-
----
-
-## 🧩 P2 — 二开友好
-
-### T8 · README「扩展」章节
-- **内容**：新增云商 / API 的标准三步（路由注册 / `authorizeRoute` scope / 契约登记），以 AliyunProvider 为范例
-- **状态**：✅ 完成（2026-11-14 22:54）——README 新增「扩展开发」章节：云商适配器四步（CloudProvider 抽象方法
-  / provider_factory 注册 / providerSchema 凭据 / DnsRecordCache + DnsChangeService 纪律）+ API 三件事 + 文档联动说明
-
-### T9 · `package-release.py --clean-data`
-- **内容**：发布包排除 `data/`、缓存与本地配置，交付物开箱即干净
-- **状态**：✅ 完成（2026-11-14 22:56）——审计确认发布包本为显式白名单制（data/ 结构性排除），
-  无需 --clean-data 开关；落地为：FILES 补齐新增交付物（mcp-server.py / AGENTS.md / tasks.md）+
-  新增 `FORBIDDEN_PREFIXES` 硬校验（data/ / .local/ / .git/ / config 真实凭据出现即构建失败）+
-  实测构建 96 文件零违规、新文件齐全
-
-### T10 · `scripts/check-api-contracts.py` 契约防漂移
-- **内容**：diff「index.php 路由 ↔ Auth scope ↔ ApiDescriptionService 契约」三方，不一致退出非零；
-  纳入 AGENTS.md 验证命令
-- **验收**：删路由不删契约时脚本报错
-- **状态**：✅ 完成（2026-11-14 22:58）——脚本支持 $dnsPath 变量展开与别名折叠，正反向各三重检查；
-  **首跑即抓到一处真实漂移并修复**：`POST /api/ips/check` 与 `/api/ips/browser-check` 契约声明
-  `checks:run` 但 authorizeRoute 未声明（Bearer 调用被 403），已补上并用 checks:run 临时 token 实测
-  （422 验证拒绝 TEST-NET 地址而非 403）；负向测试（临时删路由）精确报错 exit=1；已纳入 AGENTS 验证命令
-
-### T11 · `scripts/cleanup-data.php --dry-run`
-- **内容**：按代码引用白名单清点 `data/`，报告孤儿文件；防下次删功能再留渣
-- **状态**：✅ 完成（2026-11-14 23:10）——只读报告脚本（永不代删），分类覆盖锁附属文件 / SnapshotCache 快照
-  （按 remember key 哈希）/ dns-* 结构化缓存 / dns-locks 运行锁 / 未知目录；正负双向验证（fake 孤儿 → 报告并 exit 1）。
-  **两个额外发现**：① T1 判为孤儿的 6 个非 dns 缓存中有 2 个（domain-screen-v1 / ip-screen-v1）实为
-  SnapshotCache 在用缓存（删除后自动重建，无损失），脚本已正确归类；② 抓到 3 项真孤儿（`.write_test`、
-  `tasks.json` + 锁——旧任务队列存储，日历待办已迁入 calendar.json），均在 T1 白名单外，留管理员决定删除
+- **B1 · 补 LICENSE 与许可声明**：仓库目前无 LICENSE——「可自行部署」定位需要明确授权条款（如 AGPL-3.0 开源 + 商业授权双许可，或私有保留）；README 加许可章节。这是任何变现动作的前置。
+- **B2 · 白标日报（巡检报告服务）**：`generate-screen-report.php` 日报加可配置抬头（客户名 / 落款），即可作为面向中小企业的「域名与 IP 资产巡检月报」交付物——人工巡检收费的自动化底座。
+- **B3 · AI 代管服务（提案流变现）**：MCP + 作用域密钥 + 提案审批流已就绪，「AI 提案、人批准」天然是可售卖的安全卖点——打包为代管服务（帮客户的域名资产做 AI 巡检 + 变更建议），管理侧零改造。
+- **B4 · 部署 / 代维服务**：发布包（白名单 + 禁止凭据硬校验）+ nginx 参考配置已把部署门槛压到最低，可提供付费部署与年度代维（升级 + 备份 + 巡检），产品本身保持单管理员形态不变。
 
 ---
 
 ## 🧹 持续优化（随手做，不排期）
 
-- [x] screen.js 模块化拆分（2026-11-14）：视图域 876 行 + `screen-modal.js` 弹窗模块 930 行（ScreenBoard 桥接共享 state 与工具）；顺带修复非 A 记录编辑后 `reload()` 未定义的隐藏 bug。
-- [x] DNS 缓存 raw 瘦身（2026-11-14）：阿里云 / 腾讯云 listRecords 的 raw 收敛到唯一消费字段（Weight，供 DnsChangeService 权重保留），存量 79 个缓存就地迁移 609KB → 281KB（raw 占比 64% → 极小）；raw 不参与 version 哈希，record_access revision 对齐不受影响，Weight 保留链路实测通过。
-- [x] 大屏自动刷新与快照 TTL 联动提示（2026-11-14）：SnapshotCache 透出固定时长 ttl（120s，写入时不随剩余秒数递减），前端缓存芯片在「自动刷新周期 < 快照有效期」时显示说明与悬停解释（刷新 300s 或关闭自动刷新时自动隐藏）。
-- [x] AGENTS.md 架构地图随 P0–P2 刷新（2026-11-14）：scripts 行补 AI 客户端 / MCP / 防漂移 / 数据清点，AI 接入点补 bootstrap.md 与客户端 / MCP 入口。
-- [x] IP 定位高亮持久化 + 视图条件写入 URL（2026-11-14）：修复点击卡片 IP 后弹窗定位高亮被异步归属地重渲染抹掉的问题（高亮跨重渲染保留、closeModal 复位、筛选重绘不丢）；视图条件（mode / tab / status / sort / size / page / q）点击即写入 URL hash（replaceState，默认值不写入），刷新与分享链接后还原，hash 优先于本地记忆且 mode 大小写不敏感（修复 `#mode=IP` 无法识别）。
-- [x] 视图切换按钮失效修复（2026-11-14 23:58）：modal 拆分时 setMode 内的 closeModal() 调用漏改（ReferenceError 中断切换、state 与 UI 错位），已改走 ScreenBoard 桥接并全量扫描确认三个脚本无其他残留引用。
-- [ ] `data/cache` 单 zone 文件可达 4.7MB：DNS 缓存可剥离 raw 字段瘦身（改 provider 返回结构，需回归测试）
-- [ ] 大屏自动刷新周期与 SnapshotCache TTL 联动提示（刷新快于缓存时给出说明）
-- [ ] `AGENTS.md` 架构地图随 P0–P2 落地同步刷新
+> 已完成条目随手清走（沉淀见 `CHANGELOG.md`）；本区只留未做的随手项。
+
+- [ ] **Git 提交还原点**：今天一批改动未提交（环境检查门槛 / 记住密码与退出修复 / AGENTS + tasks 刷新），先落盘再远程部署。
+- [ ] **发布 1.3.1**：CHANGELOG「未发布」攒了多条稳定改动，定版发布并重建发布包（`package-release.py`，SHA256 随包）。
+- [ ] **登录失败后焦点移到验证码框**：失败回填已保留账号密码，焦点应自动落到 `#login-captcha`，重输验证码即可再试。
+- [ ] **theme-color 修正**：登录壳 `app.php` 用浅色 `#f5f6f2`，与深色夜景页面（登录 / 初始化）不符——壳改深色；screen / settings / calendar / docs 四页反而没设，各补浅色。
+- [ ] **补 favicon**：全站无 favicon 声明（tab 图标缺失、/favicon.ico 404），复用 `asset-workspace-logo.svg` 加 `<link rel="icon">`。
+- [ ] **`.well-known` 部署指引**：llms.txt 宣传了 `/.well-known/asset-workspace.json`，但自建 nginx 默认 404（远端实测）——`deploy/nginx.conf.example` 加一条 rewrite 到 `/api/capabilities`。
+- [ ] **CSS 残留清理**：components.css 有孤立花括号（`.two-col` 一带）与疑似无引用样式类，全量扫描死样式后清理。
+- [ ] **设置页「清除本机记住的密码」入口**：公用设备场景一键清 localStorage（登录页取消勾选也可清，补一个更显式的入口）。
 
 ## 🚫 明确不做（防止 scope 蔓延）
 

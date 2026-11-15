@@ -812,3 +812,47 @@ a.tab-btn { text-decoration: none; }
     .promo-copy > p:not(.promo-kicker) { max-width: 58%; }
     .promo-art { bottom: 0; }
 }
+
+/* ---------- Setup（首次初始化）：与登录同一夜景舞台；环境检查全部通过才出现创建管理员 ---------- */
+#setup-view:not(.hidden) {
+    position: relative; min-height: 100vh; min-height: 100dvh; overflow: hidden;
+    display: grid; place-items: center; padding: 36px 16px;
+    background: radial-gradient(ellipse at 50% 105%, #193962 0, #0a1932 38%, #050b1a 80%);
+    color: #edf5ff; isolation: isolate;
+}
+#setup-view .login-cosmos { z-index: -1; }
+.setup-shell { width: min(1080px, 100%); display: grid; grid-template-columns: minmax(0, 1fr) 460px; align-items: center; gap: clamp(32px, 6vw, 80px); }
+.setup-intro .brand-mark { display: inline-flex; width: 52px; height: 52px; align-items: center; justify-content: center; border-radius: 14px; background: linear-gradient(135deg, #1867ac, #2748a2); box-shadow: 0 0 28px #2b8cda55; color: #c6edff; }
+.setup-intro .brand-mark .icon { width: 26px; height: 26px; }
+#setup-view .eyebrow { margin: 18px 0 6px; color: #76b6e5; font-size: 10px; font-weight: 600; letter-spacing: .2em; }
+#setup-view h1 { margin: 0; color: #f2f8ff; font-size: clamp(30px, 3.4vw, 44px); letter-spacing: -.03em; }
+#setup-view .muted { color: #a3bad1; }
+.setup-steps { margin: 26px 0 0; padding: 0; list-style: none; display: grid; gap: 14px; }
+.setup-steps li { display: flex; gap: 14px; align-items: flex-start; }
+.setup-steps b { display: inline-flex; width: 34px; height: 34px; flex: none; align-items: center; justify-content: center; border: 1px solid #7ebcff38; border-radius: 10px; color: #8fc7f2; font-size: 12px; background: #0b172b8c; }
+.setup-steps strong { display: block; color: #e8f2fb; font-size: 14px; }
+.setup-steps span { display: block; margin-top: 2px; color: #8ca4bb; font-size: 12px; }
+#setup-view .setup-form-panel { position: relative; padding: 28px 34px 30px; border: 1px solid #7ebcff38; border-radius: 18px; background: linear-gradient(150deg, #172b45ed, #0b172bea); box-shadow: 0 30px 90px #0008, inset 0 1px #ffffff12; backdrop-filter: blur(16px); }
+#setup-view .setup-form-panel h2 { margin: 0 0 6px; color: #f2f8ff; font-size: 20px; }
+#setup-view .setup-form-panel .muted { font-size: 12px; line-height: 1.6; }
+#setup-view .setup-form-panel label { display: grid; gap: 6px; margin-top: 16px; color: #b4c8da; font-size: 12px; }
+#setup-view .setup-form-panel input { height: 44px; color: #edf7ff; background: #071427b3; border: 1px solid #88b7df35; border-radius: 7px; font-size: 13px; }
+#setup-view .setup-form-panel input::placeholder { color: #7188a0; }
+#setup-view .setup-form-panel input:focus { border-color: #63c4ff; box-shadow: 0 0 0 3px #39a9f525; }
+#setup-view .setup-form-panel .btn-primary { justify-content: center; width: 100%; margin-top: 20px; color: #fff; border: 0; background: linear-gradient(100deg, #1679bd, #536ce1); box-shadow: 0 6px 24px #126dbd40; }
+#setup-view .setup-form-panel .btn-primary:hover:not(:disabled) { filter: brightness(1.14); }
+#setup-view .error-text { color: #ffb6bb; }
+.setup-env-list { margin: 16px 0 0; padding: 0; list-style: none; display: grid; gap: 8px; }
+.setup-env-item { display: grid; grid-template-columns: 22px auto; grid-template-rows: auto auto; column-gap: 10px; align-items: baseline; padding: 9px 12px; border: 1px solid #88b7df22; border-radius: 9px; background: #07142773; }
+.setup-env-item.is-loading { grid-template-columns: 22px auto; grid-template-rows: auto; color: #8ca4bb; }
+.setup-env-mark { grid-row: 1 / span 2; justify-self: center; font-size: 12px; font-weight: 700; }
+.setup-env-item.is-ok .setup-env-mark { color: #7de0cb; }
+.setup-env-item.is-fail { border-color: #ff9aa455; background: #2a122066; }
+.setup-env-item.is-fail .setup-env-mark { color: #ffb6bb; }
+.setup-env-name { color: #dcebfa; font-size: 13px; font-weight: 550; }
+.setup-env-detail { grid-column: 2; color: #8ca4bb; font-size: 11px; line-height: 1.55; word-break: break-word; }
+.setup-env-actions { display: flex; gap: 10px; margin-top: 18px; }
+.setup-env-actions .btn { height: 40px; border: 1px solid #88b7df35; background: #071427b3; color: #cfe0ee; }
+.setup-env-actions .btn-primary { color: #fff; border: 0; background: linear-gradient(100deg, #1679bd, #536ce1); box-shadow: 0 6px 24px #126dbd40; }
+@media (max-width: 900px) { .setup-shell { grid-template-columns: 1fr; gap: 28px; } .setup-intro h1 { font-size: clamp(26px, 6vw, 34px); } }
+@media (max-width: 480px) { #setup-view:not(.hidden) { padding: 24px 14px; } #setup-view .setup-form-panel { padding: 22px 20px 24px; } }

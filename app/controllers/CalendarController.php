@@ -4,7 +4,7 @@ class CalendarController
     /** 独立日历页（/calendar）：管理员会话；自包含视图，$calendarBootstrap 携带 CSRF。 */
     public function page(): void
     {
-        Auth::requireSession();
+        Auth::requirePageSession();
         header('Cache-Control: no-store');
         $calendarBootstrap = [
             'csrf' => Auth::csrfToken(),

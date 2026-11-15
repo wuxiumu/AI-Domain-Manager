@@ -4,15 +4,33 @@ window.WorkspaceLogin = (() => {
     let active = false, busy = false, loading = false, generation = 0;
     let challenge = '', expiresAt = 0, retryAt = 0, timer;
     const storageKey = 'asset-workspace-remembered-login';
+    const REMEMBER_HINT = '默认记住密码：登录成功后保存在此浏览器中，下次自动填入；取消勾选即清除，请勿在公用设备使用。';
     function forget() { try { localStorage.removeItem(storageKey); } catch (_) {} }
+    /** 已保存且勾选时返回记住的密码，否则空串（失败回填用）。 */
+    function savedPass() {
+        if (!$('#login-remember').checked) return '';
+        try {
+            const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
+            return saved && typeof saved.pass === 'string' ? saved.pass : '';
+        } catch (_) { return ''; }
+    }
     function restore() {
+        const hintEl = $('#login-remember-hint');
         try {
             const saved = JSON.parse(localStorage.getItem(storageKey) || 'null');
             if (saved && typeof saved.user === 'string' && typeof saved.pass === 'string') {
                 $('#login-user').value = saved.user; $('#login-pass').value = saved.pass;
                 $('#login-remember').checked = true;
-            } else { $('#login-remember').checked = false; }
-        } catch (_) { $('#login-remember').checked = false; }
+                hintEl.textContent = '已自动填入记住的账号和密码，输入验证码即可登录；取消勾选将清除保存。';
+            } else {
+                // 默认记住：登录成功后保存到本浏览器，下次免输账号密码。
+                $('#login-remember').checked = true;
+                hintEl.textContent = REMEMBER_HINT;
+            }
+        } catch (_) {
+            $('#login-remember').checked = false;   // localStorage 不可用（如隐私模式）
+            hintEl.textContent = REMEMBER_HINT;
+        }
     }
     const hint = () => $('#login-captcha-hint');
     function update() {
@@ -101,8 +119,15 @@ window.WorkspaceLogin = (() => {
             if (rememberFailed) toast('登录成功，但浏览器不允许保存账号和密码', 'error');
         } catch (error) {
             if (!active || current !== generation) return;
+            if (error.code === 'setup_required') {
+                // 工作台尚未初始化：登录表单是死路，引导回环境检查 + 创建管理员流程。
+                busy = false;
+                toast('工作台尚未初始化，请先完成环境检查并创建管理员');
+                await window.WorkspaceSetup.check();
+                return;
+            }
             showLoginError(error.message);
-            $('#login-pass').value = '';
+            $('#login-pass').value = savedPass();   // 失败多为验证码/限流：记住过则回填密码，避免整段重输
             challenge = '';
             $('#login-captcha').value = '';
             $('#login-captcha-image').removeAttribute('src');

@@ -153,6 +153,8 @@ $assetVer = static function (string $path): string {
 
 <script>
 window.__SCREEN__ = <?= json_encode($boot, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+/* admin-page.js 的统一退出（#ap-logout）读 window.__ADMIN__.csrf；缺失会导致退出 403 弹回大屏。 */
+window.__ADMIN__ = window.__SCREEN__;
 </script>
 <script src="<?= $assetVer('/assets/js/admin-page.js') ?>"></script>
 <script src="<?= $assetVer('/assets/js/screen.js') ?>"></script>

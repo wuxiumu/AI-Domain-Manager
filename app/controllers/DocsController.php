@@ -12,7 +12,7 @@ class DocsController
     /** 文档管理页（/docs）：管理员会话；自包含视图，$docsBootstrap 携带 CSRF。 */
     public function page(): void
     {
-        Auth::requireSession();
+        Auth::requirePageSession();
         header('Cache-Control: no-store');
         $docsBootstrap = [
             'csrf' => Auth::csrfToken(),

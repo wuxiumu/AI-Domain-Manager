@@ -71,6 +71,13 @@ class Auth
         self::requireLogin();
     }
 
+    /** 独立页面守卫：未登录跳回登录壳（/ 会呈现环境检查 + 初始化或登录），而非裸 JSON 401。 */
+    public static function requirePageSession(): void
+    {
+        if (!self::check()) { header('Location: /'); exit; }
+        self::requireSession();
+    }
+
     /** Deny unlisted routes to tokens; browser sessions keep CSRF protection. */
     public static function authorizeRoute(string $method, string $route): void
     {

@@ -42,7 +42,7 @@ $scripts = ['ui', 'cache', 'core', 'setup', 'login', 'app'];
             <label for="login-pass">密码</label>
             <input type="password" id="login-pass" autocomplete="current-password" required placeholder="输入密码">
             <label class="login-remember"><input type="checkbox" id="login-remember"><span>记住密码</span></label>
-            <p class="login-remember-hint">勾选后密码将保存在此浏览器中，请勿在公用设备使用。</p>
+            <p id="login-remember-hint" class="login-remember-hint">默认记住密码：登录成功后保存在此浏览器中，下次自动填入；取消勾选即清除，请勿在公用设备使用。</p>
             <label for="login-captcha">图形验证码</label>
             <div class="login-captcha-row">
                 <input type="text" id="login-captcha" autocomplete="off" autocapitalize="characters" spellcheck="false" required maxlength="5" pattern="[A-Za-z0-9]{5}" aria-describedby="login-captcha-hint" placeholder="输入 5 位验证码">

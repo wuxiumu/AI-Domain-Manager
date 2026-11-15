@@ -8,7 +8,7 @@ class ScreenController
 {
     public function page(): void
     {
-        Auth::requireSession();
+        Auth::requirePageSession();
         header('Cache-Control: no-store');
         $screenBootstrap = [
             'csrf' => Auth::csrfToken(),

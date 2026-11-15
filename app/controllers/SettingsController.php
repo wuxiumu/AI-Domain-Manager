@@ -5,7 +5,7 @@ class SettingsController
     /** 独立设置页（/settings）：管理员会话；自包含视图，$settingsBootstrap 携带 CSRF。 */
     public function page(): void
     {
-        Auth::requireSession();
+        Auth::requirePageSession();
         header('Cache-Control: no-store');
         $settingsBootstrap = [
             'csrf' => Auth::csrfToken(),
