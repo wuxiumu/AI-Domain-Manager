@@ -139,6 +139,11 @@ class ScreenService
                         // HTTPS 单列结果：ok=证书有效可达（上线运营）；fail=未启用或证书无效；空=旧结果未探测
                         'https' => (string) ($probe['https_status'] ?? ''),
                         'https_code' => (int) ($probe['https_code'] ?? 0),
+                        'https_expires' => (string) ($probe['https_expires'] ?? ''),
+                        // HTTP / HTTPS 分列访问耗时（ms）；旧结果无此字段
+                        'http_status' => (string) ($probe['http_status'] ?? ''),
+                        'http_ms' => isset($probe['http_ms']) ? (int) $probe['http_ms'] : null,
+                        'https_ms' => isset($probe['https_ms']) ? (int) $probe['https_ms'] : null,
                         'checked_at' => (string) ($probe['checked_at'] ?? ''),
                     ];
                     if ($entry['access']['status'] === 'ok') { $groups[$fqdn]['access'] = 'ok'; }
@@ -146,16 +151,32 @@ class ScreenService
                 }
                 $groups[$fqdn]['records'][] = $entry;
             }
-            // 组级 HTTPS 聚合：任一记录 HTTPS 通过 → ok；可达但全部记录 HTTPS 未通过 → http-only；无 HTTPS 数据 → null
+            // 组级 HTTPS 聚合（与 🔒 锁标一致的语义）：有锁 ok=任一记录 HTTPS 通过（到期取最早）；
+            // 浏览器 https 探测通过也算有锁（fetch https 成功即证书有效）；
+            // 无锁 http-only=HTTP 可达但没有锁（HTTPS 未通过或未检查）；组不可达 → null
             foreach ($groups as $fqdn => $group) {
-                $httpsOk = false; $httpsProbed = false;
+                $httpsOk = false; $earliestExpire = '';
                 foreach ($group['records'] as $e) {
-                    $h = $e['access']['https'] ?? '';
-                    if ($h === 'ok') { $httpsOk = true; break; }
-                    if ($h !== '') { $httpsProbed = true; }
+                    $a = $e['access'];
+                    $h = is_array($a) ? $a['https'] : '';
+                    if ($h === 'ok') {
+                        $httpsOk = true;
+                        $exp = $a['https_expires'] ?? '';
+                        if ($exp !== '' && ($earliestExpire === '' || $exp < $earliestExpire)) { $earliestExpire = $exp; }
+                    }
                 }
-                $groups[$fqdn]['https'] = $httpsOk ? 'ok'
-                    : ($httpsProbed && $group['access'] === 'ok' ? 'http-only' : null);
+                $browser = $browserByFqdn[$fqdn] ?? null;
+                $browserHttps = is_array($browser) && ($browser['ok'] ?? false) === true && ($browser['scheme'] ?? '') === 'https';
+                if ($httpsOk) {
+                    $groups[$fqdn]['https'] = 'ok';
+                    $groups[$fqdn]['https_expires'] = $earliestExpire;
+                } elseif ($browserHttps) {
+                    $groups[$fqdn]['https'] = 'ok';
+                    $groups[$fqdn]['https_expires'] = null;
+                } else {
+                    $groups[$fqdn]['https'] = $group['access'] === 'ok' ? 'http-only' : null;
+                    $groups[$fqdn]['https_expires'] = null;
+                }
             }
             // 浏览器探测结果（前端检查上报）：按 FQDN 合并，任一通过即组级 ok；耗时与时间透出供页面显示
             foreach ($browserByFqdn as $fqdn => $browser) {
@@ -270,8 +291,11 @@ class ScreenService
 
     private static function accessSuffix(array $sub): string
     {
-        if (($sub['https'] ?? null) === 'ok') { return '｜HTTPS 正常（已上线运营）'; }
-        if (($sub['access'] ?? null) === 'ok') { return '｜仅 HTTP（未启用 HTTPS）'; }
+        if (($sub['https'] ?? null) === 'ok') {
+            $expire = ($sub['https_expires'] ?? '') !== '' ? '，证书 ' . $sub['https_expires'] . ' 到期' : '';
+            return '｜HTTPS 通过（有锁' . $expire . '）';
+        }
+        if (($sub['access'] ?? null) === 'ok') { return '｜HTTP 通过（无锁）'; }
         if (($sub['access'] ?? null) === 'fail') { return '｜访问异常'; }
         return '';
     }

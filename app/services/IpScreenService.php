@@ -84,6 +84,7 @@ class IpScreenService
                     'access' => is_array($probe) ? (string) ($probe['status'] ?? '') : null,
                     'http_code' => is_array($probe) ? (int) ($probe['http_code'] ?? 0) : null,
                     'https' => is_array($probe) ? (string) ($probe['https_status'] ?? '') : null,
+                    'https_expires' => is_array($probe) ? (string) ($probe['https_expires'] ?? '') : null,
                     'access_ms' => is_array($probe) && isset($probe['ms']) ? (int) $probe['ms'] : null,
                     'checked_at' => is_array($probe) ? ($probe['checked_at'] ?? null) : null,
                 ];
@@ -303,8 +304,9 @@ class IpScreenService
             if ($row['domains']) {
                 $lines[] = '- 关联域名（' . $row['domain_count'] . '）：';
                 foreach ($row['domains'] as $d) {
-                    $https = ($d['https'] ?? '') === 'ok' ? ' · HTTPS 正常（已上线运营）'
-                        : (($d['https'] ?? '') === 'fail' && $d['access'] === 'ok' ? ' · 仅 HTTP（未启用 HTTPS）' : '');
+                    $https = ($d['https'] ?? '') === 'ok' ? ' · HTTPS 通过（有锁'
+                            . (($d['https_expires'] ?? '') !== '' ? '，证书 ' . $d['https_expires'] . ' 到期）' : '）')
+                        : (($d['https'] ?? '') === 'fail' && $d['access'] === 'ok' ? ' · HTTP 通过（无锁）' : '');
                     $suffix = $d['access'] === null ? '未检查' : ($d['access'] === 'ok' ? 'HTTP ' . $d['http_code'] : ($d['access'] === 'na' ? '不适用' : '失败'));
                     $lines[] = '  - ' . $d['fqdn'] . '（' . $d['provider_name'] . ' · ' . $suffix . $https . '）';
                 }

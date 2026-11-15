@@ -109,6 +109,7 @@ class PublicHttpProbe
                         CURLOPT_NOBODY=>true, CURLOPT_FOLLOWLOCATION=>false, CURLOPT_MAXREDIRS=>0,
                         CURLOPT_TIMEOUT_MS=>4000, CURLOPT_CONNECTTIMEOUT_MS=>2000,
                         CURLOPT_SSL_VERIFYPEER=>true, CURLOPT_SSL_VERIFYHOST=>2,
+                        CURLOPT_CERTINFO=>true, // 证书到期时间：HTTPS 检查的续期提醒依据
                         CURLOPT_RETURNTRANSFER=>false, CURLOPT_WRITEFUNCTION=>static function($ch,$bytes)use($limit){
                             $limit->bytes+=strlen($bytes);if($limit->bytes>65536){$limit->cut=true;return 0;}return strlen($bytes);
                         },
@@ -143,8 +144,17 @@ class PublicHttpProbe
                     foreach($handles as $key=>[$handle,$plan]) {
                         $errno=curl_errno($handle);
                         if($limits[$key]->cut && $errno===CURLE_WRITE_ERROR && curl_getinfo($handle,CURLINFO_HTTP_CODE)>0)$errno=0;
-                        $out[$key]=['http_code'=>$errno===0?(int)curl_getinfo($handle,CURLINFO_HTTP_CODE):0,
+                        $entry=['http_code'=>$errno===0?(int)curl_getinfo($handle,CURLINFO_HTTP_CODE):0,
                             'ms'=>($headMs[$key]??0)+(int)round(curl_getinfo($handle,CURLINFO_TOTAL_TIME)*1000), 'scheme'=>$plan['scheme'],'error'=>$errno?curl_error($handle):''];
+                        // https 目标附带证书到期（TLS 握手成功即有；取不到则不填）
+                        if ($plan['scheme']==='https') {
+                            $cert = curl_getinfo($handle, CURLINFO_CERTINFO)[0] ?? null;
+                            $expireRaw = is_array($cert) ? ($cert['Expire date'] ?? '') : '';
+                            if ($expireRaw !== '' && ($ts = strtotime($expireRaw)) !== false) {
+                                $entry['cert_expires'] = date('Y-m-d', $ts);
+                            }
+                        }
+                        $out[$key]=$entry;
                     }
                 } finally {
                     foreach($handles as [$handle]) { curl_multi_remove_handle($multi,$handle);curl_close($handle); }

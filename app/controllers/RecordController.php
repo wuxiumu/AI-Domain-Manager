@@ -57,6 +57,32 @@ class RecordController
         $this->change($provider, $domain, 'add', null);
     }
 
+    /** HTTPS 专题检查：仅探测已通过 HTTP 访问检查记录的 https://主机名（证书到期随之更新）；body.record_ids 可选 */
+    public function httpsCheck(string $provider, string $domain): void
+    {
+        Auth::requireLogin();
+        $this->releaseSession();
+        try {
+            $acc = self::account($provider);
+            $snapshot = DnsRecordCache::read(DATA_DIR, $provider, $domain, static function () use ($acc, $domain) { return provider_factory($acc)->listRecords($domain); }, true);
+            $records = $snapshot['records'];
+            $recordIds = body_json()['record_ids'] ?? null;
+            if (is_array($recordIds) && $recordIds) {
+                $wanted = array_flip(array_map('strval', $recordIds));
+                $records = array_values(array_filter($records, static function (array $r) use ($wanted): bool {
+                    return isset($wanted[(string) ($r['id'] ?? '')]);
+                }));
+                if (!$records) { json_out(['ok' => false, 'error' => '勾选的记录在云端已不存在，请刷新解析后重试'], 422); }
+            }
+            json_out(['ok' => true] + RecordAccessService::runHttpsCheck($provider, $domain, $records,
+                is_array($recordIds) ? array_map('strval', $recordIds) : null));
+        } catch (DomainException $e) {
+            json_out(['ok' => false, 'error' => $e->getMessage(), 'code' => 'conflict'], 409);
+        } catch (Throwable $e) {
+            json_out(['ok' => false, 'error' => 'HTTPS 检查未完成，请检查网络后重试', 'code' => 'dns_check_failed'], 502);
+        }
+    }
+
     public function update(string $provider, string $domain, string $recordId): void
     {
         $this->change($provider, $domain, 'update', $recordId);

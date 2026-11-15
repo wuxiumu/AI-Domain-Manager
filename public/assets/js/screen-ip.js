@@ -143,9 +143,8 @@ function ipCardHtml(r, names) {
         var msTip = d.access_ms != null ? ' · ' + Number(d.access_ms) + 'ms' : '';
         var mark = d.access === 'ok' ? '<i class="sb-ipmark ok" title="HTTP ' + esc(d.http_code) + msTip + '"></i>'
             : d.access === 'fail' ? '<i class="sb-ipmark fail" title="访问失败"></i>' : '';
-        // HTTPS 徽标：ok=证书有效可达（已上线运营）；仅 HTTP=可达但未启用 HTTPS；旧结果无 https 字段不标
-        var scheme = d.https === 'ok' ? '<b class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</b>'
-            : (d.https === 'fail' && d.access === 'ok' ? '<b class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</b>' : '');
+        // 🔒 锁标：HTTPS 通过才在域名后显示（唯一 HTTPS 视觉标识），未通过不显示
+        var scheme = d.https === 'ok' ? SB.httpsLock(d.https_expires) : '';
         var paused = d.paused ? '<span class="sb-paused-mini" title="记录已暂停解析">⏸</span>' : '';
         return '<a class="sb-tag" href="' + esc(siteLink(d.fqdn)) + '" target="_blank" rel="noopener"'
             + ' title="新页面打开 ' + esc(d.fqdn) + (d.access_ms != null ? '（' + Number(d.access_ms) + 'ms）' : '') + '">'
@@ -330,7 +329,7 @@ function runDomFrontCheck() {
         return SB.frontProbe(fqdn).then(function (res) {
             var ok = res.ok === true;
             if (ok) { okCount++; }
-            SB.saveAccess(fqdn, 'fe', { ok: ok, ms: res.ms, at: fmtNowLocal() });
+            SB.saveAccess(fqdn, 'fe', { ok: ok, ms: res.ms, at: fmtNowLocal(), scheme: ok ? res.scheme : null });
             return worker();
         });
     };
@@ -357,7 +356,7 @@ function reportDomFrontCheck(targets) {
             try { return JSON.parse(localStorage.getItem('asset-workspace-screen:access:v1') || '{}')[d.fqdn] || {}; } catch (e) { return {}; }
         })());
         if (cached.fe && cached.fe.ok === true) { // 只报成功：浏览器失败可能是环境限制
-            groups[key].results[d.fqdn] = { ok: true, ms: typeof cached.fe.ms === 'number' ? cached.fe.ms : null };
+            groups[key].results[d.fqdn] = { ok: true, ms: typeof cached.fe.ms === 'number' ? cached.fe.ms : null, scheme: cached.fe.scheme || undefined };
         }
     });
     Object.keys(groups).forEach(function (key) {

@@ -106,6 +106,7 @@ $router->put('/api/domains/{provider}/{domain}/records/{recordId}',  [RecordCont
 $router->delete('/api/domains/{provider}/{domain}/records/{recordId}', [RecordController::class, 'delete']);
 $router->post('/api/domains/{provider}/{domain}/records/{recordId}/status', [RecordController::class, 'status']);
 $router->post('/api/domains/{provider}/{domain}/records/access-check', [RecordController::class, 'accessCheck']);
+$router->post('/api/domains/{provider}/{domain}/records/https-check', [RecordController::class, 'httpsCheck']);
 $router->post('/api/domains/{provider}/{domain}/records/browser-check', [RecordController::class, 'browserCheck']);
 
 // 初始化后仅管理员会话可读取环境诊断。

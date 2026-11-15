@@ -37,12 +37,15 @@ function applyFilters(data, tab, q, status) {
     return list.filter(function (d) {
         if (tab && d.provider !== tab) { return false; }
         if (status) {
-            // ok / fail / unchecked（前端缓存 + 后端结果合并）；https / http-only 按子域名组级 HTTPS 结果匹配
+            // ok / fail / unchecked（前端缓存 + 后端结果合并）；
+            // https（有锁）/ http-only（无锁）只看主域名 @ 记录：有锁=@ HTTPS 通过；无锁=@ HTTP 通过但没有锁
             var st;
             if (status === 'https') {
-                st = (d.subdomains || []).some(function (s) { return s.https === 'ok'; }) ? 'https' : 'other';
+                var rHttps = rootSub(d);
+                st = rHttps && rHttps.https === 'ok' ? 'https' : 'other';
             } else if (status === 'http-only') {
-                st = (d.subdomains || []).some(function (s) { return s.https === 'http-only'; }) ? 'http-only' : 'other';
+                var rNoLock = rootSub(d);
+                st = rNoLock && rNoLock.access === 'ok' && rNoLock.https !== 'ok' ? 'http-only' : 'other';
             } else {
                 st = domainStatus(d);
                 st = st === 'none' ? 'unchecked' : st;
@@ -138,6 +141,8 @@ ScreenBoard.toast = function (message, type, duration) { toast(message, type, du
 ScreenBoard.reload = function (force) { loadData(force === true); };
 // 浏览器直连探测 + 本地结果缓存（IP 清单弹窗的前端检查复用）。
 ScreenBoard.frontProbe = frontProbe;
+// 🔒 锁标（弹窗记录行 / IP 视图复用，卡片直接用同文件定义）。
+ScreenBoard.httpsLock = httpsLock;
 ScreenBoard.copyText = function (text, okMessage) {
     // 大屏用自己的 toast（页面无 ap-toast）；clipboard 挂起 400ms 时 execCommand 兜底
     var done = function () { toast(okMessage || '已复制'); };
@@ -324,6 +329,7 @@ function applyModeUi() {
     $('sb-ip-becheck').classList.toggle('hidden', !ip);
     $('sb-domain-fecheck').classList.toggle('hidden', ip);
     $('sb-domain-becheck').classList.toggle('hidden', ip);
+    $('sb-domain-httpscheck').classList.toggle('hidden', ip);
     $('sb-q').placeholder = ip ? '搜索 IP / 域名 / 归属地' : '搜索域名 / 子域名 / IP';
     // 校验当前排序键属于当前视图。
     if (options.every(function (o) { return o[0] !== wanted; })) {
@@ -479,6 +485,25 @@ function httpLink(domain) {
     return 'http://' + String(domain || '').replace(/["<>\\]/g, '') + '/';
 }
 
+/** 🔒 锁标（主域名 / 子域名 / 弹窗主机名之后）：HTTPS 通过才显示，一眼区分运营状态；悬停见证书到期。 */
+function httpsLock(expires) {
+    var tip = 'HTTPS 证书有效——已上线运营';
+    if (expires) {
+        var days = Math.ceil((new Date(expires + 'T23:59:59+08:00').getTime() - Date.now()) / 86400000);
+        if (!isNaN(days) && days <= 30) { tip += '（仅剩 ' + days + ' 天，注意续期）'; }
+    }
+    return '<span class="sb-lock" title="' + escapeHtml(tip) + '">🔒</span>';
+}
+
+/** 主域名 @ 记录的子域名组（无 @ 记录返回 null）；筛选「有锁 / 无锁」与卡片主域名锁标都以它为准。 */
+function rootSub(d) {
+    var subs = d.subdomains || [];
+    for (var i = 0; i < subs.length; i++) {
+        if (subs[i].name === '@') { return subs[i]; }
+    }
+    return null;
+}
+
 function cardHtml(d) {
     var chips = [];
     if (d.provider_name) { chips.push('<span class="sb-chip">' + escapeHtml(d.provider_name) + '</span>'); }
@@ -500,6 +525,10 @@ function cardHtml(d) {
         : '<b class="sb-stat-num ' + cls.replace('u-', 'c-') + '">' + Number(d.days_left) + '</b>';
 
     var subs = d.subdomains || [];
+    // 主域名锁标：只看主域名 @ 记录的 HTTPS 状态（与「有锁 / 无锁」筛选同一口径）
+    var root = rootSub(d);
+    var domainHasHttps = !!root && root.https === 'ok';
+    var domainLockExp = domainHasHttps ? (root.https_expires || '') : '';
     var hosts;
     if (!d.dns_cached) {
         hosts = '<div class="sb-hosts-empty">更新该账号数据后展示子域名</div>';
@@ -511,13 +540,8 @@ function cardHtml(d) {
             var ipBtns = (s.ips || []).map(function (ip) {
                 return '<button type="button" class="sb-tag-ip" data-ip-goto="' + escapeHtml(ip) + '" title="点击打开解析管理并定位此 IP">' + escapeHtml(ip) + '</button>';
             }).join('');
-            // HTTPS 结果语义：ok=证书有效可达（上线运营中）；http-only=站点可达但未启用 HTTPS；无检查结果不标
-            var scheme = '';
-            if (s.https === 'ok') {
-                scheme = '<b class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</b>';
-            } else if (s.https === 'http-only') {
-                scheme = '<b class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</b>';
-            }
+            // 子域名锁标：HTTPS 通过才在名字后显示 🔒（唯一 HTTPS 视觉标识），未通过不显示
+            var scheme = s.https === 'ok' ? httpsLock(s.https_expires) : '';
             return '<span class="sb-tag"><span class="sb-tag-name">' + escapeHtml(s.name) + '</span>' + scheme + ipBtns + '</span>';
         }).join('');
         hosts = '<div class="sb-tags" data-key="' + escapeHtml(d.provider + '|' + d.domain)
@@ -532,6 +556,7 @@ function cardHtml(d) {
         + '<a class="sb-domain" href="' + escapeHtml(httpLink(d.domain))
         + '" target="_blank" rel="noopener" title="打开 ' + escapeHtml(httpLink(d.domain)) + '">'
         + escapeHtml(d.domain) + '</a>'
+        + (domainHasHttps ? httpsLock(domainLockExp) : '')
         + '<button type="button" class="sb-copy-btn" data-domain-copy="' + escapeHtml(d.domain) + '" title="复制主域名">复制</button></div>'
         + '<div class="sb-stat-row">'
         + '<div class="sb-stat">' + daysCell + '<span>天后到期</span></div>'
@@ -697,16 +722,25 @@ function expireBadge(d) {
 
 // 前端检查：浏览器直连各主机（no-cors），结果缓存在本浏览器
 function frontProbe(fqdn) {
+    // 先试 HTTPS：浏览器 fetch https 成功即 TLS 证书有效（可点亮 HTTPS 徽标）；失败回退 HTTP 仅测可达性
+    return probeOnce(fqdn, 'https').then(function (res) {
+        if (res.ok) { return res; }
+        return probeOnce(fqdn, 'http');
+    });
+}
+
+function probeOnce(fqdn, scheme) {
     return new Promise(function (resolve) {
         var settled = false;
         var ctrl = new AbortController();
+        var started = Date.now();
         var timer = setTimeout(function () {
-            if (!settled) { settled = true; ctrl.abort(); resolve(false); }
+            if (!settled) { settled = true; ctrl.abort(); resolve({ ok: false, ms: 0, scheme: scheme }); }
         }, FRONT_CHECK_TIMEOUT_MS);
-        var url = 'http://' + fqdn + '/?_awchk=' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        var url = scheme + '://' + fqdn + '/?_awchk=' + Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
         fetch(url, { mode: 'no-cors', signal: ctrl.signal, cache: 'no-store' })
-            .then(function () { if (!settled) { settled = true; clearTimeout(timer); resolve(true); } })
-            .catch(function () { if (!settled) { settled = true; clearTimeout(timer); resolve(false); } });
+            .then(function () { if (!settled) { settled = true; clearTimeout(timer); resolve({ ok: true, ms: Date.now() - started, scheme: scheme }); } })
+            .catch(function () { if (!settled) { settled = true; clearTimeout(timer); resolve({ ok: false, ms: Date.now() - started, scheme: scheme }); } });
     });
 }
 
@@ -772,6 +806,7 @@ function bind() {
     });
     $('sb-domain-fecheck').addEventListener('click', function () { runDomainBatchCheck('front'); });
     $('sb-domain-becheck').addEventListener('click', function () { runDomainBatchCheck('back'); });
+    $('sb-domain-httpscheck').addEventListener('click', runDomainHttpsCheck);
     document.querySelectorAll('.sb-mode-btn').forEach(function (btn) {
         btn.addEventListener('click', function () { setMode(btn.getAttribute('data-mode') === 'ip' ? 'ip' : 'domain'); });
     });
@@ -842,7 +877,7 @@ function runDomainBatchCheck(mode) {
     if (!items || !items.length) { toast('当前列表没有域名', 'info'); return; }
     if (mode === 'front' && items.length > 200) { items = items.slice(0, 200); toast('列表超过 200 个，本次检查前 200 个', 'info', 5000); }
     domainCheckBusy = true;
-    ['sb-domain-fecheck', 'sb-domain-becheck', 'sb-ip-fecheck', 'sb-ip-becheck'].forEach(function (id) { $(id).disabled = true; });
+    ['sb-domain-fecheck', 'sb-domain-becheck', 'sb-domain-httpscheck', 'sb-ip-fecheck', 'sb-ip-becheck'].forEach(function (id) { $(id).disabled = true; });
     if (mode === 'front') {
         // 浏览器直连探测主域名（4 路并发），按 zone 收集后逐域名上报（快照行的 dns_revision 直接可用）
         toast('前端检查中：浏览器直连 ' + items.length + ' 个主域名…', 'info', 8000);
@@ -859,7 +894,7 @@ function runDomainBatchCheck(mode) {
             return frontProbe(d.domain).then(function (res) {
                 if (res.ok) { okCount++; }
                 var key = d.provider + '|' + d.domain;
-                if (groups[key]) { groups[key].results[d.domain] = { ok: res.ok === true, ms: res.ms }; }
+                if (groups[key]) { groups[key].results[d.domain] = { ok: res.ok === true, ms: res.ms, scheme: res.ok ? res.scheme : undefined }; }
                 return worker();
             });
         };
@@ -902,6 +937,33 @@ function runDomainBatchCheck(mode) {
         domainCheckBusy = false;
         ['sb-domain-fecheck', 'sb-domain-becheck'].forEach(function (id) { $(id).disabled = false; });
         toast('后端检查完成：' + total + ' 个域名全部记录已探测并缓存', 'success', 9000);
+        loadData(true);
+    });
+}
+
+// HTTPS 专题检查（主页）：逐域名调用 https-check，仅覆盖该域名下已通过 HTTP 检查的记录。
+function runDomainHttpsCheck() {
+    if (domainCheckBusy) { return; }
+    var items = state.lastView;
+    if (!items || !items.length) { toast('当前列表没有域名', 'info'); return; }
+    domainCheckBusy = true;
+    ['sb-domain-fecheck', 'sb-domain-becheck', 'sb-domain-httpscheck', 'sb-ip-fecheck', 'sb-ip-becheck'].forEach(function (id) { $(id).disabled = true; });
+    toast('HTTPS 检查中：逐域名探测已通过 HTTP 检查的记录，可能需要数分钟…', 'info', 10000);
+    var doneCount = 0, total = items.length, httpsOk = 0;
+    var zones = items.slice();
+    var zChain = Promise.resolve();
+    zones.forEach(function (d) {
+        zChain = zChain.then(function () {
+            return fetchJson('/api/domains/' + encodeURIComponent(d.provider) + '/' + encodeURIComponent(d.domain) + '/records/https-check', { method: 'POST', body: {} })
+                .then(function (res) { httpsOk += Number(res.https_ok || 0); })
+                .catch(function () { /* 单域名失败继续其余 */ })
+                .then(function () { doneCount++; toast('HTTPS 检查进度：' + doneCount + ' / ' + total, 'info', 3000); });
+        });
+    });
+    zChain.then(function () {
+        domainCheckBusy = false;
+        ['sb-domain-fecheck', 'sb-domain-becheck', 'sb-domain-httpscheck'].forEach(function (id) { $(id).disabled = false; });
+        toast('HTTPS 检查完成：' + total + ' 个域名，HTTPS 通过 ' + httpsOk + ' 条（未通过 HTTP 检查的记录已跳过）', httpsOk ? 'success' : 'info', 9000);
         loadData(true);
     });
 }

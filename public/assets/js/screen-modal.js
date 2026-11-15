@@ -12,6 +12,7 @@ var fetchJson = SB.fetchJson;
 var toast = SB.toast;
 var escapeHtml = SB.escapeHtml;
 var httpLink = SB.httpLink;
+var httpsLock = SB.httpsLock;
 var expireBadge = SB.expireBadge;
 var groupStatus = SB.groupStatus;
 var accessStore = SB.accessStore;
@@ -21,6 +22,16 @@ var frontProbe = SB.frontProbe;
 var loadData = SB.loadData;
 var render = SB.render;
 var copyText = SB.copyText;
+
+// ---- 弹窗分页：每页条数跨会话记忆（localStorage），页码在打开 / 换筛选 / 换条数时重置 ----
+var MODAL_SIZE_KEY = 'asset-workspace-screen:modal-size:v1';
+state.modalPage = 1;
+state.modalSize = 'all';
+try {
+    var savedModalSize = localStorage.getItem(MODAL_SIZE_KEY);
+    if (savedModalSize === '10' || savedModalSize === '20' || savedModalSize === 'all') { state.modalSize = savedModalSize; }
+} catch (e) { /* localStorage 不可用时保持默认全部 */ }
+function saveModalSize() { try { localStorage.setItem(MODAL_SIZE_KEY, state.modalSize); } catch (e) { /* 忽略 */ } }
 
 
 // ---- 弹窗：子域名多选 + 批量修改 / 删除 + 访问检查 ----
@@ -37,6 +48,7 @@ function modalItem() {
 function openModal(key, source, locateIp) {
     if (!modalItemFor(key)) { return; }
     state.modalKey = key;
+    state.modalPage = 1; // 每次打开回到第一页（每页条数保持记忆值）
     // 来源上下文（从 IP 视图进入时携带）：高亮指向该 IP 的记录与被点击的域名。
     state.modalSource = source && source.ip ? { ip: String(source.ip), fqdn: String(source.fqdn || '') } : null;
     state.locateIp = locateIp ? String(locateIp) : null; // 点击卡片 IP：打开后勾选该组并滚动定位
@@ -64,6 +76,7 @@ function closeModal() {
     state.selected = {};
     state.modalQ = '';
     state.modalStatus = '';
+    state.modalPage = 1;
     $('sb-modal').classList.add('hidden');
 }
 
@@ -102,19 +115,6 @@ function hideInlineBars() {
     $('sb-addbar').classList.add('hidden');
 }
 
-function accessTitle(grp) {
-    var cached = accessStore()[grp.fqdn] || {};
-    var parts = [];
-    if (cached.fe) { parts.push('前端检查' + (cached.fe.ok ? '通过' : '异常') + (cached.fe.ms ? ' ' + cached.fe.ms + 'ms' : '') + ' ' + cached.fe.at); }
-    if (grp.browser_at) { parts.push('前端检查上报于 ' + grp.browser_at + (grp.browser_ms ? ' ' + grp.browser_ms + 'ms' : '')); }
-    var be = null;
-    (grp.records || []).some(function (r) { if (r.access) { be = r.access; return true; } return false; });
-    if (be) { parts.push('后端检查' + (be.status === 'ok' ? '通过' : '异常') + ' HTTP ' + be.http_code + ' ' + be.checked_at); }
-    if (be && be.https === 'ok') { parts.push('HTTPS 通过（证书有效，已上线运营）'); }
-    else if (be && be.https === 'fail' && be.status === 'ok') { parts.push('仅 HTTP 可达（未启用 HTTPS）'); }
-    return parts.join('；') || '尚未检查';
-}
-
 function renderModal() {
     var item = modalItem();
     if (!item) { closeModal(); return; }
@@ -140,11 +140,11 @@ function renderModal() {
     var hasRecords = (item.subdomains || []).some(function (s) { return (s.records || []).length; });
     $('sb-modal-tools').classList.toggle('hidden', !item.dns_cached);
     $('sb-batchadd').disabled = !canAdd || state.busyCheck || state.busyWrite;
-    ['sb-editip', 'sb-del', 'sb-fecheck', 'sb-becheck', 'sb-invert'].forEach(function (id) {
+    ['sb-editip', 'sb-del', 'sb-fecheck', 'sb-becheck', 'sb-httpscheck', 'sb-invert'].forEach(function (id) {
         $(id).disabled = !hasRecords || state.busyCheck || state.busyWrite;
     });
     $('sb-tool-hint').textContent = hasRecords
-        ? '前端 / 后端任一通过即通过 · 勾选后只检查选中项，未勾选检查全部 · 前端结果缓存于本浏览器 · 修改与删除直接写入云端 DNS'
+        ? '前端 / 后端任一通过即通过 · HTTPS 检查仅覆盖已通过 HTTP 的记录 · 勾选后只检查选中项，未勾选检查全部 · 修改与删除直接写入云端 DNS'
         : '该域名暂无 A 记录：点「批量添加」创建第一条解析（每行一条：主机名 + IPv4）';
 
     // 弹窗内筛选：关键词（主机名 / IP）+ 访问状态 tab；筛选条件在弹窗会话内保留，关闭即重置
@@ -158,7 +158,8 @@ function renderModal() {
     var q = (state.modalQ || '').toLowerCase();
     var stFilter = state.modalStatus || '';
     var rows = allRows.filter(function (s) {
-        if (stFilter === 'https') { if (s.https !== 'ok') { return false; } }  // HTTPS 正常（运营中）
+        if (stFilter === 'https') { if (s.https !== 'ok') { return false; } }  // 有锁：HTTPS 通过
+        else if (stFilter === 'http-only') { if (groupStatus(s) !== 'ok' || s.https === 'ok') { return false; } }  // 无锁：HTTP 通过但没有锁
         else if (stFilter && groupStatus(s) !== stFilter) { return false; }
         if (q) {
             var matched = s.fqdn.toLowerCase().indexOf(q) !== -1
@@ -169,19 +170,34 @@ function renderModal() {
     });
     $('sb-modal-count').textContent = (q || stFilter) ? '匹配 ' + rows.length + ' / 共 ' + allRows.length + ' 行' : '';
 
-    var rowsHtml = rows.map(function (s) {
-        var st = groupStatus(s);
+    // 分页：过滤后按每页条数切片；点击卡片 IP 进入时先跳到目标行所在页再渲染
+    var pageSize = state.modalSize === 'all' ? 0 : parseInt(state.modalSize, 10);
+    var pageCount = pageSize ? Math.max(1, Math.ceil(rows.length / pageSize)) : 1;
+    if (state.locateIp && pageSize) {
+        for (var li = 0; li < rows.length; li++) {
+            var recs = rows[li].records || [];
+            for (var lj = 0; lj < recs.length; lj++) {
+                if (String(recs[lj].value || '') === state.locateIp) { state.modalPage = Math.floor(li / pageSize) + 1; li = rows.length; break; }
+            }
+        }
+    }
+    if (state.modalPage > pageCount) { state.modalPage = pageCount; }
+    if (state.modalPage < 1) { state.modalPage = 1; }
+    var pageRows = pageSize ? rows.slice((state.modalPage - 1) * pageSize, state.modalPage * pageSize) : rows;
+
+    var rowsHtml = pageRows.map(function (s) {
         var clicked = src && src.fqdn && s.fqdn === src.fqdn;
-        // 表格化行：勾选 | 主机记录 | 访问状态 | TTL | 解析记录（固定列，多数据也对齐）
-        var badge = '<span class="sb-host-badges">'
-            + '<span class="sb-access sb-access-' + st + '" title="' + escapeHtml(accessTitle(s)) + '">'
-            + (st === 'ok' ? '通过' : st === 'fail' ? '异常' : '未检查') + '</span>'
-            + (clicked ? '<span class="sb-hitmark" title="你在 IP 卡片上点击的域名">所选域名</span>' : '')
-            + '</span>';
         // 域名与 IP 均为可访问链接（新窗口打开）；通配符记录无法直接访问，保持纯文本。
+        // 主机名颜色 = 访问状态（绿=通过 / 红=异常 / 默认白=未检查）；🔒 HTTPS 通过才显示（锁放进链接内，紧跟名字）。
+        var st = groupStatus(s);
+        var stCls = st === 'ok' ? ' sb-st-ok' : st === 'fail' ? ' sb-st-fail' : '';
+        var hostLock = s.https === 'ok' ? httpsLock(s.https_expires) : '';
+        var firstChecked = (s.records || []).length && s.records[0].access ? s.records[0].access.checked_at : '';
+        var hostTitle = s.fqdn + ' — 新页面打开 ' + httpLink(s.fqdn)
+            + (firstChecked ? '（访问检查于 ' + firstChecked + '）' : '');
         var hostCell = s.fqdn.indexOf('*') === -1
-            ? '<a class="sb-hostname" href="' + escapeHtml(httpLink(s.fqdn)) + '" target="_blank" rel="noopener" title="' + escapeHtml(s.fqdn) + ' — 新页面打开 ' + escapeHtml(httpLink(s.fqdn)) + '">' + escapeHtml(s.fqdn) + '</a>'
-            : '<span class="sb-hostname" title="' + escapeHtml(s.fqdn) + '">' + escapeHtml(s.fqdn) + '</span>';
+            ? '<a class="sb-hostname' + stCls + '" href="' + escapeHtml(httpLink(s.fqdn)) + '" target="_blank" rel="noopener" title="' + escapeHtml(hostTitle) + '">' + escapeHtml(s.fqdn) + hostLock + '</a>'
+            : '<span class="sb-hostname' + stCls + '" title="' + escapeHtml(hostTitle) + '">' + escapeHtml(s.fqdn) + hostLock + '</span>';
         var hasHit = false;
         // 按记录逐条展示 IP（暂停态可精确到记录）；同值多线路会重复显示。每条记录固定一行，超出省略。
         var ips = (s.records || []).map(function (rec) {
@@ -192,13 +208,13 @@ function renderModal() {
             var marks = '';
             if (paused) { marks += '<span class="sb-pausedmark" title="记录已暂停解析：该地址当前不再生效">已暂停</span>'; }
             if (hit) { marks += '<span class="sb-hitmark" title="该记录指向你来源的 IP 卡片">指向本 IP</span>'; }
-            var ms = rec.access && rec.access.ms ? '<span class="sb-ms">' + Number(rec.access.ms) + 'ms</span>' : '';
-            // HTTPS 单条徽标：ok=证书有效可达（运营中）；仅 HTTP=可达但 HTTPS 未通过；旧结果无 https 字段不标
-            var scheme = '';
-            if (rec.access && rec.access.https === 'ok') {
-                scheme = '<span class="sb-scheme ok" title="HTTPS 检查通过（证书有效）——已上线运营">HTTPS</span>';
-            } else if (rec.access && rec.access.https === 'fail' && rec.access.status === 'ok') {
-                scheme = '<span class="sb-scheme no" title="站点可达但未启用 HTTPS——尚未运营">仅HTTP</span>';
+            // HTTP / HTTPS 访问耗时并列展示（一次检查两条协议各自的时间，方便对照）；旧结果无此字段不显示
+            var times = '';
+            if (rec.access && rec.access.http_ms != null) {
+                times += '<span class="sb-time' + (rec.access.http_status === 'ok' ? ' ok' : '') + '" title="HTTP 访问耗时">HTTP ' + Number(rec.access.http_ms) + 'ms</span>';
+            }
+            if (rec.access && rec.access.https_ms != null) {
+                times += '<span class="sb-time' + (rec.access.https_status === 'ok' ? ' ok' : '') + '" title="HTTPS 访问耗时">HTTPS ' + Number(rec.access.https_ms) + 'ms</span>';
             }
             // 归属地（全局缓存，就绪后随重绘出现）
             var geo = ipLocMap && ipLocMap[rec.value] ? ipGeoHtml(ipLocMap[rec.value]) : '';
@@ -207,25 +223,26 @@ function renderModal() {
                 ? '<button type="button" class="sb-rec-edit-btn" data-rec-edit="' + escapeHtml(rec.id) + '" data-rec-type="' + escapeHtml(rec.type || 'A') + '" title="编辑这条解析记录（主机 / 类型 / 值 / TTL 等）">修改</button>'
                 : '';
             return '<span class="sb-rec">'
-                + '<span class="sb-rec-main">' + link + geo + ms + scheme + marks + '</span>'
+                + '<span class="sb-rec-main">' + link + geo + times + marks + '</span>'
                 + recEdit
                 + '</span>';
         }).join('');
         return '<div class="sb-host' + (clicked ? ' sb-host-clicked' : '') + (hasHit ? ' sb-host-hit' : '') + '">'
             + '<input type="checkbox" class="sb-check" data-fqdn="' + escapeHtml(s.fqdn) + '"' + (state.selected[s.fqdn] ? ' checked' : '') + '>'
-            + hostCell
-            + badge
-            + '<span class="sb-host-ttl">' + (s.ttl ? 'TTL ' + Number(s.ttl) : '') + '</span>'
+            + '<span class="sb-host-cell">' + hostCell
+            + (clicked ? '<span class="sb-hitmark" title="你在 IP 卡片上点击的域名">所选域名</span>' : '')
+            + '</span>'
             + '<span class="sb-ips">' + ips + '</span>'
             + '</div>';
     }).join('');
     var headHtml = rowsHtml
-        ? '<div class="sb-host-head"><span></span><span>主机记录</span><span>访问状态</span><span>TTL</span><span>解析记录</span></div>'
+        ? '<div class="sb-host-head"><span></span><span>主机记录</span><span>解析记录</span></div>'
         : '';
     $('sb-modal-body').innerHTML = headHtml + (rowsHtml
         || (allRows.length
             ? '<div class="sb-hosts-empty">没有匹配的记录：调整关键词或访问状态筛选</div>'
             : '<div class="sb-hosts-empty">该域名暂无 A 记录 · 点上方「批量添加」创建第一条解析（每行一条：主机名 + IPv4）</div>'));
+    renderPager(allRows.length, rows.length, pageCount);
 
     // 点击卡片 IP 进入：勾选该子域名组、高亮并滚动定位到可见。
     // locateIp 跨重渲染保留（异步归属地刷新 / 筛选重绘不再抹掉高亮），仅首屏滚动一次；closeModal 时复位。
@@ -256,6 +273,55 @@ function renderModal() {
     syncButtons();
 }
 
+/** 弹窗底部分页栏：计数 + 每页条数（跨会话记忆） + 页码跳转 / 上下页；「全部」模式只显示计数与条数选择。 */
+function renderPager(totalRows, matchedRows, pageCount) {
+    var pager = $('sb-modal-pager');
+    if (!totalRows) { pager.classList.add('hidden'); pager.innerHTML = ''; return; }
+    pager.classList.remove('hidden');
+    var sizeSel = '<label class="sb-pager-size">每页<select id="sb-modal-size" title="每页显示条数（选择会被记住）">'
+        + ['all', '10', '20'].map(function (v) {
+            return '<option value="' + v + '"' + (state.modalSize === v ? ' selected' : '') + '>' + (v === 'all' ? '全部' : v) + '</option>';
+        }).join('')
+        + '</select>条</label>';
+    var nav = '';
+    if (state.modalSize !== 'all') {
+        var nums = pagerWindow(state.modalPage, pageCount).map(function (p) {
+            if (p === '…') { return '<span class="sb-pager-ellipsis">…</span>'; }
+            return '<button type="button" class="sb-pager-btn sb-pager-num' + (p === state.modalPage ? ' is-active' : '')
+                + '" data-mpage-go="' + p + '" title="跳到第 ' + p + ' 页">' + p + '</button>';
+        }).join('');
+        nav = '<button type="button" class="sb-pager-btn" data-mpage="prev"' + (state.modalPage <= 1 ? ' disabled' : '') + '>‹</button>'
+            + nums
+            + '<button type="button" class="sb-pager-btn" data-mpage="next"' + (state.modalPage >= pageCount ? ' disabled' : '') + '>›</button>';
+    }
+    var sizeNum = parseInt(state.modalSize, 10);
+    var countText = state.modalSize === 'all'
+        ? '共 ' + totalRows + ' 行'
+        : '第 ' + ((state.modalPage - 1) * sizeNum + 1) + '–' + Math.min(state.modalPage * sizeNum, totalRows) + ' 行 · 共 ' + totalRows + ' 行'
+            + (matchedRows !== totalRows ? '（筛选后）' : '');
+    pager.innerHTML = '<span class="sb-pager-count">' + escapeHtml(countText) + '</span>'
+        + '<span class="sb-pager-nav">' + nav + sizeSel + '</span>';
+}
+
+/** 页码窗口：首尾 + 当前页邻域，中间以省略号折叠（总页数 ≤7 全展示）。 */
+function pagerWindow(current, total) {
+    if (total <= 7) {
+        var all = [];
+        for (var i = 1; i <= total; i++) { all.push(i); }
+        return all;
+    }
+    var wanted = [1, current - 1, current, current + 1, total].filter(function (p) { return p >= 1 && p <= total; });
+    var unique = [];
+    wanted.forEach(function (p) { if (unique.indexOf(p) === -1) { unique.push(p); } });
+    unique.sort(function (a, b) { return a - b; });
+    var out = [];
+    unique.forEach(function (p, i) {
+        if (i && p - unique[i - 1] > 1) { out.push('…'); }
+        out.push(p);
+    });
+    return out;
+}
+
 function selectedGroups(item) {
     return (item.subdomains || []).filter(function (s) {
         return state.selected[s.fqdn] && (s.records || []).length;
@@ -281,7 +347,7 @@ function syncButtons() {
 }
 
 function setToolsBusy(text) {
-    ['sb-editip', 'sb-del', 'sb-batchadd', 'sb-fecheck', 'sb-becheck', 'sb-invert'].forEach(function (id) { $(id).disabled = !!text; });
+    ['sb-editip', 'sb-del', 'sb-batchadd', 'sb-fecheck', 'sb-becheck', 'sb-httpscheck', 'sb-invert'].forEach(function (id) { $(id).disabled = !!text; });
     if (text) { $('sb-tool-hint').textContent = text; }
     else { renderModal(); } // 忙碌结束后按当前数据恢复按钮可用性与提示文案
 }
@@ -772,7 +838,7 @@ function runFrontCheck() {
         return frontProbe(grp.fqdn).then(function (res) {
             var ok = res.ok === true;
             if (ok) { okCount++; }
-            saveAccess(grp.fqdn, 'fe', { ok: ok, ms: res.ms, at: fmtNow() });
+            saveAccess(grp.fqdn, 'fe', { ok: ok, ms: res.ms, at: fmtNow(), scheme: ok ? res.scheme : null });
             return worker();
         });
     }
@@ -799,7 +865,7 @@ function reportFrontCheck(item, targets) {
     targets.forEach(function (s) {
         var cached = accessStore()[s.fqdn] || {};
         if (cached.fe && cached.fe.ok === true) { // 只报成功：浏览器失败可能是环境限制
-            results[s.fqdn] = { ok: true, ms: typeof cached.fe.ms === 'number' ? cached.fe.ms : null };
+            results[s.fqdn] = { ok: true, ms: typeof cached.fe.ms === 'number' ? cached.fe.ms : null, scheme: cached.fe.scheme || undefined };
         }
     });
     if (!Object.keys(results).length) { return; }
@@ -837,6 +903,41 @@ function runBackCheck() {
             state.busyCheck = false;
             setToolsBusy('');
             toast((err && err.message) || '后端检查失败，请稍后重试', 'error', 8000);
+        });
+}
+
+// HTTPS 专题检查：仅探测已通过 HTTP 访问检查记录的 https://主机名（严格 TLS + 证书到期），未通过 HTTP 的跳过。
+function runHttpsCheck() {
+    var item = modalItem();
+    if (!item || state.busyCheck || state.busyWrite) { return; }
+    var chosen = selectedGroups(item);
+    var recordIds = [];
+    if (chosen.length) {
+        chosen.forEach(function (s) { (s.records || []).forEach(function (r) { recordIds.push(r.id); }); });
+    }
+    state.busyCheck = true;
+    setToolsBusy('HTTPS 检查中：探测' + (recordIds.length ? '选中 ' + recordIds.length + ' 条' : '全部') + '已通过 HTTP 检查的记录…');
+    toast('HTTPS 检查「' + item.domain + '」：仅覆盖已通过 HTTP 检查的记录', 'info', 8000);
+    fetchJson('/api/domains/' + encodeURIComponent(item.provider) + '/' + encodeURIComponent(item.domain) + '/records/https-check',
+        { method: 'POST', body: recordIds.length ? { record_ids: recordIds } : {} })
+        .then(function (summary) {
+            return loadData().then(function () {
+                state.busyCheck = false;
+                setToolsBusy('');
+                if (state.modalKey && modalItemFor(state.modalKey)) { openModal(state.modalKey, state.modalSource); }
+                if (summary.checked === 0) {
+                    toast((summary.message || '没有可检查的记录'), 'info', 9000);
+                    return;
+                }
+                toast('HTTPS 检查完成：通过 ' + (summary.https_ok || 0) + ' · 未启用/失败 ' + (summary.https_fail || 0)
+                    + (summary.skipped_no_http ? ' · 跳过未过 HTTP 检查 ' + summary.skipped_no_http + ' 项' : ''),
+                    (summary.https_ok || 0) ? 'success' : 'error', 9000);
+            });
+        })
+        .catch(function (err) {
+            state.busyCheck = false;
+            setToolsBusy('');
+            toast((err && err.message) || 'HTTPS 检查失败，请稍后重试', 'error', 8000);
         });
 }
 
@@ -891,14 +992,37 @@ function runBackCheck() {
     // 弹窗内关键词搜索：输入即过滤（渲染层过滤，不重新拉数据）
     $('sb-modal-q').addEventListener('input', function (event) {
         state.modalQ = event.target.value.trim();
+        state.modalPage = 1; // 换筛选回第一页
         renderModal();
     });
-    // 访问状态 tab：全部 / 通过 / 异常 / 未检查
+    // 访问状态 tab：全部 / 通过 / 异常 / HTTPS / 未检查
     $('sb-status-tabs').addEventListener('click', function (event) {
         var t = event.target.closest('.sb-status-tab');
         if (!t) { return; }
         state.modalStatus = t.getAttribute('data-mstatus') || '';
+        state.modalPage = 1; // 换筛选回第一页
         document.querySelectorAll('#sb-status-tabs .sb-status-tab').forEach(function (b) { b.classList.toggle('is-active', b === t); });
+        renderModal();
+    });
+    // 弹窗底部分页：页码跳转 + 上下页 + 每页条数（条数跨会话记忆，变更时回第一页）
+    $('sb-modal-pager').addEventListener('click', function (event) {
+        var goBtn = event.target.closest('[data-mpage-go]');
+        if (goBtn) {
+            state.modalPage = parseInt(goBtn.getAttribute('data-mpage-go'), 10) || 1;
+            renderModal();
+            return;
+        }
+        var btn = event.target.closest('[data-mpage]');
+        if (!btn || btn.disabled) { return; }
+        state.modalPage += btn.getAttribute('data-mpage') === 'prev' ? -1 : 1;
+        renderModal();
+    });
+    $('sb-modal-pager').addEventListener('change', function (event) {
+        var sel = event.target.closest('#sb-modal-size');
+        if (!sel) { return; }
+        state.modalSize = sel.value === '10' || sel.value === '20' ? sel.value : 'all';
+        state.modalPage = 1;
+        saveModalSize();
         renderModal();
     });
 
@@ -936,6 +1060,7 @@ function runBackCheck() {
 
     $('sb-fecheck').addEventListener('click', runFrontCheck);
     $('sb-becheck').addEventListener('click', runBackCheck);
+    $('sb-httpscheck').addEventListener('click', runHttpsCheck);
 
 // 桥接回填：视图域与 IP 视图经此打开 / 关闭解析管理弹窗。
 SB.openModal = openModal;

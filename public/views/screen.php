@@ -59,12 +59,13 @@ $assetVer = static function (string $path): string {
         <option value="">全部访问状态</option>
         <option value="ok">访问正常</option>
         <option value="fail">访问异常</option>
-        <option value="https">HTTPS 正常（运营中）</option>
-        <option value="http-only">仅 HTTP（未启用 HTTPS）</option>
+        <option value="https">HTTPS 通过（有锁）</option>
+        <option value="http-only">HTTP 通过（无锁）</option>
         <option value="unchecked">未检查</option>
     </select>
     <button type="button" class="sb-btn hidden" id="sb-domain-fecheck" title="浏览器直连探测当前列表全部主域名">前端检查</button>
     <button type="button" class="sb-btn hidden" id="sb-domain-becheck" title="服务端逐域名探测当前列表全部解析记录">后端检查</button>
+    <button type="button" class="sb-btn hidden" id="sb-domain-httpscheck" title="逐域名探测已通过 HTTP 检查记录的 HTTPS（严格 TLS + 证书到期更新）">HTTPS 检查</button>
     <select id="sb-sort" title="排序">
         <option value="expire">到期时间（先到期优先）</option>
         <option value="expire_desc">到期时间（后到期优先）</option>
@@ -109,7 +110,8 @@ $assetVer = static function (string $path): string {
             <span class="sb-tool-sep"></span>
             <button type="button" class="sb-mini" id="sb-fecheck">前端检查</button>
             <button type="button" class="sb-mini" id="sb-becheck">后端检查</button>
-            <span class="sb-tool-hint" id="sb-tool-hint">前端 / 后端任一通过即通过 · 勾选后只检查选中项，未勾选检查全部 · 前端结果缓存于本浏览器 · 修改与删除直接写入云端 DNS</span>
+            <button type="button" class="sb-mini" id="sb-httpscheck" title="仅对已通过 HTTP 检查的记录探测 HTTPS（严格 TLS + 证书到期更新）">HTTPS 检查</button>
+            <span class="sb-tool-hint" id="sb-tool-hint">前端 / 后端任一通过即通过 · HTTPS 检查仅覆盖已通过 HTTP 的记录 · 勾选后只检查选中项，未勾选检查全部 · 修改与删除直接写入云端 DNS</span>
         </div>
         <div class="sb-inline-bar hidden" id="sb-ipedit">
             <label>新 IP <input type="text" id="sb-ipinput" placeholder="IPv4，如 192.0.2.10" autocomplete="off" spellcheck="false"></label>
@@ -138,12 +140,14 @@ $assetVer = static function (string $path): string {
                 <button type="button" class="sb-status-tab is-active" data-mstatus="">全部</button>
                 <button type="button" class="sb-status-tab" data-mstatus="ok">通过</button>
                 <button type="button" class="sb-status-tab" data-mstatus="fail">异常</button>
-                <button type="button" class="sb-status-tab" data-mstatus="https">HTTPS</button>
+                <button type="button" class="sb-status-tab" data-mstatus="https">有锁</button>
+                <button type="button" class="sb-status-tab" data-mstatus="http-only">无锁</button>
                 <button type="button" class="sb-status-tab" data-mstatus="unchecked">未检查</button>
             </div>
             <span class="sb-filter-count" id="sb-modal-count"></span>
         </div>
         <div class="sb-modal-body" id="sb-modal-body"></div>
+        <div class="sb-modal-pager hidden" id="sb-modal-pager"></div>
     </div>
 </div>
 

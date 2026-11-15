@@ -375,7 +375,7 @@ button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
     padding: 16px 18px 12px;
     border-bottom: 1px solid var(--line);
 }
-.sb-modal-head-main { min-width: 0; }
+.sb-modal-head-main { flex: 1; min-width: 0; } /* flex:1 让关闭按钮贴到右缘（否则 X 跟在标题内容后不对齐） */
 
 .sb-modal-domain {
     font-size: clamp(17px, 1vw + 12px, 24px);
@@ -402,6 +402,48 @@ button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
 .sb-modal-close:hover { color: var(--text); border-color: var(--accent); }
 
 .sb-modal-body { padding: 6px 18px 16px; overflow-y: auto; scrollbar-width: thin; scrollbar-color: var(--line) transparent; }
+
+/* 弹窗底部分页栏：计数 + 每页条数（跨会话记忆） + 上下页；body 滚动时保持可见 */
+.sb-modal-pager {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 10px 18px;
+    border-top: 1px solid var(--line);
+    color: var(--muted);
+    font-size: 12px;
+    flex-shrink: 0;
+}
+.sb-modal-pager.hidden { display: none; }
+.sb-pager-nav { display: flex; align-items: center; gap: 10px; }
+.sb-pager-info { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.sb-pager-btn {
+    background: none;
+    border: 1px solid var(--line);
+    color: var(--muted);
+    border-radius: 7px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.sb-pager-btn:hover:not(:disabled) { color: var(--text); border-color: var(--accent); }
+.sb-pager-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.sb-pager-num { min-width: 28px; padding: 4px 7px; text-align: center; font-variant-numeric: tabular-nums; }
+.sb-pager-num.is-active { background: var(--primary); border-color: var(--primary); color: #fff; font-weight: 700; }
+.sb-pager-num.is-active:hover:not(:disabled) { color: #fff; border-color: var(--primary); }
+.sb-pager-ellipsis { color: var(--muted); padding: 0 1px; user-select: none; }
+.sb-pager-size { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; cursor: pointer; }
+.sb-pager-size select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    padding: 3px 6px;
+    font-size: 12px;
+    cursor: pointer;
+}
 
 /* ---- 弹窗工具区：多选 / 批量修改删除 / 访问检查 ---- */
 
@@ -489,43 +531,48 @@ button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
 .sb-addbar-foot .sb-tool-hint { flex: 1; min-width: 220px; }
 .sb-addbar-btns { display: flex; gap: 8px; }
 
-.sb-access {
+/* 主机名状态着色：绿=HTTP 访问通过，红=访问异常，默认=未检查 */
+.sb-hostname.sb-st-ok { color: var(--green); }
+.sb-hostname.sb-st-fail { color: #ff9aa4; }
+
+/* HTTP / HTTPS 访问耗时 chips：一次检查两条协议并列展示 */
+.sb-time {
     flex-shrink: 0;
-    border-radius: 999px;
-    padding: 1px 9px;
+    color: var(--muted);
     font-size: 11.5px;
-    font-weight: 600;
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
 }
-.sb-access-ok { background: rgba(52, 211, 153, 0.14); color: var(--green); }
-.sb-access-fail { background: rgba(248, 113, 113, 0.14); color: var(--red); }
-.sb-access-none { background: rgba(139, 151, 179, 0.12); color: var(--muted); }
+.sb-time.ok { color: var(--green); }
 
-/* HTTPS 运营状态徽标：HTTPS=证书有效可达（上线运营中）；仅 HTTP=可达但未启用 HTTPS */
-.sb-scheme {
+/* HTTPS 锁标：HTTPS 通过才显示在域名 / 子域名后（唯一视觉标识），悬停见证书到期与续期提醒 */
+.sb-lock {
     flex-shrink: 0;
-    display: inline-block;
-    border-radius: 999px;
-    padding: 0 7px;
-    font-size: 10.5px;
-    font-weight: 700;
-    font-style: normal;
-    line-height: 17px;
-    white-space: nowrap;
-    vertical-align: middle;
+    font-size: 11px;
+    line-height: 1;
+    margin-left: 4px;
+    cursor: help;
 }
-.sb-scheme.ok { background: rgba(52, 211, 153, 0.16); color: var(--green); }
-.sb-scheme.no { background: rgba(251, 191, 36, 0.18); color: #b7791f; }
-.sb-tag .sb-scheme, .sb-tag-name .sb-scheme { margin-left: 5px; }
-.sb-rec-main .sb-scheme { margin: 0 2px; }
+.sb-card-head .sb-lock { margin-left: 7px; font-size: 13px; }
+.sb-hostname .sb-lock { margin-left: 5px; }
+.sb-tag-name .sb-lock, .sb-tag .sb-lock { margin-left: 4px; }
 
-/* 解析管理弹窗表格化行：勾选 | 主机记录 | 访问状态 | TTL | 解析记录，固定列对齐 + 行分割线 + 悬停高亮 */
+/* 解析管理弹窗表格化行：勾选 | 主机记录 | 解析记录，两列平分 + 列间竖线。
+   主机名颜色 = 访问状态（绿=通过 / 红=异常 / 默认=未检查）；解析记录列展示 IP、归属地与 HTTP / HTTPS 访问耗时。 */
 .sb-host, .sb-host-head {
     display: grid;
-    grid-template-columns: auto minmax(150px, 1.1fr) auto auto minmax(0, 1.4fr);
-    gap: 10px;
+    grid-template-columns: 34px minmax(0, 1fr) minmax(0, 1fr);
+    gap: 0;
     align-items: center;
 }
+.sb-host > *, .sb-host-head > * {
+    align-self: center;
+    padding: 0 12px;
+    border-left: 1px solid rgba(34, 48, 78, 0.6);
+}
+.sb-host > :first-child, .sb-host-head > :first-child { border-left: none; padding-left: 6px; }
+.sb-host > .sb-check { justify-self: center; }
+.sb-host-cell { min-width: 0; }
 .sb-host {
     padding: 7px 8px;
     border-bottom: 1px solid rgba(34, 48, 78, 0.6);
@@ -544,8 +591,6 @@ button.sb-tag-more:hover { color: var(--accent); border-color: var(--accent); }
     font-size: 11.5px;
     letter-spacing: 0.04em;
 }
-.sb-host-badges { display: inline-flex; align-items: center; gap: 6px; }
-
 /* 来源高亮：从 IP 卡片进入弹窗时，标注指向来源 IP 的记录与被点击的域名 */
 .sb-host-hit { background: rgba(52, 211, 153, 0.07); box-shadow: inset 3px 0 0 rgba(52, 211, 153, 0.55); }
 .sb-host-clicked { background: rgba(56, 189, 248, 0.1); box-shadow: inset 3px 0 0 rgba(56, 189, 248, 0.65); }
