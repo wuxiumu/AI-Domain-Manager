@@ -11,6 +11,10 @@ server {
     client_max_body_size 12m;
 
     location / { try_files $uri $uri/ /index.php?$query_string; }
+    # /.well-known/asset-workspace.json is the machine discovery endpoint advertised in llms.txt.
+    # The dotfile deny rule below would swallow the /.well-known prefix; this exact match wins
+    # over the regex and hands the request to the capabilities endpoint.
+    location = /.well-known/asset-workspace.json { rewrite ^ /api/capabilities last; }
     # API path parameters can contain a literal .php suffix (for example a DNS record ID).
     # Always route them to the front controller, never to a physical file.
     location ^~ /api/ { rewrite ^ /index.php last; }

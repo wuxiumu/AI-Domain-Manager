@@ -263,6 +263,25 @@ $('sp-auth-form').addEventListener('submit', function (event) {
     }).catch(function (error) { errorFor(form, error.message); button.disabled = false; });
 });
 
+/* ---- 清除本机记住的密码（公用设备）：与 login.js 的 storageKey 保持一致 ---- */
+
+var REMEMBERED_KEY = 'asset-workspace-remembered-login';
+$('sp-forget-remembered').addEventListener('click', function () {
+    var saved = null;
+    try { saved = localStorage.getItem(REMEMBERED_KEY); } catch (e) { /* localStorage 不可用视为未保存 */ }
+    if (!saved) { toast('本机没有保存的账号密码'); return; }
+    confirmDialog({
+        title: '清除本机记住的密码',
+        message: '将删除此浏览器自动填入的管理员账号与密码，下次登录需手动输入。云账号凭据与 API 密钥不受影响。',
+        confirmText: '清除',
+        danger: true,
+    }).then(function (ok) {
+        if (!ok) { return; }
+        try { localStorage.removeItem(REMEMBERED_KEY); toast('已清除本机记住的密码'); }
+        catch (e) { toast('浏览器不允许清除本地存储', 'error'); }
+    });
+});
+
 /* ---- API 密钥 ---- */
 
 $('sp-token-form').addEventListener('submit', function (event) {

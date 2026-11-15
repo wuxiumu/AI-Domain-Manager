@@ -186,6 +186,11 @@
 .sp-token .sp-token-scopes { display: flex; gap: 5px; flex-wrap: wrap; }
 .sp-token .ap-btn { margin-left: auto; }
 
+/* ---- 清除本机记住的密码（通用设置 · 登录账号与密码面板） ---- */
+
+.sp-forget { margin-top: 16px; padding-top: 14px; border-top: 1px dashed var(--card-border); }
+.sp-forget .ap-help { margin-bottom: 10px; }
+
 /* ---- 修改记录与文档面板 ---- */
 
 .sp-table-wrap { overflow-x: auto; }

@@ -3,7 +3,7 @@
 /** OpenAPI and discovery documents contain contracts only, never deployment secrets. */
 class ApiDescriptionService
 {
-    public const VERSION = '1.3.0';
+    public const VERSION = '1.3.1';
 
     public static function discovery(): array
     {

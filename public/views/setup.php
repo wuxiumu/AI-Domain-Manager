@@ -24,7 +24,7 @@
             <!-- 阶段二：创建管理员 -->
             <div id="setup-form-step" class="hidden">
                 <h2>创建管理员</h2><p class="muted">环境已就绪，设置管理员账号和密码后自动完成初始化并登录。</p>
-                <form id="setup-form" class="settings-form">
+                <form id="setup-form">
                     <label>管理员账号<input id="setup-user" required minlength="3" maxlength="64" autocomplete="username" placeholder="3–64 位字母、数字或 _.@-"></label>
                     <label>登录密码<input id="setup-password" type="password" required minlength="12" maxlength="72" autocomplete="new-password" placeholder="12–72 字节"></label>
                     <p id="setup-error" class="error-text hidden" role="alert"></p>

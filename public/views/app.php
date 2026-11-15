@@ -14,8 +14,9 @@ $scripts = ['ui', 'cache', 'core', 'setup', 'login', 'app'];
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <meta name="theme-color" content="#f5f6f2">
+    <meta name="theme-color" content="#081321">
     <title>资产大屏 · 登录</title>
+    <link rel="icon" type="image/svg+xml" href="/assets/img/asset-workspace-logo.svg">
 <?php foreach ($styles as $style): ?>
     <link rel="stylesheet" href="<?= $assetUrl('/assets/css/' . $style . '.css') ?>">
 <?php endforeach; ?>

@@ -15,7 +15,9 @@ $assetVer = static function (string $path): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1220">
 <title>产品设置 · 资产大屏</title>
+<link rel="icon" type="image/svg+xml" href="/assets/img/asset-workspace-logo.svg">
 <link rel="stylesheet" href="<?= $assetVer('/assets/css/admin-page.css') ?>">
 <link rel="stylesheet" href="<?= $assetVer('/assets/vendor/hljs-github-dark.min.css') ?>">
 <link rel="stylesheet" href="<?= $assetVer('/assets/css/settings-page.css') ?>">
@@ -194,6 +196,10 @@ $assetVer = static function (string $path): string {
                 <p class="ap-error hidden" role="alert"></p>
                 <button class="ap-btn ap-btn-primary" type="submit">更新登录信息</button>
             </form>
+            <div class="sp-forget">
+                <p class="ap-help">公用设备上一键删除此浏览器自动填入的账号密码（下次登录需手动输入）；云账号凭据与 API 密钥不受影响。</p>
+                <button type="button" id="sp-forget-remembered" class="ap-btn ap-btn-danger">清除本机记住的密码</button>
+            </div>
         </section>
     </section>
 </main>
