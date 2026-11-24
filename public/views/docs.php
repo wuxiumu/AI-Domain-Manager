@@ -16,7 +16,9 @@ $assetVer = static function (string $path): string {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#0b1220">
 <title>文档库 · 资产大屏</title>
+<link rel="icon" type="image/svg+xml" href="/assets/img/asset-workspace-logo.svg">
 <link rel="stylesheet" href="<?= $assetVer('/assets/css/admin-page.css') ?>">
 <link rel="stylesheet" href="<?= $assetVer('/assets/vendor/hljs-github-dark.min.css') ?>">
 <link rel="stylesheet" href="<?= $assetVer('/assets/css/docs-page.css') ?>">

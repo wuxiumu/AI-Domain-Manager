@@ -134,6 +134,8 @@ window.WorkspaceLogin = (() => {
             if (error.status === 429) retryAt = Date.now() + (error.retryAfter || 60) * 1000;
             busy = false;
             await refresh();
+            // 账号密码已回填：焦点直接落在验证码框，重输验证码即可再试。
+            $('#login-captcha').focus();
         } finally {
             if (active && current === generation) { busy = false; update(); }
         }
