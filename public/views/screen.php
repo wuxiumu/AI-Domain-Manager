@@ -51,43 +51,73 @@ $assetVer = static function (string $path): string {
 
 <nav class="sb-tabs" id="sb-tabs" aria-label="云账号筛选"></nav>
 
-<div class="sb-toolbar">
-    <div class="sb-search">
-        <input type="search" id="sb-q" placeholder="搜索域名 / 子域名 / IP" autocomplete="off">
+<!-- 工具条：一行只留「搜索按钮 + 状态 tab + 更多」；关键词与排序 / 条数 / 批量检查收进面板 -->
+<div class="sb-toolbar" id="sb-toolbar">
+    <div class="sb-toolbar-main">
+        <button type="button" class="sb-btn" id="sb-search-toggle" aria-expanded="false" aria-controls="sb-search-panel"
+                title="按域名 / 子域名 / IP 搜索（按 / 可快速打开）">🔍 搜索</button>
+        <div class="sb-status-tabs" id="sb-home-tabs" role="group" aria-label="访问状态筛选">
+            <button type="button" class="sb-status-tab is-active" data-status="" title="不限制访问状态">全部</button>
+            <button type="button" class="sb-status-tab" data-status="ok" title="访问检查通过">通过</button>
+            <button type="button" class="sb-status-tab" data-status="fail" title="访问检查均未通过">异常</button>
+            <button type="button" class="sb-status-tab" data-status="https" data-domain-only="1" title="HTTPS 通过（主域名有 🔒，仅域名视图）">有锁</button>
+            <button type="button" class="sb-status-tab" data-status="http-only" data-domain-only="1" title="HTTP 通过但没有 🔒（仅域名视图）">无锁</button>
+            <button type="button" class="sb-status-tab" data-status="unchecked" title="尚未做访问检查">未检查</button>
+        </div>
+        <button type="button" class="sb-btn" id="sb-more-toggle" aria-expanded="false" aria-controls="sb-more-panel"
+                title="排序 / 每页条数 / 批量检查">更多 ▾</button>
+        <span class="sb-count" id="sb-count"></span>
+        <div class="sb-page">
+            <button type="button" id="sb-prev" title="上一页">‹</button>
+            <span id="sb-page-info"></span>
+            <button type="button" id="sb-next" title="下一页">›</button>
+        </div>
     </div>
-    <select id="sb-status" title="访问状态筛选" hidden>
-        <option value="">全部访问状态</option>
-        <option value="ok">访问正常</option>
-        <option value="fail">访问异常</option>
-        <option value="https">HTTPS 通过（有锁）</option>
-        <option value="http-only">HTTP 通过（无锁）</option>
-        <option value="unchecked">未检查</option>
-    </select>
-    <button type="button" class="sb-btn hidden" id="sb-domain-fecheck" title="浏览器直连探测当前列表全部主域名">前端检查</button>
-    <button type="button" class="sb-btn hidden" id="sb-domain-becheck" title="服务端逐域名探测当前列表全部解析记录">后端检查</button>
-    <button type="button" class="sb-btn hidden" id="sb-domain-httpscheck" title="逐域名探测已通过 HTTP 检查记录的 HTTPS（严格 TLS + 证书到期更新）">HTTPS 检查</button>
-    <select id="sb-sort" title="排序">
-        <option value="expire">到期时间（先到期优先）</option>
-        <option value="expire_desc">到期时间（后到期优先）</option>
-        <option value="domain">域名 A → Z</option>
-        <option value="subdomains">子域名数量</option>
-        <option value="a">A 记录数量</option>
-        <option value="synced">最近同步</option>
-    </select>
-    <select id="sb-size" title="每页条数（状态自动记忆）">
-        <option value="12">每页 12</option>
-        <option value="24" selected>每页 24</option>
-        <option value="48">每页 48</option>
-        <option value="all">全部展示</option>
-    </select>
-    <button type="button" class="sb-btn hidden" id="sb-addip" title="手工登记一个公网 IP">＋ 添加 IP</button>
-    <button type="button" class="sb-btn hidden" id="sb-ip-fecheck" title="浏览器直连探测当前列表全部 IP">前端检查</button>
-    <button type="button" class="sb-btn hidden" id="sb-ip-becheck" title="服务端探测当前列表全部 IP（不跟随跳转）">后端检查</button>
-    <span class="sb-count" id="sb-count"></span>
-    <div class="sb-page">
-        <button type="button" id="sb-prev" title="上一页">‹</button>
-        <span id="sb-page-info"></span>
-        <button type="button" id="sb-next" title="下一页">›</button>
+
+    <div class="sb-toolbar-panel hidden" id="sb-search-panel">
+        <span class="sb-panel-label">关键词</span>
+        <input type="search" id="sb-q" placeholder="搜索域名 / 子域名 / IP" autocomplete="off">
+        <button type="button" class="sb-mini" id="sb-q-reset" title="清空关键词">重置</button>
+        <button type="button" class="sb-mini sb-mini-primary" id="sb-q-done">完成</button>
+        <span class="sb-panel-hint">输入即过滤 · Esc 收起面板，条件仍然生效</span>
+    </div>
+
+    <div class="sb-toolbar-panel hidden" id="sb-more-panel">
+        <div class="sb-panel-row">
+            <span class="sb-panel-label">排序</span>
+            <select id="sb-sort" title="排序">
+                <option value="expire">到期时间（先到期优先）</option>
+                <option value="expire_desc">到期时间（后到期优先）</option>
+                <option value="domain">域名 A → Z</option>
+                <option value="subdomains">子域名数量</option>
+                <option value="a">A 记录数量</option>
+                <option value="synced">最近同步</option>
+            </select>
+        </div>
+        <div class="sb-panel-row">
+            <span class="sb-panel-label">每页</span>
+            <div class="sb-status-tabs" id="sb-size-tabs" role="group" aria-label="每页条数">
+                <button type="button" class="sb-status-tab" data-size="12">12</button>
+                <button type="button" class="sb-status-tab" data-size="24">24</button>
+                <button type="button" class="sb-status-tab" data-size="48">48</button>
+                <button type="button" class="sb-status-tab" data-size="all">全部</button>
+            </div>
+        </div>
+        <div class="sb-panel-row" id="sb-row-checks-domain">
+            <span class="sb-panel-label">检查</span>
+            <button type="button" class="sb-mini" id="sb-domain-fecheck" title="浏览器直连探测当前列表全部主域名">前端检查</button>
+            <button type="button" class="sb-mini" id="sb-domain-becheck" title="服务端逐域名探测当前列表全部解析记录">后端检查</button>
+            <button type="button" class="sb-mini" id="sb-domain-httpscheck" title="逐域名探测已通过 HTTP 检查记录的 HTTPS（严格 TLS + 证书到期更新）">HTTPS 检查</button>
+        </div>
+        <div class="sb-panel-row hidden" id="sb-row-checks-ip">
+            <span class="sb-panel-label">检查</span>
+            <button type="button" class="sb-mini" id="sb-ip-fecheck" title="浏览器直连探测当前列表全部 IP">前端检查</button>
+            <button type="button" class="sb-mini" id="sb-ip-becheck" title="服务端探测当前列表全部 IP（不跟随跳转）">后端检查</button>
+        </div>
+        <div class="sb-panel-row hidden" id="sb-row-ip-actions">
+            <span class="sb-panel-label">IP 台账</span>
+            <button type="button" class="sb-mini sb-mini-primary" id="sb-addip" title="手工登记一个公网 IP">＋ 添加 IP</button>
+        </div>
     </div>
 </div>
 
@@ -126,7 +156,7 @@ $assetVer = static function (string $path): string {
         <div class="sb-inline-bar sb-inline-add hidden" id="sb-addbar">
             <textarea id="sb-addinput" rows="5" placeholder="如：www 192.0.2.10" spellcheck="false"></textarea>
             <div class="sb-addbar-foot">
-                <span class="sb-tool-hint">格式：<b>主机 [类型] 值</b>，一行一条；简写「主机 IPv4」即 A 记录；# 为注释。支持 A / AAAA / CNAME / MX / TXT / NS；已存在的相同记录自动跳过；逐条写入云端并回读核实。</span>
+                <span class="sb-tool-hint">格式：<b>主机 [类型] 值</b>，一行一条；简写「主机 IPv4」即 A 记录；# 为注释。支持 A / AAAA / CNAME / MX / TXT / NS / SRV / CAA；已存在的相同记录自动跳过；逐条写入云端并回读核实。</span>
                 <button type="button" class="sb-mini" id="sb-record-demo" title="各类型解析的示例与常见规则">解析示例</button>
                 <span class="sb-addbar-btns">
                     <button type="button" class="sb-mini sb-mini-primary" id="sb-addok">开始添加</button>

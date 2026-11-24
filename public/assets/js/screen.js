@@ -301,8 +301,7 @@ function restoreView() {
     if (SIZES.indexOf(hashQuery.size) !== -1) { state.size = hashQuery.size; }
     if (Number(hashQuery.page) > 0) { state.page = Math.floor(Number(hashQuery.page)); }
     $('sb-q').value = state.q;
-    applyModeUi(); // 内部已按当前视图重建排序下拉并赋值，不再重复赋值
-    $('sb-size').value = state.size;
+    applyModeUi(); // 内部已按当前视图重建排序下拉、状态 tab 与条数 tab，不再重复赋值
 }
 
 // ---- 视图模式：域名 / IP ----
@@ -322,21 +321,66 @@ function applyModeUi() {
     }).join('');
     $('sb-sort').value = wanted;
     $('sb-sub').textContent = ip ? '公网 IP · DNS 解析自动发现 + 手工登记' : '域名 · 未过期域名与子域名 A 记录（IPv4）';
-    $('sb-addip').classList.toggle('hidden', !ip);
-    $('sb-status').hidden = false;
-    $('sb-status').value = ip ? state.ipStatus : state.domainStatus;
-    $('sb-ip-fecheck').classList.toggle('hidden', !ip);
-    $('sb-ip-becheck').classList.toggle('hidden', !ip);
-    $('sb-domain-fecheck').classList.toggle('hidden', ip);
-    $('sb-domain-becheck').classList.toggle('hidden', ip);
-    $('sb-domain-httpscheck').classList.toggle('hidden', ip);
+    // 「更多」面板里的视图专属行按当前视图显隐（按钮 id 不变，事件绑定共用一套）
+    $('sb-row-ip-actions').classList.toggle('hidden', !ip);
+    $('sb-row-checks-ip').classList.toggle('hidden', !ip);
+    $('sb-row-checks-domain').classList.toggle('hidden', ip);
+    // IP 视图没有 HTTPS 锁标语义：记忆里残留的锁相关状态回落到「全部」
+    if (ip && (state.ipStatus === 'https' || state.ipStatus === 'http-only')) { state.ipStatus = ''; }
     $('sb-q').placeholder = ip ? '搜索 IP / 域名 / 归属地' : '搜索域名 / 子域名 / IP';
+    syncHomeTabs();
     // 校验当前排序键属于当前视图。
     if (options.every(function (o) { return o[0] !== wanted; })) {
         wanted = ip ? 'domains' : 'expire';
         $('sb-sort').value = wanted;
         if (ip) { state.ipSort = wanted; } else { state.sort = wanted; }
     }
+}
+
+// ---- 工具条：状态 tab / 每页条数 tab /「搜索」「更多」两个面板 ----
+
+function currentStatus() { return state.mode === 'ip' ? state.ipStatus : state.domainStatus; }
+
+/** 工具条的 tab 激活态与两个按钮的高亮跟随当前条件（面板收起时也看得出「正在按什么筛选」）。 */
+function syncHomeTabs() {
+    var ip = state.mode === 'ip';
+    var status = currentStatus();
+    document.querySelectorAll('#sb-home-tabs .sb-status-tab').forEach(function (tab) {
+        tab.classList.toggle('hidden', ip && tab.hasAttribute('data-domain-only'));
+        tab.classList.toggle('is-active', (tab.getAttribute('data-status') || '') === status);
+    });
+    document.querySelectorAll('#sb-size-tabs .sb-status-tab').forEach(function (tab) {
+        tab.classList.toggle('is-active', tab.getAttribute('data-size') === state.size);
+    });
+    var searchBtn = $('sb-search-toggle');
+    var kw = state.q || '';
+    searchBtn.classList.toggle('is-active', !!kw);
+    searchBtn.innerHTML = kw ? '🔍 搜索 · ' + escapeHtml(kw.length > 14 ? kw.slice(0, 14) + '…' : kw) : '🔍 搜索';
+    var sortNow = ip ? state.ipSort : state.sort;
+    $('sb-more-toggle').classList.toggle('is-active', state.size !== '24' || sortNow !== (ip ? 'domains' : 'expire'));
+}
+
+/** 展开 name 面板并收起另一个；name 传空串即全部收起。 */
+function setPanel(name, open) {
+    ['search', 'more'].forEach(function (key) {
+        var panel = $('sb-' + key + '-panel');
+        var on = open && name === key;
+        if (panel.classList.contains('hidden') === !on) { return; } // 已是目标状态，避免重复聚焦
+        panel.classList.toggle('hidden', !on);
+        $('sb-' + key + '-toggle').setAttribute('aria-expanded', String(on));
+        if (on && key === 'search') { $('sb-q').focus(); $('sb-q').select(); }
+    });
+}
+
+function togglePanel(name) {
+    setPanel(name, $('sb-' + name + '-panel').classList.contains('hidden'));
+}
+
+function closePanels() { setPanel('', false); }
+
+/** 弹窗（解析管理 / 各类覆盖层）打开时，工具条不抢键盘焦点、不响应 Esc。 */
+function overlayBusy() {
+    return document.querySelector('.sb-ipov') !== null || !$('sb-modal').classList.contains('hidden');
 }
 
 function setMode(mode) {
@@ -357,6 +401,7 @@ function setMode(mode) {
 
 function render() {
     window.__SCREEN_MODE__ = state.mode; // 供 screen-ip.js 的卡片事件委托判断当前视图
+    syncHomeTabs(); // 工具条 tab / 按钮高亮跟随条件（IP 视图分支也走这里）
     // IP 视图：委托给 screen-ip.js（模块加载完成前先走域名渲染兜底）。
     if (state.mode === 'ip' && window.ScreenIp) {
         window.ScreenIp.render({
@@ -560,7 +605,7 @@ function cardHtml(d) {
         + '<button type="button" class="sb-copy-btn" data-domain-copy="' + escapeHtml(d.domain) + '" title="复制主域名">复制</button></div>'
         + '<div class="sb-stat-row">'
         + '<div class="sb-stat">' + daysCell + '<span>天后到期</span></div>'
-        + '<div class="sb-stat sb-stat-link"><b class="sb-stat-num c-cyan">' + Number(d.subdomain_count || 0) + '</b><button type="button" class="sb-stat-btn" data-other-modal="' + zoneKey + '" title="点击查看非 A 记录（CNAME / MX / TXT 等）">子域名</button></div>'
+        + '<div class="sb-stat sb-stat-link"><b class="sb-stat-num c-cyan">' + Number(d.subdomain_count || 0) + '</b><button type="button" class="sb-stat-btn" data-other-modal="' + zoneKey + '" title="点击查看非 A 记录（CNAME / MX / TXT 等），并可添加任意类型解析（含 A）">子域名</button></div>'
         + '<div class="sb-stat sb-stat-link"><b class="sb-stat-num c-violet">' + Number(d.a_count || 0) + '</b><button type="button" class="sb-stat-btn" data-key="' + zoneKey + '" title="点击管理子域名与 A 记录（批量修改 / 删除 / 添加）">A 记录</button></div>'
         + '<div class="sb-stat"><b class="sb-stat-num ' + stColorCls + '">' + stLabel + '</b><span>访问状态' + (stMs != null ? ' · ' + Number(stMs) + 'ms' : '') + '</span></div>'
         + '</div>'
@@ -798,11 +843,53 @@ function bind() {
         state.page = 1;
         render();
     });
-    $('sb-status').addEventListener('change', function (event) {
-        if (state.mode === 'ip') { state.ipStatus = event.target.value; }
-        else { state.domainStatus = event.target.value; }
+    // 状态 tab（替代原「访问状态」下拉）：点一下即生效，IP 视图自动隐藏有锁 / 无锁
+    $('sb-home-tabs').addEventListener('click', function (event) {
+        var tab = event.target.closest('.sb-status-tab');
+        if (!tab) { return; }
+        var value = tab.getAttribute('data-status') || '';
+        if (state.mode === 'ip') { state.ipStatus = value; }
+        else { state.domainStatus = value; }
         state.page = 1;
         render();
+    });
+    // 每页条数 tab（替代原「每页」下拉）
+    $('sb-size-tabs').addEventListener('click', function (event) {
+        var tab = event.target.closest('.sb-status-tab');
+        if (!tab) { return; }
+        state.size = tab.getAttribute('data-size');
+        state.page = 1;
+        render();
+    });
+    // 「搜索」「更多」面板：按钮开合，点面板外或工具条空白即收起（条件不丢），Esc 同样收起
+    $('sb-search-toggle').addEventListener('click', function () { togglePanel('search'); });
+    $('sb-more-toggle').addEventListener('click', function () { togglePanel('more'); });
+    $('sb-q-reset').addEventListener('click', function () {
+        $('sb-q').value = '';
+        state.q = '';
+        state.page = 1;
+        render();
+        $('sb-q').focus();
+    });
+    $('sb-q-done').addEventListener('click', closePanels);
+    $('sb-toolbar').addEventListener('click', function (event) {
+        if (event.target.closest('.sb-toolbar-panel') || event.target.closest('button') || event.target.closest('select')) { return; }
+        closePanels();
+    });
+    document.addEventListener('click', function (event) {
+        if (event.target.closest && event.target.closest('#sb-toolbar')) { return; }
+        closePanels();
+    });
+    document.addEventListener('keydown', function (event) {
+        if (overlayBusy()) { return; }
+        if (event.key === 'Escape') { closePanels(); return; }
+        // 「/」快速打开搜索（输入控件里打字不拦截）
+        if (event.key === '/' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+            var tag = String((event.target && event.target.tagName) || '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || tag === 'select') { return; }
+            event.preventDefault();
+            setPanel('search', true);
+        }
     });
     $('sb-domain-fecheck').addEventListener('click', function () { runDomainBatchCheck('front'); });
     $('sb-domain-becheck').addEventListener('click', function () { runDomainBatchCheck('back'); });
@@ -810,10 +897,9 @@ function bind() {
     document.querySelectorAll('.sb-mode-btn').forEach(function (btn) {
         btn.addEventListener('click', function () { setMode(btn.getAttribute('data-mode') === 'ip' ? 'ip' : 'domain'); });
     });
-    $('sb-size').addEventListener('change', function (event) { state.size = event.target.value; state.page = 1; render(); });
+    // 每页条数改由上方 tab 承担（重复绑定的旧监听已移除）
     $('sb-prev').addEventListener('click', function () { state.page -= 1; render(); });
     $('sb-next').addEventListener('click', function () { state.page += 1; render(); });
-    $('sb-size').addEventListener('change', function (event) { state.size = event.target.value; state.page = 1; render(); });
     $('sb-sync-btn').addEventListener('click', syncAccount);
 
     // 手动刷新：带 ?refresh=1 绕过快照 TTL 立即重建（不访问云商）。
@@ -855,8 +941,7 @@ function bind() {
     // hash 变化（前进 / 后退 / 手动改 URL / 粘贴分享链接）：从 hash 恢复全部视图条件
     window.addEventListener('hashchange', function () {
         restoreView();
-        applyModeUi();
-        $('sb-size').value = state.size;
+        applyModeUi(); // 条数与状态 tab 由 render → syncHomeTabs 统一刷新
         state.page = Math.max(1, state.page);
         render();
         if (state.mode === 'ip' && !state.ipsData) { loadIpData(); }

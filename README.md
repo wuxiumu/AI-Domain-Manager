@@ -57,13 +57,15 @@ flowchart LR
 ./start.sh
 ```
 
+启动前会确认端口：默认 `18080`，直接回车即接受，也可以现场输入别的端口（脚本只按「本机能否监听」判定，端口被占会给出可用端口与建议命令）。非交互场景用 `./start.sh -y`（端口被占自动顺延），或 `./start.sh --port 9000` 固定端口（明确指定的端口被占用则报错退出，不擅自改动）；也可用环境变量 `WORKSPACE_HOST` / `WORKSPACE_PORT`。
+
 也可以直接启动：
 
 ```bash
-php -S 127.0.0.1:8080 -t public public/index.php
+php -S 127.0.0.1:18080 -t public public/index.php
 ```
 
-浏览器访问 `http://127.0.0.1:8080`，首次进入创建管理员账号，随后自动进入大屏。生产部署请参考 [Nginx 示例](deploy/nginx.conf.example)。
+浏览器访问 `http://127.0.0.1:18080`，首次进入创建管理员账号，随后自动进入大屏。生产部署请参考 [Nginx 示例](deploy/nginx.conf.example)。
 
 ### 3. 开始使用
 
@@ -100,7 +102,7 @@ php -S 127.0.0.1:8080 -t public public/index.php
 `scripts/mcp-server.py` 把本实例接入任意支持 MCP 的 AI 客户端：
 
 ```bash
-WORKSPACE_URL=http://127.0.0.1:8080 WORKSPACE_API_TOKEN=aw_xxx python3 scripts/mcp-server.py
+WORKSPACE_URL=http://127.0.0.1:18080 WORKSPACE_API_TOKEN=aw_xxx python3 scripts/mcp-server.py
 ```
 
 提供工具：`get_domain_screen` / `get_ip_screen` / `list_dns_records` / `get_daily_report` / `list_docs` 只读 + `propose_dns_change`（走提案流，需 `proposals:write`；scope 不足时服务端拒绝）。CLI 直用同一客户端：`python3 scripts/workspace-api.py screen` / `ips` / `report` / `records --provider <账号> --domain <域名>`。

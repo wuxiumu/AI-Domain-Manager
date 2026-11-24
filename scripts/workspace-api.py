@@ -112,7 +112,7 @@ def main():
     parser = argparse.ArgumentParser(description="Call Asset Workspace using an API token or password session.")
     parser.add_argument("command", help="语义命令（bootstrap/screen/ips/records/report/propose）或 HTTP 方法（GET/POST/PUT/DELETE 原始模式）")
     parser.add_argument("path", nargs="?", help="原始模式：相对 API 路径，如 /api/domains/screen")
-    parser.add_argument("--base-url", default=os.environ.get("WORKSPACE_URL", "http://127.0.0.1:8080"))
+    parser.add_argument("--base-url", default=os.environ.get("WORKSPACE_URL", "http://127.0.0.1:18080"))
     parser.add_argument("--username", default=os.environ.get("WORKSPACE_USER"), help="Interactive password login with a human-entered image captcha; automation should use an API token")
     parser.add_argument("--json", dest="payload", help="JSON string, @file, or - for stdin")
     parser.add_argument("--provider", help="records 子命令：云账号 ID（GET /api/accounts 可查）")

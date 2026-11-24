@@ -129,7 +129,7 @@ def call_tool(name, arguments, client):
 
 def main():
     try:
-        client = McpClient(os.environ.get("WORKSPACE_URL", "http://127.0.0.1:8080"), ShimParser(),
+        client = McpClient(os.environ.get("WORKSPACE_URL", "http://127.0.0.1:18080"), ShimParser(),
             os.environ.get("WORKSPACE_USER") or None)
     except RuntimeError as error:
         print(f"配置错误：{error}", file=sys.stderr)

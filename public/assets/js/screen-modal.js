@@ -145,7 +145,7 @@ function renderModal() {
     });
     $('sb-tool-hint').textContent = hasRecords
         ? '前端 / 后端任一通过即通过 · HTTPS 检查仅覆盖已通过 HTTP 的记录 · 勾选后只检查选中项，未勾选检查全部 · 修改与删除直接写入云端 DNS'
-        : '该域名暂无 A 记录：点「批量添加」创建第一条解析（每行一条：主机名 + IPv4）';
+        : '该域名暂无解析记录：点「批量添加」创建第一条（每行一条：主机 [类型] 值，支持 A / AAAA / CNAME / MX / TXT / NS / SRV / CAA，详见「解析示例」）';
 
     // 弹窗内筛选：关键词（主机名 / IP）+ 访问状态 tab；筛选条件在弹窗会话内保留，关闭即重置
     var allRows = item.subdomains || [];
@@ -222,9 +222,14 @@ function renderModal() {
             var recEdit = (!paused && hasRecords)
                 ? '<button type="button" class="sb-rec-edit-btn" data-rec-edit="' + escapeHtml(rec.id) + '" data-rec-type="' + escapeHtml(rec.type || 'A') + '" title="编辑这条解析记录（主机 / 类型 / 值 / TTL 等）">修改</button>'
                 : '';
+            // 单条记录「删除」按钮：紧跟「修改」之后，二次弹窗确认后只写一次并回读核实（暂停态也能删）
+            var recDel = (hasRecords && rec.id)
+                ? '<button type="button" class="sb-rec-edit-btn sb-rec-del-btn" data-rec-del="' + escapeHtml(rec.id)
+                    + '" data-rec-host="' + escapeHtml(s.fqdn) + '" title="删除这条解析记录（需二次确认）">删除</button>'
+                : '';
             return '<span class="sb-rec">'
                 + '<span class="sb-rec-main">' + link + geo + times + marks + '</span>'
-                + recEdit
+                + recEdit + recDel
                 + '</span>';
         }).join('');
         return '<div class="sb-host' + (clicked ? ' sb-host-clicked' : '') + (hasHit ? ' sb-host-hit' : '') + '">'
@@ -241,7 +246,7 @@ function renderModal() {
     $('sb-modal-body').innerHTML = headHtml + (rowsHtml
         || (allRows.length
             ? '<div class="sb-hosts-empty">没有匹配的记录：调整关键词或访问状态筛选</div>'
-            : '<div class="sb-hosts-empty">该域名暂无 A 记录 · 点上方「批量添加」创建第一条解析（每行一条：主机名 + IPv4）</div>'));
+            : '<div class="sb-hosts-empty">该域名暂无解析记录 · 点上方「批量添加」创建第一条（每行一条：主机 [类型] 值，支持全部类型，详见「解析示例」）</div>'));
     renderPager(allRows.length, rows.length, pageCount);
 
     // 点击卡片 IP 进入：勾选该子域名组、高亮并滚动定位到可见。
@@ -377,7 +382,7 @@ function openRecordEditForm(item, rec) {
     var isGodaddy = String(item.provider || '').toLowerCase().indexOf('godaddy') !== -1;
     var formOv = document.createElement('div');
     formOv.className = 'sb-ipov';
-    var typeOptions = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA'].map(function (t) {
+    var typeOptions = BATCH_TYPES.map(function (t) {
         return '<option value="' + t + '"' + (String(rec.type || 'A').toUpperCase() === t ? ' selected' : '') + '>' + t + '</option>';
     }).join('');
     var godaddyNote = isGodaddy
@@ -398,7 +403,7 @@ function openRecordEditForm(item, rec) {
         + '<label>线路（阿里云 / 腾讯云）<input name="line" value="' + escapeHtml(rec.line || '') + '" placeholder="default（留空保持当前值）" spellcheck="false"></label>'
         + '</div>'
         + '<label>优先级（仅 MX / SRV 生效）<input name="priority" type="number" min="0" max="65535" value="' + (rec.priority != null && rec.priority > 0 ? Number(rec.priority) : '') + '" placeholder="留空保持当前值"></label>'
-        + '<p class="sb-demo-note">类型说明见弹窗工具栏「批量添加 → 解析示例」。A / AAAA 记录值必须是合法 IP 地址。</p>'
+        + '<p class="sb-demo-note">类型说明见弹窗工具栏「批量添加 → 解析示例」。A / AAAA 记录值必须是合法 IP 地址，CNAME / MX / NS 记录值必须是一个域名。</p>'
         + '<p class="dc-form-err hidden"></p>'
         + '<div class="sb-demo-foot"><button type="button" class="sb-mini" data-cancel>取消</button>'
         + '<button type="submit" class="sb-mini sb-mini-primary">保存修改（单次写入并回读核实）</button></div>'
@@ -419,10 +424,8 @@ function openRecordEditForm(item, rec) {
             value: form.elements.value.value.trim(),
             expected_version: rec.version
         };
-        if (body.type === 'A' && !isIPv4(body.value)) { errEl.textContent = 'A 记录的记录值必须是合法 IPv4 地址（如 192.0.2.10）'; errEl.classList.remove('hidden'); return; }
-        var isIPv6 = /^[0-9a-fA-F:]{2,45}$/.test(body.value) && body.value.indexOf(':') !== -1;
-        if (body.type === 'AAAA' && !isIPv6) { errEl.textContent = 'AAAA 记录的记录值必须是合法 IPv6 地址'; errEl.classList.remove('hidden'); return; }
-        if (body.value === '') { errEl.textContent = '记录值不能为空'; errEl.classList.remove('hidden'); return; }
+        var valueErr = recordValueError(body.type, body.value);
+        if (valueErr) { errEl.textContent = valueErr; errEl.classList.remove('hidden'); return; }
         var ttlRaw = form.elements.ttl.value.trim();
         if (ttlRaw !== '') { body.ttl = Number(ttlRaw); }
         var lineRaw = form.elements.line.value.trim();
@@ -496,6 +499,91 @@ function applyBatchIp() {
     batchWrite(selectedRecords(), 'update', ip);
 }
 
+// ---- 删除单条 / 多条解析记录：二次确认弹窗 + 单次写入 + 回读核实 ----
+
+/** 通用危险操作二次确认弹窗：rows 为 [标签, 值] 列表，点「确认」才执行 onOk。 */
+function openConfirmDialog(opts, onOk) {
+    var ov = document.createElement('div');
+    ov.className = 'sb-ipov';
+    ov.setAttribute('role', 'dialog');
+    ov.setAttribute('aria-modal', 'true');
+    ov.setAttribute('aria-label', opts.title || '确认操作');
+    var rows = (opts.rows || []).map(function (row) {
+        return '<div class="sb-confirm-row"><span>' + escapeHtml(row[0]) + '</span><b>' + escapeHtml(row[1]) + '</b></div>';
+    }).join('');
+    ov.innerHTML = '<div class="sb-ipbox sb-confirmbox"><h3>' + escapeHtml(opts.title || '确认操作') + '</h3>'
+        + (rows ? '<div class="sb-confirm-rows">' + rows + '</div>' : '')
+        + '<p class="sb-confirm-warn">' + escapeHtml(opts.warn || '') + '</p>'
+        + '<div class="sb-demo-foot"><button type="button" class="sb-mini" data-confirm-cancel>取消</button>'
+        + '<button type="button" class="sb-mini sb-mini-danger" data-confirm-ok>' + escapeHtml(opts.okText || '确认删除') + '</button></div></div>';
+    document.body.appendChild(ov);
+    var okBtn = ov.querySelector('[data-confirm-ok]');
+    var cancelBtn = ov.querySelector('[data-confirm-cancel]');
+    var close = function () { ov.remove(); };
+    cancelBtn.addEventListener('click', close);
+    ov.addEventListener('click', function (e) {
+        if (e.target === okBtn) { close(); onOk(); return; }
+        if (e.target === ov) { close(); } // 点遮罩只关闭，绝不触发删除
+    });
+    ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
+    cancelBtn.focus(); // 默认焦点在「取消」，回车不会误删
+}
+
+/** 快照行数据按主机名 + 记录 id 找回（删除需要记录 version 做版本护栏）。 */
+function findSnapshotRecord(item, fqdn, recId) {
+    var found = null;
+    (item.subdomains || []).forEach(function (s) {
+        if (s.fqdn !== fqdn) { return; }
+        (s.records || []).forEach(function (r) { if (String(r.id) === String(recId)) { found = r; } });
+    });
+    return found;
+}
+
+/** 逐条删除：单次写入 + 回读核实；版本冲突（409）立即停止剩余删除，绝不自动重试。 */
+function deleteRecords(item, entries, done) {
+    var base = '/api/domains/' + encodeURIComponent(item.provider) + '/' + encodeURIComponent(item.domain) + '/records/';
+    var ok = 0, fail = 0, firstErr = null, stopped = false;
+    function step(i) {
+        if (stopped || i >= entries.length) { done(ok, fail, firstErr); return; }
+        fetchJson(base + encodeURIComponent(entries[i].id), { method: 'DELETE', body: { expected_version: entries[i].version } })
+            .then(function (r) {
+                ok++;
+                // 未回读核实即停：云端状态不明时继续删下一条有风险，绝不自动重试
+                if (r.verified === false) { firstErr = firstErr || '云端结果未回读核实，请刷新核对后再继续'; stopped = true; }
+            })
+            .catch(function (err) {
+                fail++;
+                firstErr = firstErr || ((err && err.message) || '删除失败');
+                if (err && err.status === 409) { stopped = true; }
+            })
+            .then(function () { step(i + 1); });
+    }
+    step(0);
+}
+
+/** 解析管理弹窗：单条记录删除（确认后走同一套写入护栏）。 */
+function confirmDeleteRecord(item, rec, hostLabel) {
+    openConfirmDialog({
+        title: '确认删除这条解析记录？',
+        rows: [['域名', item.domain], ['主机记录', hostLabel],
+            ['类型', String(rec.type || 'A').toUpperCase()], ['记录值', rec.value || '-'],
+            ['TTL', rec.ttl ? rec.ttl + ' 秒' : '云商默认']],
+        warn: '删除只写一次并回读核实，不会自动重试；解析停止生效需等云端传播与 TTL 过期。',
+        okText: '确认删除',
+    }, function () {
+        state.busyWrite = true;
+        setToolsBusy('正在删除解析记录（写入并回读核实）…');
+        deleteRecords(item, [rec], function (okCount, failCount, firstErr) {
+            state.busyWrite = false;
+            setToolsBusy('');
+            toast(failCount ? '删除失败：' + firstErr
+                : '记录已删除' + (firstErr ? '（' + firstErr + '）' : '并回读核实'),
+                failCount ? 'error' : (firstErr ? 'info' : 'success'), 9000);
+            reloadAfterWrite();
+        });
+    });
+}
+
 // ---- 批量添加解析：Markdown 多行（如 www 192.0.2.10），重复自动跳过 ----
 
 function fqdnOfName(name, domain) {
@@ -504,7 +592,8 @@ function fqdnOfName(name, domain) {
     return (name.length > suffix.length && name.slice(-suffix.length) === suffix) ? name : name + suffix;
 }
 
-var BATCH_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS'];
+// 与 DnsChangeService::params 的类型白名单一致：批量添加与单条添加 / 编辑共用同一套类型。
+var BATCH_TYPES = ['A', 'AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA'];
 
 function isIPv4(v) {
     return /^(\d{1,3}\.){3}\d{1,3}$/.test(v) && v.split('.').every(function (o) { return Number(o) <= 255; });
@@ -514,6 +603,19 @@ function isIPv6(v) {
 }
 function isDomainValue(v) {
     return /^[a-z0-9]([a-z0-9-*_]*[a-z0-9-*_])?(\.[a-z0-9-*_]+)*\.?$/.test(v.toLowerCase()) && v.indexOf('.') !== -1;
+}
+
+/** 按类型校验记录值（单条添加 / 编辑共用）：返回错误文案，合法时返回空串。 */
+function recordValueError(type, value) {
+    if (value === '') { return '记录值不能为空'; }
+    if (type === 'A') { return isIPv4(value) ? '' : 'A 记录的记录值必须是合法 IPv4 地址（如 192.0.2.10）'; }
+    if (type === 'AAAA') { return isIPv6(value) ? '' : 'AAAA 记录的记录值必须是合法 IPv6 地址（如 2001:db8::1）'; }
+    if (type === 'CNAME' || type === 'NS' || type === 'MX') {
+        return isDomainValue(value) ? '' : type + ' 记录的值应为一个域名（如 ' + (type === 'MX' ? 'mail.example.com' : 'example.com') + '）';
+    }
+    if (type === 'TXT') { return value.length > 512 ? 'TXT 记录值不应超过 512 字符' : ''; }
+    // SRV / CAA 各云商填写格式不同（如「权重 端口 目标域名」「0 issue "letsencrypt.org"」），只要求非空，具体格式由云端核实。
+    return '';
 }
 
 /** 批量添加解析：全类型行解析。
@@ -550,6 +652,7 @@ function parseBatchLines(text) {
         if (!type) {
             if (isIPv4(value)) { type = 'A'; }
             else if (isIPv6(value)) { type = 'AAAA'; }
+            else if (/^\d{1,3}(\.\d{1,3}){3}$/.test(value)) { bad.push(no + '疑似 IPv4 但地址不合法（每段需 ≤255）'); return; }
             else if (isDomainValue(value)) { type = 'CNAME'; }
             else { bad.push(no + '无法识别记录值（应为 IPv4 / IPv6 / 域名，或在值前写明类型）'); return; }
         }
@@ -580,6 +683,10 @@ var RECORD_DEMOS = [
         note: '值含空格用引号包裹；具体内容以邮件服务商 / 验证平台的说明为准。' },
     { type: 'NS', label: 'NS · 子域委派', lines: ['api NS ns1.example.com'],
         note: '将子域委派给其他 DNS 服务器；慎用，通常只在分域托管时配置。' },
+    { type: 'SRV', label: 'SRV · 服务定位', lines: ['_sip._tcp SRV 10 5060 sip.example.com'],
+        note: '值按「权重 端口 目标域名」填写，各云商格式略有差异，以云商控制台说明为准。' },
+    { type: 'CAA', label: 'CAA · 限制可签发证书的数字证书机构', lines: ['@ CAA 0 issue "letsencrypt.org"'],
+        note: '值按「标志 标签 内容」填写；内容含空格用引号包裹，具体以证书服务商说明为准。' },
 ];
 
 function openRecordDemoModal() {
@@ -594,7 +701,7 @@ function openRecordDemoModal() {
             + lines + '<p class="sb-demo-note">' + escapeHtml(demo.note) + '</p></div>';
     }).join('');
     ov.innerHTML = '<div class="sb-ipbox sb-demobox"><h3>解析记录示例与常见规则</h3>'
-        + '<p class="sb-demo-note">批量添加格式：<b>主机 [类型] 值</b>，一行一条；简写「主机 IPv4」即 A 记录；# 开头为注释；TTL 默认 600；已存在的相同记录自动跳过；逐条写入云端并回读核实。</p>'
+        + '<p class="sb-demo-note">批量添加格式：<b>主机 [类型] 值</b>，一行一条；简写「主机 IPv4」即 A 记录，类型可写 A / AAAA / CNAME / MX / TXT / NS / SRV / CAA；# 开头为注释；TTL 默认 600；已存在的相同记录自动跳过；逐条写入云端并回读核实。</p>'
         + rows
         + '<div class="sb-demo-foot"><button type="button" class="sb-mini" id="sb-demo-copyall">复制全部示例</button>'
         + '<button type="button" class="sb-mini sb-mini-primary" data-close-demo>知道了</button></div></div>';
@@ -615,15 +722,19 @@ function openRecordDemoModal() {
     });
 }
 
-/** 非 A 记录弹窗：多选 / 全选 / 反选 + 编辑与添加（写操作与其他 DNS 变更同一套护栏）。 */
+/** 非 A 记录弹窗：多选 / 全选 / 反选 + 编辑与添加（写操作与其他 DNS 变更同一套护栏）。
+ *  列表只列非 A 记录，但「添加 / 编辑」支持全部类型（含 A）：域名一条 A 都没有时也能在这里直接补上。 */
 function openOtherRecordsModal(item) {
     var ov = document.createElement('div');
     ov.className = 'sb-ipov';
     ov.innerHTML = '<div class="sb-ipbox sb-demobox"><h3>' + escapeHtml(item.domain) + ' · 非 A 记录</h3>'
+        + '<p class="sb-demo-note">列表只展示非 A 记录；「添加 / 编辑」支持全部类型（含 A / AAAA）。'
+        + '在此添加的 A 记录请到卡片「A 记录」入口的解析管理中查看与修改。</p>'
         + '<div class="sb-other-tools">'
         + '<label class="sb-check"><input type="checkbox" id="sb-other-all"> 全选</label>'
         + '<button type="button" class="sb-mini" id="sb-other-invert">反选</button>'
         + '<button type="button" class="sb-mini sb-mini-primary" id="sb-other-edit" disabled>编辑</button>'
+        + '<button type="button" class="sb-mini sb-mini-danger" id="sb-other-del" disabled>删除</button>'
         + '<button type="button" class="sb-mini sb-mini-primary" id="sb-other-add" disabled>添加</button>'
         + '<span class="sb-tool-hint" id="sb-other-status">正在读取解析记录…</span>'
         + '</div>'
@@ -636,12 +747,16 @@ function openOtherRecordsModal(item) {
     ov.addEventListener('keydown', function (e) { if (e.key === 'Escape') { close(); } });
 
     var zone = { provider: item.provider, domain: item.domain };
+    var recordsBase = '/api/domains/' + encodeURIComponent(zone.provider) + '/' + encodeURIComponent(zone.domain) + '/records';
     var records = []; // 非 A 记录（含 version）
+    var revision = null; // 区域版本：添加记录用 expected_revision，写入成功后需刷新
+    var otherBusy = false; // 写入期间锁住本弹窗工具（编辑 / 删除 / 添加 / 全选 / 反选）
 
     function renderList() {
         var listEl = ov.querySelector('#sb-other-list');
         var statusEl = ov.querySelector('#sb-other-status');
-        statusEl.textContent = '共 ' + records.length + ' 条非 A 记录 · 选中 ' + selectedCount() + ' 条';
+        ov.querySelector('#sb-other-all').checked = false; // 列表重建即勾选清空，全选框随之复位
+        statusEl.textContent = '共 ' + records.length + ' 条非 A 记录 · 选中 ' + selectedIdx().length + ' 条';
         listEl.innerHTML = records.length
             ? '<table class="sb-other-table"><thead><tr><th></th><th>类型</th><th>主机记录</th><th>记录值</th><th>TTL</th></tr></thead><tbody>'
                 + records.map(function (r, idx) {
@@ -652,7 +767,7 @@ function openOtherRecordsModal(item) {
                         + '<td class="sb-other-value">' + escapeHtml(r.value || '-') + '</td>'
                         + '<td>' + escapeHtml(String(r.ttl || '-')) + '</td></tr>';
                 }).join('') + '</tbody></table>'
-            : '<p class="sb-hosts-empty">该域名暂无非 A 记录。点「添加」创建第一条（CNAME / MX / TXT 等）。</p>';
+            : '<p class="sb-hosts-empty">该域名暂无非 A 记录。点「添加」可创建任意类型解析（A / AAAA / CNAME / MX / TXT / NS / SRV / CAA）。</p>';
     }
 
     function selectedIdx() {
@@ -680,26 +795,48 @@ function openOtherRecordsModal(item) {
         if (e.target.closest('.sb-other-check')) { syncTools(); }
     });
 
-    /** 编辑 / 添加共用表单弹窗；record 为 null 时是添加。 */
-    function openForm(record, revision) {
+    /** 重新读取云端记录：刷新非 A 列表与区域 revision（写一次成功后版本会变，不刷新下一条必然 409）。 */
+    function loadRecords(isInitial) {
+        return fetchJson(recordsBase)
+            .then(function (snap) {
+                records = (snap.records || []).filter(function (r) { return (r.type || '').toUpperCase() !== 'A'; });
+                revision = snap.revision || null;
+                renderList();
+                syncTools();
+            })
+            .catch(function (err) {
+                ov.querySelector('#sb-other-status').textContent = (isInitial ? '读取失败：' : '记录列表刷新失败（写入已结束），关闭后重开可看最新记录：')
+                    + ((err && err.message) || '未知错误');
+            });
+    }
+
+    /** 编辑 / 添加共用表单弹窗；record 为 null 时是添加。类型覆盖全部（含 A / AAAA），写入走同一套护栏。 */
+    function openForm(record) {
         var isEdit = !!record;
+        var isGodaddy = String(zone.provider || '').toLowerCase().indexOf('godaddy') !== -1;
         var formOv = document.createElement('div');
         formOv.className = 'sb-ipov';
-        var typeOptions = ['AAAA', 'CNAME', 'MX', 'TXT', 'NS', 'SRV', 'CAA'].map(function (t) {
-            return '<option value="' + t + '"' + (isEdit && record.type === t ? ' selected' : '') + '>' + t + '</option>';
+        var typeOptions = BATCH_TYPES.map(function (t) {
+            return '<option value="' + t + '"' + (isEdit && String(record.type || 'A').toUpperCase() === t ? ' selected' : '') + '>' + t + '</option>';
         }).join('');
-        formOv.innerHTML = '<div class="sb-ipbox sb-demobox"><h3>' + (isEdit ? '编辑非 A 记录' : '添加非 A 记录') + '</h3>'
-            + '<p class="sb-demo-note">' + escapeHtml(zone.domain) + ' · 类型说明见「批量添加 → 解析示例」；只写一次并回读核实。</p>'
+        // GoDaddy 不支持改类型与主机名（云端会拒绝），表单直接锁住这两项。
+        var lockEdit = isEdit && isGodaddy;
+        formOv.innerHTML = '<div class="sb-ipbox sb-demobox"><h3>' + (isEdit ? '编辑解析记录' : '添加解析记录') + ' · '
+            + escapeHtml(zone.domain) + '</h3>'
+            + '<p class="sb-demo-note">' + (isEdit ? '类型说明见「批量添加 → 解析示例」；只写一次并回读核实。'
+                : '支持全部类型：A / AAAA / CNAME / MX / TXT / NS / SRV / CAA；只写一次并回读核实，已存在的相同记录不会重复添加。') + '</p>'
+            + (lockEdit ? '<p class="sb-demo-note sb-warn">GoDaddy 不支持修改已有记录的类型与主机名；如需变更，请删除该记录后重新添加。</p>' : '')
             + '<form class="ap-form dc-form">'
-            + '<div class="ap-row"><label>类型<select name="type"' + (isEdit ? '' : '') + '>' + typeOptions + '</select></label>'
-            + '<label>主机记录（@ 为主域名）<input name="name" required value="' + escapeHtml(isEdit ? (record.name || '@') : '@') + '"></label></div>'
-            + '<label>记录值<textarea name="value" rows="2" required placeholder="按类型填写：域名 / 文本（TXT 用引号包裹可含空格）">' + escapeHtml(isEdit ? record.value : '') + '</textarea></label>'
+            + '<div class="ap-row"><label>记录类型<select name="type"' + (lockEdit ? ' disabled' : '') + '>' + typeOptions + '</select></label>'
+            + '<label>主机记录（@ 为主域名）<input name="name" required value="' + escapeHtml(isEdit ? (record.name || '@') : '@') + '"'
+            + (lockEdit ? ' disabled' : '') + ' spellcheck="false"></label></div>'
+            + '<label>记录值<textarea name="value" rows="2" required placeholder="A 填 IPv4（如 192.0.2.10）· AAAA 填 IPv6 · CNAME / MX / NS 填域名 · TXT 用引号包裹可含空格">' + escapeHtml(isEdit ? (record.value || '') : '') + '</textarea></label>'
             + '<div class="ap-row"><label>TTL（秒，留空默认 600）<input name="ttl" type="number" min="1" value="' + (isEdit && record.ttl ? record.ttl : '') + '"></label>'
-            + '<label>优先级（MX / SRV）<input name="priority" type="number" min="0" value="' + (isEdit && record.priority != null ? record.priority : '') + '"></label></div>'
-            + '<p class="sb-demo-note">TTL / 优先级留空使用云商默认。</p>'
+            + '<label>优先级（MX / SRV）<input name="priority" type="number" min="0" max="65535" value="' + (isEdit && record.priority != null ? record.priority : '') + '"></label></div>'
+            + '<p class="sb-demo-note">TTL / 优先级留空使用云商默认。' + (isEdit ? '' : '添加 A 记录后可在卡片「A 记录」入口的解析管理中修改与检查。') + '</p>'
             + '<p class="dc-form-err hidden"></p>'
             + '<div class="sb-demo-foot"><button type="button" class="sb-mini" data-cancel>取消</button>'
-            + '<button type="submit" class="sb-mini sb-mini-primary">' + (isEdit ? '保存修改' : '添加记录') + '</button></div></div></form></div>';
+            + '<button type="submit" class="sb-mini sb-mini-primary">' + (isEdit ? '保存修改（单次写入并回读核实）' : '添加记录（单次写入并回读核实）') + '</button></div></div></form></div>';
         document.body.appendChild(formOv);
         var form = formOv.querySelector('form');
         var closeForm = function () { formOv.remove(); };
@@ -710,30 +847,42 @@ function openOtherRecordsModal(item) {
             e.preventDefault();
             var errEl = formOv.querySelector('.dc-form-err');
             errEl.classList.add('hidden');
+            var fail = function (msg) { errEl.textContent = msg; errEl.classList.remove('hidden'); };
             var ttlRaw = form.elements.ttl.value.trim();
             var priRaw = form.elements.priority.value.trim();
             var body = {
-                type: form.elements.type.value,
+                type: form.elements.type.value.toUpperCase(),
                 name: form.elements.name.value.trim().toLowerCase().replace(/\.$/, '') || '@',
                 value: form.elements.value.value.trim(),
-                expected_version: isEdit ? record.version : revision,
             };
+            var valueErr = recordValueError(body.type, body.value);
+            if (valueErr) { fail(valueErr); return; }
+            if (!isEdit) {
+                if (revision == null) { fail('未取到解析区域版本，请关闭弹窗后重试'); return; }
+                body.expected_revision = revision; // 添加用区域版本
+            } else {
+                body.expected_version = record.version; // 修改用单条记录版本
+            }
             if (ttlRaw !== '') { body.ttl = Number(ttlRaw); }
             if (priRaw !== '' && (body.type === 'MX' || body.type === 'SRV')) { body.priority = Number(priRaw); }
-            var url = '/api/domains/' + encodeURIComponent(zone.provider) + '/' + encodeURIComponent(zone.domain) + '/records'
-                + (isEdit ? '/' + encodeURIComponent(record.id) : '');
             var btn = form.querySelector('[type="submit"]');
             btn.disabled = true;
-            fetchJson(url, { method: isEdit ? 'PUT' : 'POST', body: body })
+            fetchJson(recordsBase + (isEdit ? '/' + encodeURIComponent(record.id) : ''), { method: isEdit ? 'PUT' : 'POST', body: body })
                 .then(function (r) {
                     closeForm();
-                    toast((isEdit ? '记录已保存' : '记录已添加') + (r.verified === false ? '（结果待核实）' : '（已回读核实）'), r.verified === false ? 'info' : 'success');
+                    toast((isEdit ? '记录已保存' : body.type + ' 记录已添加')
+                        + (r.verified === false ? '（结果待核实）' : '（已回读核实）'), r.verified === false ? 'info' : 'success', 9000);
                     SB.loadData(true); // 强制重建快照，状态即时生效
+                    return loadRecords(false);
                 })
                 .catch(function (err) {
-                    errEl.textContent = err.message || '保存失败';
-                    errEl.classList.remove('hidden');
                     btn.disabled = false;
+                    if (err && err.status === 409) {
+                        fail(((err && err.message) || '记录已在云端被修改') + '；已重新读取最新版本，请确认后再提交');
+                        loadRecords(false);
+                        return;
+                    }
+                    fail((err && err.message) || '保存失败');
                 });
         });
     }
@@ -741,23 +890,39 @@ function openOtherRecordsModal(item) {
     ov.querySelector('#sb-other-edit').addEventListener('click', function () {
         var idx = selectedIdx();
         if (idx.length !== 1) { return; }
-        openForm(records[idx[0]], null);
+        openForm(records[idx[0]]);
+    });
+    ov.querySelector('#sb-other-del').addEventListener('click', function () {
+        var chosen = selectedIdx().map(function (i) { return records[i]; }).filter(Boolean);
+        if (!chosen.length) { toast('请先勾选要删除的记录', 'info'); return; }
+        var rows = [['域名', zone.domain]];
+        chosen.slice(0, 6).forEach(function (r) {
+            rows.push([(r.name === '' || r.name === '@') ? '@' : r.name,
+                String(r.type || '').toUpperCase() + ' · ' + (r.value || '-')]);
+        });
+        if (chosen.length > 6) { rows.push(['…', '其余 ' + (chosen.length - 6) + ' 条']); }
+        openConfirmDialog({
+            title: '确认删除选中的 ' + chosen.length + ' 条解析记录？',
+            rows: rows,
+            warn: '删除只写一次并回读核实，不会自动重试；版本冲突会立即停止剩余删除。',
+            okText: '确认删除 ' + chosen.length + ' 条',
+        }, function () {
+            otherBusy = true;
+            syncTools();
+            deleteRecords(item, chosen, function (okCount, failCount, firstErr) {
+                otherBusy = false;
+                toast('删除完成：成功 ' + okCount + ' · 失败 ' + failCount + (firstErr ? '；首个错误：' + firstErr : ''),
+                    failCount ? (okCount ? 'info' : 'error') : 'success', 9000);
+                SB.loadData(true); // 大屏快照同步重建
+                loadRecords(false); // 重读列表与 revision，同时恢复工具可用
+            });
+        });
     });
     ov.querySelector('#sb-other-add').addEventListener('click', function () {
-        openForm(null, revision);
+        openForm(null);
     });
 
-    var revision = null;
-    fetchJson('/api/domains/' + encodeURIComponent(zone.provider) + '/' + encodeURIComponent(zone.domain) + '/records')
-        .then(function (snap) {
-            records = (snap.records || []).filter(function (r) { return (r.type || '').toUpperCase() !== 'A'; });
-            revision = snap.revision || null;
-            renderList();
-            syncTools();
-        })
-        .catch(function (err) {
-            ov.querySelector('#sb-other-status').textContent = '读取失败：' + (err.message || '未知错误');
-        });
+    loadRecords(true);
 }
 
 function runBatchAdd() {
@@ -950,14 +1115,22 @@ function runHttpsCheck() {
         if (event.key === 'Escape' && !$('sb-modal').classList.contains('hidden')) { closeModal(); }
     });
 
-    // 单条记录编辑：点击「修改」打开编辑弹窗（可改主机 / 类型 / 值 / TTL / 线路 / 优先级）
+    // 单条记录「修改 / 删除」：修改打开编辑弹窗（先读云端补全字段），删除先二次确认再写入
     $('sb-modal-body').addEventListener('click', function (event) {
-        var editBtn = event.target.closest('[data-rec-edit]');
-        if (!editBtn) { return; }
         var item = modalItem();
         if (!item) { return; }
-        var recId = editBtn.getAttribute('data-rec-edit');
-        openRecordEditModal(item, recId);
+        var delBtn = event.target.closest('[data-rec-del]');
+        if (delBtn) {
+            if (state.busyWrite || state.busyCheck) { toast('请等当前写入或检查完成后再删除', 'info'); return; }
+            var host = delBtn.getAttribute('data-rec-host');
+            var rec = findSnapshotRecord(item, host, delBtn.getAttribute('data-rec-del'));
+            if (!rec || !rec.version) { toast('未取到该记录的云端版本，请关闭弹窗后重新打开再试', 'error'); return; }
+            confirmDeleteRecord(item, rec, host);
+            return;
+        }
+        var editBtn = event.target.closest('[data-rec-edit]');
+        if (!editBtn) { return; }
+        openRecordEditModal(item, editBtn.getAttribute('data-rec-edit'));
     });
 
     // 弹窗内勾选（事件委托，行内容会随数据刷新重建）

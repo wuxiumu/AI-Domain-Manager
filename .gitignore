@@ -25,3 +25,9 @@ vendor/
 
 # Local dev unlock flag (loopback password-free login)
 /config/dev-unlock.flag
+
+# SSH 连通性测试的本地凭据与产出（私钥 / 清单 / 日志一律不提交）
+.logs/
+scripts/ssh_check/key/
+*.pem
+*.ppk

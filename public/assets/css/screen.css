@@ -113,24 +113,62 @@ select:focus { outline: none; border-color: var(--accent); }
     z-index: 15;
     background: linear-gradient(var(--bg), var(--bg));
     border-bottom: 1px solid var(--card-border);
+    padding: clamp(10px, 1vw, 16px) clamp(16px, 2.2vw, 40px);
+}
+
+/* 主行：搜索按钮 + 状态 tab + 更多 + 计数分页（面板展开时仍在同一 sticky 容器内） */
+.sb-toolbar-main {
     display: flex;
     align-items: center;
     gap: clamp(10px, 1.2vw, 20px);
-    padding: clamp(10px, 1vw, 16px) clamp(16px, 2.2vw, 40px);
     flex-wrap: wrap;
 }
 
-.sb-search input {
+/* 搜索 / 更多 面板：工具条下方的第二行，条件都在这里，收起不丢状态 */
+.sb-toolbar-panel {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px clamp(10px, 1.2vw, 18px);
+    margin-top: 12px;
+    padding: 12px 14px;
     background: var(--bg-soft);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+}
+.sb-panel-row { display: flex; align-items: center; flex-wrap: wrap; gap: 10px; }
+.sb-panel-label { color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+.sb-panel-hint { color: var(--muted); font-size: 12px; }
+.sb-toolbar-panel select {
+    background: var(--bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-family: inherit;
+    font-size: 0.95em;
+}
+.sb-toolbar-panel input[type="search"] {
+    flex: 1 1 260px;
+    background: var(--bg);
     color: var(--text);
     border: 1px solid var(--line);
     border-radius: 999px;
     padding: 8px 18px;
     font-size: 1.05em;
-    width: clamp(220px, 22vw, 420px);
 }
-.sb-search input:focus { outline: none; border-color: var(--accent); }
-.sb-search input::placeholder { color: var(--muted); }
+.sb-toolbar-panel input[type="search"]:focus { outline: none; border-color: var(--accent); }
+.sb-toolbar-panel input[type="search"]::placeholder { color: var(--muted); }
+
+/* 工具条上的 tab 比弹窗里稍大一档，和搜索 / 更多按钮同一视觉重量 */
+.sb-toolbar .sb-status-tab { font-size: 0.95em; padding: 6px 13px; }
+
+/* 按钮的「有条件生效」高亮（搜索有关键词 / 排序条数非默认） */
+.sb-btn.is-active {
+    background: rgba(56, 189, 248, 0.12);
+    border-color: var(--accent);
+    color: var(--text);
+}
 
 .sb-count { color: var(--muted); white-space: nowrap; }
 
@@ -1035,6 +1073,17 @@ button.sb-tag-ip:hover { color: var(--text); border-color: var(--accent); }
     transition: color 0.15s, border-color 0.15s;
 }
 .sb-rec-edit-btn:hover { color: var(--accent); border-color: var(--accent); }
+/* 单条记录「删除」（紧跟修改之后，危险色） */
+.sb-rec-del-btn { margin-left: -2px; }
+.sb-rec-del-btn:hover { color: var(--red); border-color: rgba(248, 113, 113, 0.7); }
+
+/* 危险操作二次确认弹窗（删除解析记录） */
+.sb-confirmbox { width: min(460px, 100%); }
+.sb-confirm-rows { display: grid; gap: 5px; margin: 2px 0 0; }
+.sb-confirm-row { display: flex; justify-content: space-between; align-items: baseline; gap: 14px; font-size: 12.5px; color: var(--muted); }
+.sb-confirm-row b { color: var(--text); font-weight: 600; text-align: right; word-break: break-all; }
+/* 注意：需压过 `.sb-ipbox p` 的灰色，这里用两层类名提升优先级 */
+.sb-ipbox .sb-confirm-warn { margin: 12px 0 0; color: var(--red); font-size: 12.5px; line-height: 1.6; }
 
 /* 解析管理弹窗：记录行 IP 归属地（来自全局缓存） */
 .sb-ip-geo { color: var(--muted); font-size: 11.5px; white-space: nowrap; }
